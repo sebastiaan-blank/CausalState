@@ -687,6 +687,10 @@ sdr <- function(
       m_gdeath_tr <- binom_metric(D_tr[exit_idx], p_dex_nat[exit_idx])
       m_gdeath_vl <- binom_metric(D_vl[exit_idx_vl], p_dex_nat_vl[exit_idx_vl])
 
+      # Q_rem target is observed Y (terminal outcome) for remainers.
+      # Calibration is only directly interpretable under a natural course run;
+      # under a shifted policy the target is still natural-course Y, not the
+      # counterfactual, so treat this metric as a model-quality check only.
       m_qrem_tr <- gauss_metric(Y_init[id_tr_ar[rem_idx]], q_rem_nat[rem_idx])
       m_qrem_vl <- gauss_metric(Y_init[id_vl_ar[rem_idx_vl]], q_rem_nat_vl[rem_idx_vl])
       
