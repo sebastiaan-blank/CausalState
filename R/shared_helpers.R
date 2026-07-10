@@ -988,9 +988,11 @@ contrast <- function(fit1, fit0, df = NULL, id_col = NULL, cluster = NULL) {
   psi1 <- fit1$psi
   psi0 <- fit0$psi
 
+  # Auto-read id and cluster from fit1 settings if not overridden
   vi <- fit1$settings$variable_info
   if (is.null(id_col))  id_col  <- if (!is.null(vi$id))      vi$id      else "id"
   if (is.null(cluster)) cluster <- if (!is.null(vi$cluster))  vi$cluster else NULL
+
 
 
   ic1 <- data.table::as.data.table(fit1$ic_df)[, .(id, ic1 = ic)]
