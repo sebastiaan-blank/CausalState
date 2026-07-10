@@ -944,6 +944,9 @@ expand_to_horizon <- function(DT, id, time, alive, in_state, tmax) {
 }
 
 
+# ------------------------------------------------------------------
+# contrast — risk difference and risk ratio from two fitted estimators
+# ------------------------------------------------------------------
 
 #' Compute risk difference and risk ratio from two fitted estimators
 #'
@@ -989,6 +992,7 @@ contrast <- function(fit1, fit0, df = NULL, id_col = NULL, cluster = NULL) {
   if (is.null(id_col))  id_col  <- if (!is.null(vi$id))      vi$id      else "id"
   if (is.null(cluster)) cluster <- if (!is.null(vi$cluster))  vi$cluster else NULL
 
+
   ic1 <- data.table::as.data.table(fit1$ic_df)[, .(id, ic1 = ic)]
   ic0 <- data.table::as.data.table(fit0$ic_df)[, .(id, ic0 = ic)]
   merged <- merge(ic1, ic0, by = "id", all = FALSE)
@@ -996,10 +1000,13 @@ contrast <- function(fit1, fit0, df = NULL, id_col = NULL, cluster = NULL) {
   n <- nrow(merged)
   if (n == 0L) stop("contrast: no overlapping subject IDs between fit1 and fit0.", call. = FALSE)
 
+  # Build cluster vector aligned to merged rows
   cl <- NULL
   if (!is.null(cluster)) {
     if (is.null(df))
       stop("contrast: `df` must be provided when a cluster column is set.", call. = FALSE)
+    if (!is.character(cluster) || length(cluster) != 1L)
+      stop("contrast: `cluster` must be a single column name string.", call. = FALSE)
     if (!id_col %in% names(df))
       stop(sprintf("contrast: id_col '%s' not found in df.", id_col), call. = FALSE)
     if (!cluster %in% names(df))
@@ -1027,10 +1034,12 @@ contrast <- function(fit1, fit0, df = NULL, id_col = NULL, cluster = NULL) {
     sqrt((G / (G - 1L)) * sum((S$S - Sbar)^2) / n_ok^2)
   }
 
+  # Risk difference
   ic_rd <- merged$ic1 - merged$ic0
   rd    <- psi1 - psi0
   se_rd <- .se(ic_rd)
 
+  # Risk ratio — SE and CI on log scale
   ic_log_rr <- merged$ic1 / psi1 - merged$ic0 / psi0
   rr         <- psi1 / psi0
   se_log_rr  <- .se(ic_log_rr)
