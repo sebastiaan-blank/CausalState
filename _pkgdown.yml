@@ -1,0 +1,41 @@
+url: ~
+
+template:
+  bootstrap: 5
+
+reference:
+- title: "Main estimators"
+  desc: "User-facing estimators for the mean counterfactual outcome under a modified treatment policy."
+  contents:
+  - sdr
+  - itmle
+  - qreg
+
+- title: "Competing-event variants"
+  desc: "Survival / mortality estimators that reuse density-ratio weights computed for the main estimators."
+  contents:
+  - sdr_competing
+  - itmle_competing
+
+- title: "Density-ratio estimation"
+  desc: "Treatment and censoring models; must be run before the outcome estimators."
+  contents:
+  - density_ratio
+  - method.WB_dr
+
+- title: "Utilities"
+  desc: "Building blocks for advanced users."
+  contents:
+  - absorb_rule
+  - cluster_boot_se
+
+- title: "iTMLE targeting wrappers"
+  desc: >
+    Custom SuperLearner wrappers for the iTMLE targeting step.
+    These handle the logit-offset structure required for cross-validated TMLE
+    and are the only SL wrappers the package exports.
+    For density-ratio models (`dr_sl = TRUE`) users must write their own wrappers.
+  contents:
+  - sl_itmle
+  - starts_with("SL.tgt")
+  - starts_with("SL.tmle_")

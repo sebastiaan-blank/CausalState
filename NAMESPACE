@@ -1,0 +1,72 @@
+# Hand-maintained NAMESPACE for CausalState.
+#
+# NOTE: DESCRIPTION sets `Roxygen: list(roclets = c("collate", "rd"))` so that
+# running `devtools::document()` generates man pages but does NOT overwrite
+# this file. When you're ready to switch to roxygen-driven NAMESPACE generation,
+# (1) add `#' @export` tags above the functions you want exported,
+# (2) edit DESCRIPTION to include "namespace" in roclets, and
+# (3) run `devtools::document()` to regenerate.
+
+# --- Imports --------------------------------------------------------------
+
+# data.table is imported in bulk because of the := assignment operator,
+# which cannot be invoked via `data.table::`.
+import(data.table)
+
+importFrom(magrittr, "%>%")
+importFrom(dplyr, filter, summarise, mutate, across, all_of)
+importFrom(tidyr, pivot_longer)
+importFrom(rlang, .data)
+
+# Everything else is called via explicit pkg:: prefixes in the source.
+
+# --- Exports: user-facing estimators --------------------------------------
+
+export(sdr)
+export(itmle)
+export(itmle_competing)
+export(qreg)
+
+# --- Exports: building blocks (advanced users) ----------------------------
+
+export(density_ratio)
+export(contrast)
+export(method.WB_dr)
+export(absorb_rule)
+export(sdr_competing)
+export(cluster_boot_se)
+
+# --- Exports: default targeting library vector ----------------------------
+
+export(sl_tmle)
+
+# --- Exports: SuperLearner wrappers ---------------------------------------
+# These must be exported so SuperLearner can find them by string lookup
+# when passed in SL.library.
+
+# SDR-targeted learners
+export(SL.tgt.empty)
+export(SL.tgt.intercept)
+export(SL.tgt.glm)
+export(SL.tgt.glmnet)
+export(SL.tgt.xgboost)
+
+# TMLE learners
+export(SL.tmle_glm)
+export(SL.tmle_glmnet_ridge)
+export(SL.tmle_glmnet_enet)
+export(SL.tmle_glmnet_lasso)
+export(SL.tmle_xgb_d1)
+export(SL.tmle_xgb_d3)
+export(SL.tmle_xgb_d6)
+
+# --- S3 method registration -----------------------------------------------
+
+S3method(predict, SL.tgt.empty)
+S3method(predict, SL.tgt.intercept)
+S3method(predict, SL.tgt.glm)
+S3method(predict, SL.tgt.glmnet)
+S3method(predict, SL.tgt.xgboost)
+S3method(predict, SL.tgt.glm.failed)
+S3method(predict, SL.tgt.glmnet.failed)
+S3method(predict, SL.tgt.xgboost.failed)

@@ -1,0 +1,70 @@
+---
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "man/figures/README-",
+  out.width = "100%"
+)
+```
+
+# CausalState
+
+<!-- badges: start -->
+[![R-CMD-check](https://github.com/YOUR-GITHUB-HANDLE/CausalState/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/YOUR-GITHUB-HANDLE/CausalState/actions/workflows/R-CMD-check.yaml)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
+<!-- badges: end -->
+
+**CausalState** provides Sequential Doubly Robust (SDR) and iterative Targeted Maximum Likelihood (iTMLE) estimators for longitudinal modified treatment policies in settings with absorbing state transitions — for example, ICU, ward, or emergency department care episodes where treatment is applicable while in the active state and becomes structurally inapplicable after discharge or death.
+
+The package complements [`lmtp`](https://github.com/nt-williams/lmtp) by handling settings where the timing of state transitions is itself endogenous to the treatment policy.
+
+## Scope
+
+Designed for **medium-horizon** care episodes (5–10 daily blocks). Beyond that, cumulative density-ratio products tend to collapse positivity regardless of estimator choice.
+
+## Features
+
+- Sequential Doubly Robust (SDR) estimator with k-fold cross-fitting
+- Iterative TMLE (iTMLE) estimator
+- First-class handling of single absorbing transitions (alive-discharge vs death as competing terminal events)
+- Asymmetric g- and Q-model regularisation defaults (sharper g, more-regularised Q)
+- Pluggable SuperLearner ensembles via included custom learner wrappers (`SL.tgt.*`, `SL.tmle_*`)
+- Cluster bootstrap standard errors
+
+## Installation
+
+You can install the development version of `CausalState` from GitHub with:
+
+``` r
+# install.packages("remotes")
+remotes::install_github("YOUR-GITHUB-HANDLE/CausalState")
+```
+
+## Quick example
+
+```{r example, eval = FALSE}
+library(CausalState)
+
+# Coming soon — see vignettes/getting-started.Rmd
+```
+
+## Citation
+
+Please cite this package as:
+
+```
+Blank S (2026). CausalState: SDR and iTMLE for State-Aware Longitudinal
+Modified Treatment Policies. R package version 0.0.0.9000.
+https://github.com/YOUR-GITHUB-HANDLE/CausalState
+```
+
+## License
+
+AGPL-3. See `LICENSE.md` for details.

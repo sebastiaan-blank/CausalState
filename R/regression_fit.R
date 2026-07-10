@@ -1,0 +1,425 @@
+fit_pooled_g_death_exit <- function(
+    D,
+    tr_ids,
+    row_index,
+    tmax,
+    baseline,
+    tv_names,
+    a_names,
+    all_names,
+    k,
+    t_min,
+    alive,
+    in_state,
+    cluster_by_id,
+    sl_death,
+    inner_v,
+    seed,
+    f_idx,
+    min_n = 30L,
+    min_events = 5L,
+    sl_workers = NULL
+) {
+  cols_pool <- make_cols(
+    tt        = 1L,
+    baseline  = baseline,
+    tv_names  = tv_names,
+    a_names   = a_names,
+    k         = k,
+    all_names = all_names,
+    t_min     = t_min
+  )
+
+  pool_X  <- vector("list", tmax)
+  pool_Y  <- vector("list", tmax)
+  pool_cl <- vector("list", tmax)
+
+  for (tt in seq_len(tmax)) {
+    at_risk_p <- !is.na(row_index[tr_ids, tt])
+    if (!any(at_risk_p)) next
+
+    id_tr_ar_p <- tr_ids[at_risk_p]
+    rows_tr_p  <- row_index[id_tr_ar_p, tt]
+
+    alive_p <- as.integer(D[[alive]][rows_tr_p])
+    in_state_p   <- as.integer(D[[in_state]][rows_tr_p])
+
+    R_p <- as.integer(alive_p == 1L & in_state_p == 1L)
+    D_p <- as.integer(alive_p == 0L)
+
+    exit_idx_p <- which(R_p == 0L)
+    if (!length(exit_idx_p)) next
+
+    X_p      <- make_design(D, rows_tr_p[exit_idx_p], cols_pool)
+    X_p$.__t <- tt
+
+    pool_X[[tt]]  <- X_p
+    pool_Y[[tt]]  <- D_p[exit_idx_p]
+    pool_cl[[tt]] <- cluster_by_id[id_tr_ar_p[exit_idx_p]]
+  }
+
+  pool_X  <- Filter(Negate(is.null), pool_X)
+  pool_Y  <- Filter(Negate(is.null), pool_Y)
+  pool_cl <- Filter(Negate(is.null), pool_cl)
+
+  if (!length(pool_X)) {
+    return(list(
+      fit = NULL,
+      sl = NULL,
+      cols = NULL,
+      cols_pool = cols_pool,
+      X = NULL,
+      Y = integer(0),
+      cluster = NULL,
+      reason = "no_exit_rows"
+    ))
+  }
+
+  all_X_pool  <- data.table::rbindlist(pool_X, use.names = TRUE, fill = TRUE)
+  all_Y_pool  <- unlist(pool_Y, use.names = FALSE)
+  all_cl_pool <- unlist(pool_cl, use.names = FALSE)
+
+  chk <- can_fit_bin(
+    all_Y_pool,
+    min_n      = min_n,
+    min_events = min_events
+  )
+
+  if (!chk$ok || nrow(all_X_pool) < 2L) {
+    return(list(
+      fit = NULL,
+      sl = NULL,
+      cols = colnames(all_X_pool),
+      cols_pool = cols_pool,
+      X = all_X_pool,
+      Y = all_Y_pool,
+      cluster = all_cl_pool,
+      reason = "sparse_or_one_class"
+    ))
+  }
+
+  sl <- sl_block_fit(
+    Y             = all_Y_pool,
+    X             = all_X_pool,
+    family        = stats::binomial(),
+    sl_lib        = sl_death,
+    v_inner       = max(2L, min(as.integer(inner_v), nrow(all_X_pool))),
+    cluster_inner = all_cl_pool,
+    seed_inner    = est_seed_for(seed, fold = f_idx, t = 0L,
+                                 component = "g_death_exit_pooled", phase = "fit"),
+    seed_cv_rows  = est_seed_for(seed, fold = f_idx, t = 0L,
+                                 component = "g_death_exit_pooled", phase = "cv_rows"),
+    seed_sl_fit   = est_seed_for(seed, fold = f_idx, t = 0L,
+                                 component = "g_death_exit_pooled", phase = "sl_fit"),
+    sl_workers    = sl_workers
+  )
+
+  list(
+    fit = sl$fit,
+    sl = sl,
+    cols = colnames(all_X_pool),
+    cols_pool = cols_pool,
+    X = all_X_pool,
+    Y = all_Y_pool,
+    cluster = all_cl_pool,
+    reason = "fit"
+  )
+}
+
+fit_transition_regressions <- function(
+  X_nat_tr_base,
+  X_shf_tr_base,
+  X_nat_tr_haz,
+  X_shf_tr_haz,
+  Y_pseudo_ar,
+  Y_init_ar,
+  R_tr,
+  D_tr,
+  exit_idx,
+  rem_idx,
+  n_ar,
+
+  cl_tr_ar,
+  cl_exit_ar,
+  cl_rem_ar,
+
+  pool_g_death = FALSE,
+  fit_dex_pooled = NULL,
+  cn_pool = NULL,
+  cols_pool = NULL,
+  D = NULL,
+  rows_tr = NULL,
+  D_shifted_tt = NULL,
+  a_names = NULL,
+  tt = NULL,
+  k = NULL,
+  t_min = NULL,
+
+  is_binom,
+  tmax,
+  scale_info,
+  sl_remain,
+  sl_death,
+  sl_y,
+  sl_recursive,
+  inner_v,
+  seed,
+  f_idx,
+
+  parallel = FALSE,
+  reg_workers = NULL,
+  sl_workers = NULL
+) {
+  fit_g_remain_one <- function() {
+    p_rem_const <- NA_real_
+    fit_rem <- NULL
+    sl_rem <- NULL
+
+    chkR <- can_fit_bin(R_tr, min_n = 30L, min_events = 5L)
+
+    if (!chkR$ok) {
+      p_rem_const <- scale_info$clip(chkR$p)
+      p_rem_nat <- rep_const(p_rem_const, n_ar)
+      p_rem_shf <- rep_const(p_rem_const, n_ar)
+    } else {
+      sl_rem <- sl_block_fit(
+        Y = R_tr,
+        X = X_nat_tr_haz,
+        family = stats::binomial(),
+        sl_lib = sl_remain,
+        v_inner = max(2L, min(as.integer(inner_v), n_ar)),
+        cluster_inner = cl_tr_ar,
+        seed_inner = est_seed_for(seed, f_idx, tt, "g_remain", "fit"),
+        seed_cv_rows = est_seed_for(seed, f_idx, tt, "g_remain", "cv_rows"),
+        seed_sl_fit = est_seed_for(seed, f_idx, tt, "g_remain", "sl_fit"),
+        sl_workers = sl_workers
+      )
+      fit_rem <- sl_rem$fit
+      p_rem_nat <- scale_info$clip(sl_predict(fit_rem, X_nat_tr_haz))
+      p_rem_shf <- scale_info$clip(sl_predict(fit_rem, X_shf_tr_haz))
+    }
+
+    list(
+      sl_rem = sl_rem,
+      fit_rem = fit_rem,
+      p_rem_const = p_rem_const,
+      p_rem_nat = p_rem_nat,
+      p_rem_shf = p_rem_shf
+    )
+  }
+
+  fit_g_death_exit_one <- function() {
+    p_dex_const <- NA_real_
+    p_dex_nat <- rep_const(0, n_ar)
+    p_dex_shf <- rep_const(0, n_ar)
+    fit_dex <- NULL
+    sl_dex <- NULL
+
+    if (isTRUE(pool_g_death)) {
+      if (is.null(fit_dex_pooled)) {
+        stop(sprintf("[fold %d][t=%d] pooled g_death fit is NULL", f_idx, tt), call. = FALSE)
+      }
+
+      X_nat_dex_t <- make_design(D, rows_tr, cols_pool)
+      X_nat_dex_t$.__t <- tt
+
+      X_shf_dex_t <- patch_shifted_design(
+        X_nat = X_nat_dex_t,
+        D_shifted_tt = D_shifted_tt,
+        rows = rows_tr,
+        a_names = a_names,
+        tt = tt,
+        k = k,
+        t_min = t_min
+      )
+      X_shf_dex_t$.__t <- tt
+
+      X_nat_dex_t <- align_cols(X_nat_dex_t, cn_pool)
+      X_shf_dex_t <- align_cols(X_shf_dex_t, cn_pool)
+
+      p_dex_nat <- scale_info$clip(sl_predict(fit_dex_pooled, X_nat_dex_t))
+      p_dex_shf <- scale_info$clip(sl_predict(fit_dex_pooled, X_shf_dex_t))
+      fit_dex <- fit_dex_pooled
+
+    } else if (length(exit_idx) >= 2L) {
+      chkDex <- can_fit_bin(D_tr[exit_idx], min_n = 30L, min_events = 5L)
+
+      if (!chkDex$ok) {
+        p_dex_const <- scale_info$clip(chkDex$p)
+        p_dex_nat <- rep_const(p_dex_const, n_ar)
+        p_dex_shf <- rep_const(p_dex_const, n_ar)
+      } else {
+        sl_dex <- sl_block_fit(
+          Y = D_tr[exit_idx],
+          X = X_nat_tr_haz[exit_idx, , drop = FALSE],
+          family = stats::binomial(),
+          sl_lib = sl_death,
+          v_inner = max(2L, min(as.integer(inner_v), length(exit_idx))),
+          cluster_inner = cl_exit_ar,
+          seed_inner = est_seed_for(seed, f_idx, tt, "g_death_exit", "fit"),
+          seed_cv_rows = est_seed_for(seed, f_idx, tt, "g_death_exit", "cv_rows"),
+          seed_sl_fit = est_seed_for(seed, f_idx, tt, "g_death_exit", "sl_fit"),
+          sl_workers = sl_workers
+        )
+        fit_dex <- sl_dex$fit
+        p_dex_nat <- scale_info$clip(sl_predict(fit_dex, X_nat_tr_haz))
+        p_dex_shf <- scale_info$clip(sl_predict(fit_dex, X_shf_tr_haz))
+      }
+
+    } else {
+      if (length(exit_idx) >= 1L) {
+        p_dex_const <- scale_info$clip(mean(D_tr[exit_idx], na.rm = TRUE))
+      } else {
+        p_dex_const <- 0
+      }
+      p_dex_nat <- rep_const(p_dex_const, n_ar)
+      p_dex_shf <- rep_const(p_dex_const, n_ar)
+    }
+
+    list(
+      sl_dex = sl_dex,
+      fit_dex = fit_dex,
+      p_dex_const = p_dex_const,
+      p_dex_nat = p_dex_nat,
+      p_dex_shf = p_dex_shf
+    )
+  }
+
+  fit_Q_exit_one <- function() {
+    muY <- if (length(exit_idx)) {
+      mean(Y_init_ar[exit_idx], na.rm = TRUE)
+    } else {
+      mean(Y_init_ar, na.rm = TRUE)
+    }
+
+    q_death_nat <- rep(muY, n_ar)
+    q_death_shf <- rep(muY, n_ar)
+    q_dc_nat <- rep(muY, n_ar)
+    q_dc_shf <- rep(muY, n_ar)
+    fit_qexit <- NULL
+    cn_qexit <- NULL
+    sl_qexit <- NULL
+
+    if (length(exit_idx) >= 2L) {
+      X_exit <- X_nat_tr_base[exit_idx, , drop = FALSE]
+      X_exit$exit_status <- as.numeric(D_tr[exit_idx])
+      Y_exit <- Y_init_ar[exit_idx]
+
+      sl_qexit <- sl_block_fit(
+        Y = Y_exit,
+        X = X_exit,
+        family = if (is_binom) stats::binomial() else stats::gaussian(),
+        sl_lib = sl_y,
+        v_inner = max(2L, min(as.integer(inner_v), length(exit_idx))),
+        cluster_inner = cl_exit_ar,
+        seed_inner = est_seed_for(seed, f_idx, tt, "Q_exit", "fit"),
+        seed_cv_rows = est_seed_for(seed, f_idx, tt, "Q_exit", "cv_rows"),
+        seed_sl_fit = est_seed_for(seed, f_idx, tt, "Q_exit", "sl_fit"),
+        sl_workers = sl_workers
+      )
+      fit_qexit <- sl_qexit$fit
+      cn_qexit <- colnames(X_exit)
+
+      X_nat_d <- X_nat_tr_base; X_nat_d$exit_status <- 1
+      X_nat_c <- X_nat_tr_base; X_nat_c$exit_status <- 0
+      X_shf_d <- X_shf_tr_base; X_shf_d$exit_status <- 1
+      X_shf_c <- X_shf_tr_base; X_shf_c$exit_status <- 0
+
+      X_nat_d <- align_cols(X_nat_d, cn_qexit)
+      X_nat_c <- align_cols(X_nat_c, cn_qexit)
+      X_shf_d <- align_cols(X_shf_d, cn_qexit)
+      X_shf_c <- align_cols(X_shf_c, cn_qexit)
+
+      q_death_nat <- scale_info$clip(sl_predict(fit_qexit, X_nat_d))
+      q_dc_nat    <- scale_info$clip(sl_predict(fit_qexit, X_nat_c))
+      q_death_shf <- scale_info$clip(sl_predict(fit_qexit, X_shf_d))
+      q_dc_shf    <- scale_info$clip(sl_predict(fit_qexit, X_shf_c))
+    }
+
+    list(
+      sl_qexit = sl_qexit,
+      fit_qexit = fit_qexit,
+      cn_qexit = cn_qexit,
+      muY = muY,
+      q_death_nat = q_death_nat,
+      q_dc_nat = q_dc_nat,
+      q_death_shf = q_death_shf,
+      q_dc_shf = q_dc_shf
+    )
+  }
+
+  fit_Q_rem_one <- function() {
+    muP <- if (length(rem_idx)) {
+      mean(Y_pseudo_ar[rem_idx], na.rm = TRUE)
+    } else {
+      mean(Y_pseudo_ar, na.rm = TRUE)
+    }
+
+    q_rem_nat <- rep(muP, n_ar)
+    q_rem_shf <- rep(muP, n_ar)
+    fit_qrem <- NULL
+    cn_qrem <- NULL
+    sl_qrem <- NULL
+
+    if (length(rem_idx) >= 2L) {
+      X_rem <- X_nat_tr_base[rem_idx, , drop = FALSE]
+      Y_rem <- Y_pseudo_ar[rem_idx]
+
+      ok_to_fit <- if (is_binom && tt == tmax) can_fit_bin(Y_rem)$ok else TRUE
+
+      if (ok_to_fit) {
+        sl_qrem <- sl_block_fit(
+          Y = Y_rem,
+          X = X_rem,
+          family = if (is_binom && tt == tmax) stats::binomial() else stats::gaussian(),
+          sl_lib = if (tt == tmax) sl_y else sl_recursive,
+          v_inner = max(2L, min(as.integer(inner_v), length(rem_idx))),
+          cluster_inner = cl_rem_ar,
+          seed_inner = est_seed_for(seed, f_idx, tt, "Q_remain", "fit"),
+          seed_cv_rows = est_seed_for(seed, f_idx, tt, "Q_remain", "cv_rows"),
+          seed_sl_fit = est_seed_for(seed, f_idx, tt, "Q_remain", "sl_fit"),
+          sl_workers = sl_workers
+        )
+        fit_qrem <- sl_qrem$fit
+        cn_qrem <- colnames(X_rem)
+
+        X_nat_r <- align_cols(X_nat_tr_base, cn_qrem)
+        X_shf_r <- align_cols(X_shf_tr_base, cn_qrem)
+
+        q_rem_nat <- scale_info$clip(sl_predict(fit_qrem, X_nat_r))
+        q_rem_shf <- scale_info$clip(sl_predict(fit_qrem, X_shf_r))
+      }
+    }
+
+    list(
+      sl_qrem = sl_qrem,
+      fit_qrem = fit_qrem,
+      cn_qrem = cn_qrem,
+      muP = muP,
+      q_rem_nat = q_rem_nat,
+      q_rem_shf = q_rem_shf
+    )
+  }
+
+  reg_jobs <- list(
+    g_remain     = fit_g_remain_one,
+    g_death_exit = fit_g_death_exit_one,
+    Q_exit       = fit_Q_exit_one,
+    Q_rem        = fit_Q_rem_one
+  )
+
+  reg_res <- par_lapply(
+    X        = reg_jobs,
+    FUN      = function(f) f(),
+    workers  = reg_workers,
+    parallel = parallel,
+    seed     = TRUE
+  )
+
+  list(
+    g_remain     = reg_res$g_remain,
+    g_death_exit = reg_res$g_death_exit,
+    Q_exit       = reg_res$Q_exit,
+    Q_rem        = reg_res$Q_rem
+  )
+}

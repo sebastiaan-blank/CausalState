@@ -1,0 +1,523 @@
+---
+title: "Getting started with CausalState"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting started with CausalState}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+```{r setup}
+library(CausalState)
+library(SuperLearner)
+```
+
+## Overview
+
+`CausalState` estimates the causal effect of a longitudinal **modified
+treatment policy** (MTP) on an outcome in care-episode data where patients
+can transition out of an active state (e.g. ICU discharge or death). The
+distinctive feature is that the MTP can shift the transition dynamics
+themselves — not only the terminal outcome. The MTP framework is due to
+Díaz & van der Laan (2012) and Haneuse & Rotnitzky (2013).
+
+Two main estimators are provided, both from Luedtke et al. (2017/2018) and
+both **sequentially doubly robust (SDR)**: consistent whenever, at each time
+point $t$, either the treatment model $g_t$ or the outcome model $Q_t$ is
+correctly specified ($2^K$-robust, Definition 2 of Luedtke et al.):
+
+- **`sdr()`** — Sequential Doubly Robust estimator. Applies an EIF-based
+  pseudo-outcome update within the backward Q-regression (Díaz et al. 2021).
+- **`itmle()`** — Infinite-dimensional TMLE (iTMLE), Algorithm 4 of Luedtke
+  et al. Shares the same backward Q-regression as SDR; differs only in the
+  update step, which uses an infinite-dimensional TMLE fluctuation.
+
+**`qreg()`** is a pure Q-recursion plug-in (no update step, no DR guarantees)
+included as a sensitivity check when density-ratio weights are extreme.
+
+The workflow is always:
+
+```
+density_ratio()  →  sdr() / itmle() / qreg()
+```
+
+`density_ratio()` must be run first; all downstream estimators inherit its
+fold structure and weights.
+
+---
+
+## Data structure
+
+Data must be in **long format**: one row per subject per time point, covering
+only periods while the subject is in the active state. The last row for each
+subject carries their transition outcome.
+
+| Column | Type | Meaning |
+|--------|------|---------|
+| `id` | integer / character | Subject identifier |
+| `time` | integer 1, 2, … | Time index |
+| `alive` | 0 / 1 | 1 = alive at end of period |
+| `in_state` | 0 / 1 | 1 = still in active state (e.g. ICU) |
+| treatment | numeric | One or more treatment variables (`a_names`) |
+| outcome | numeric | Outcome variable (`y`) |
+| covariates | numeric | Baseline and time-varying covariates |
+
+A subject exits when `in_state == 0` on their last row (`alive = 1` for
+discharge, `alive = 0` for death). Subjects still in the active state at
+`tmax` have `in_state == 1` on their last row.
+
+### Simulated example data
+
+The DGP below generates a simple ICU panel with binary treatment and a binary
+outcome. Copy it directly or adapt it for your own simulation studies.
+
+```{r sim-panel}
+sim_panel <- function(n = 500L, tmax = 4L, seed = 42L) {
+  set.seed(seed)
+  rows <- vector("list", n)
+  for (i in seq_len(n)) {
+    age <- round(rnorm(1, 65, 10))
+    sex <- rbinom(1, 1, 0.5)
+    L1  <- rnorm(1, 0, 1)
+    L2  <- rbinom(1, 1, 0.4)
+    pat <- list()
+    for (t in seq_len(tmax)) {
+      A     <- rbinom(1, 1, plogis(0.3 * L1 - 0.4 + 0.2 * sex))
+      p_die <- plogis(-4.0 + 0.3 * L1 - 0.1 * age / 10)
+      p_dc  <- plogis(-2.5 + 0.5 * A  - 0.2 * L2)
+      u     <- runif(1)
+      if      (u < p_die)        { alive <- 0L; in_state <- 0L }
+      else if (u < p_die + p_dc) { alive <- 1L; in_state <- 0L }
+      else                       { alive <- 1L; in_state <- 1L }
+      py <- if (!alive)      plogis(-3.0 + 0.1 * L1)
+            else if (!in_state) plogis(1.5 + 0.2 * L1 - 0.1 * age / 10 + 0.3 * A)
+            else             plogis(-0.5 + 0.4 * A - 0.2 * L1 + 0.1 * L2)
+      Y <- rbinom(1, 1, py)
+      pat[[length(pat) + 1L]] <- data.frame(
+        id = i, time = t, age = age, sex = sex,
+        alive = alive, in_state = in_state,
+        L1 = L1, L2 = L2, A = A, Y = Y
+      )
+      if (in_state == 0L) break
+      if (t < tmax) {
+        L1 <- L1 + rnorm(1, -0.1 * A, 0.3)
+        L2 <- rbinom(1, 1, plogis(0.5 * L2 + 0.3 * A - 0.5))
+      }
+    }
+    rows[[i]] <- do.call(rbind, pat)
+  }
+  do.call(rbind, rows)
+}
+
+df <- sim_panel(n = 2000L, tmax = 5L, seed = 1L)
+head(df)
+```
+
+---
+
+## Step 1 — Define a policy
+
+A policy is a function `(D_block, t, a_names)` that returns a `data.table`
+with the shifted treatment values for all subjects at time `t`. Here we apply
+a soft upward shift: increase treatment probability by 0.3, capped at 1.
+
+```{r policy}
+policy_up <- function(D_block, t, a_names) {
+  out <- D_block[, ..a_names, drop = FALSE]
+  out[[a_names[1]]] <- pmin(D_block[[a_names[1]]] + 0.3, 1)
+  out
+}
+```
+
+---
+
+## Step 2 — Density ratios
+
+`density_ratio()` fits per-time-point treatment models and returns the
+instantaneous ratio $r_t = d\tilde{P}(A_t \mid H_t) / dP(A_t \mid H_t)$
+comparing the MTP to the natural course.
+
+```{r density-ratio}
+# For real analyses replace with a richer library:
+# e.g. c("SL.glm", "SL.earth", "SL.xgboost", "SL.dbarts")
+sl_lib <- c("SL.mean", "SL.glm")
+
+wr <- density_ratio(
+  df              = df,
+  a_names         = "A",
+  tmax            = 5L,
+  baseline        = c("age", "sex"),
+  tv_names        = c("L1", "L2"),
+  sl_g            = sl_lib,
+  k               = 1L,
+  inner_v         = 5L,
+  v               = 5L,
+  seed            = 1L,
+  id              = "id",
+  time            = "time",
+  policy_spec_fun = policy_up
+)
+```
+
+`wr$weights_dt` contains one row per subject per time with `Rt_t`
+(instantaneous ratio) and `global_fold` (cross-fitting fold). Inspect
+`wr$sl_summary` to check SuperLearner ensemble weights.
+
+**Bypass for identical natural and shifted treatment.** At any time point
+where the policy produces no shift for any subject (natural treatment =
+shifted treatment in every row), `density_ratio()` skips model fitting
+entirely and fills $r_t = 1$ for all subjects at that time. This covers
+policies with a finite intervention window: time points outside the window
+are filled with 1 automatically.
+
+### Weights, intervention windows, and trim
+
+**Intervention window shorter than `tmax`.** A common pattern is an MTP
+that intervenes only during times 1 to $x < \texttt{tmax}$ (e.g. treatment
+is feasible only in the first few ICU days). `density_ratio()` is called
+with this `tmax`, fits models only where the shift is non-trivial, and fills
+$r_t = 1$ outside the intervention window. The downstream estimators
+`sdr()` and `itmle()` are still called with the full `tmax`:
+
+- The Q-models covering time points beyond $x$ are estimated under the
+  natural course (weights = 1), but the risk set (who is still in the ICU)
+  continues to evolve and is modelled correctly. For SDR this means the
+  backward recursion propagates through those time points using natural-course
+  predictions; for iTMLE the targeting step uses unit weights there.
+- Modelling beyond the intervention window is therefore still useful: it
+  correctly accounts for transitions that occur after the policy has ended.
+
+**Trimming.** Trim is applied **globally** across the entire `weights_dt`
+object at the point it is consumed by `sdr()`, `itmle()`, or
+`sdr_competing()` / `itmle_competing()`. The trim quantile is computed over
+all time points present in the weight object, not just those within the
+intervention window or the current `tmax`. This means:
+
+- The trim threshold is identical regardless of whether you call the
+  estimator with `tmax = 3` or `tmax = 10`, as long as they share the same
+  weight object — estimates across horizons are directly comparable.
+- The same `trim` value must be passed consistently to all estimators
+  (main and competing-event) that share a weight object.
+
+### Using `dr_sl = TRUE` (Wu-Benkeser metalearner)
+
+By default (`dr_sl = FALSE`) treatment models are binary classifiers and the
+density ratio is recovered as $\hat{r} = \hat{p} / (1 - \hat{p})$. Setting
+`dr_sl = TRUE` switches to the Wu-Benkeser (2024) metalearner, which
+minimises a density-ratio loss directly on the simplex.
+
+**This requires custom SuperLearner wrappers that return density ratios
+directly, not class probabilities.** The package does not export such wrappers
+because the right design choices (learner type, regularisation, bandwidth) are
+analysis-specific. The `density_ratio()` help page documents the interface a
+custom wrapper must satisfy.
+
+---
+
+## Step 3 — SDR estimator
+
+```{r sdr}
+res_sdr <- sdr(
+  df              = df,
+  weight_object   = wr,
+  tmax            = 5L,
+  id              = "id",
+  time            = "time",
+  alive           = "alive",
+  in_state        = "in_state",
+  y               = "Y",
+  baseline        = c("age", "sex"),
+  tv_names        = c("L1", "L2"),
+  a_names         = "A",
+  sl_g            = sl_lib,
+  sl_recursive    = sl_lib,
+  sl_y            = sl_lib,
+  outcome_family  = "binomial",
+  k               = 1L,
+  inner_v         = 5L,
+  seed            = 1L,
+  policy_spec_fun = policy_up
+)
+
+cat(sprintf(
+  "SDR  psi = %.3f  (natural = %.3f)  RD = %.3f  SE = %.3f  95%% CI [%.3f, %.3f]\n",
+  res_sdr$psi, res_sdr$psi_nat, res_sdr$rd, res_sdr$se,
+  res_sdr$psi - 1.96 * res_sdr$se,
+  res_sdr$psi + 1.96 * res_sdr$se
+))
+```
+
+The return list contains `psi` (point estimate under MTP), `psi_nat` /
+`psi_shf` (plug-in estimates under natural course and MTP), `rd` (risk
+difference `psi_shf − psi_nat`), `se` (from the efficient influence curve),
+`ic` (per-subject influence curve values), `sl_summary`, and `fold_diag`.
+
+---
+
+## Step 4 — Infinite-dimensional TMLE (iTMLE)
+
+iTMLE applies an infinite-dimensional TMLE fluctuation as the update step.
+It requires `sl_tmle`: a SuperLearner library of targeting wrappers from the
+`sl_itmle` family that handle the logit offset passed as column `._sl_offset`
+in the design matrix. These are the **only** SL wrappers the package exports,
+because they must accommodate the offset-as-column structure that standard
+SuperLearner wrappers do not handle (see `?sl_itmle`).
+
+For a quick start, `SL.tgt.intercept` (standard one-parameter TMLE update)
+and `SL.tgt.glm` (GLM fluctuation) are sufficient. The full `sl_tmle` default
+vector adds penalised regression and gradient boosting.
+
+```{r itmle}
+res_itmle <- itmle(
+  df               = df,
+  weight_object    = wr,
+  tmax             = 5L,
+  id               = "id",
+  time             = "time",
+  alive            = "alive",
+  in_state         = "in_state",
+  y                = "Y",
+  baseline         = c("age", "sex"),
+  tv_names         = c("L1", "L2"),
+  a_names          = "A",
+  sl_g             = sl_lib,
+  sl_recursive     = sl_lib,
+  sl_y             = sl_lib,
+  sl_tmle          = c("SL.tgt.intercept", "SL.tgt.glm"),
+  outcome_family   = "binomial",
+  k                = 1L,
+  inner_v          = 5L,
+  v_target_itmle   = 5L,
+  v_sl_inner_itmle = 5L,
+  seed             = 1L,
+  policy_spec_fun  = policy_up
+)
+
+cat(sprintf(
+  "iTMLE  psi = %.3f  SE = %.3f  95%% CI [%.3f, %.3f]  targeting gap = %.2e\n",
+  res_itmle$psi, res_itmle$se,
+  res_itmle$ci[1], res_itmle$ci[2],
+  res_itmle$targeting_gap
+))
+```
+
+`targeting_gap` (mean EIF after targeting) should be near zero; a large value
+indicates the targeting step did not converge.
+
+---
+
+## Step 5 — Q-recursion sensitivity check (`qreg`)
+
+`qreg()` runs the same backward Q-regression without any update step. The
+point estimate $\hat\Psi_Q = n^{-1}\sum_i \hat{Q}_1(H_{i1})$ depends only on
+the Q-models and is independent of density-ratio weights.
+
+It is **not** sequentially doubly robust and carries first-order bias when
+Q-models are misspecified. Use it as a sensitivity check: if `qreg` and `sdr`
+agree, the DR update and density-ratio weighting are not decisive. A large
+discrepancy suggests extreme weights or Q-model misspecification and warrants
+closer inspection of ESS diagnostics.
+
+Passing `weight_object` is optional but enables an EIF-based SE alongside the
+always-computed naive SE (which treats the fitted Q as fixed and
+underestimates uncertainty).
+
+```{r qreg}
+res_qreg <- qreg(
+  df              = df,
+  weight_object   = wr,
+  tmax            = 5L,
+  id              = "id",
+  time            = "time",
+  alive           = "alive",
+  in_state        = "in_state",
+  y               = "Y",
+  baseline        = c("age", "sex"),
+  tv_names        = c("L1", "L2"),
+  a_names         = "A",
+  sl_g            = sl_lib,
+  sl_recursive    = sl_lib,
+  sl_y            = sl_lib,
+  outcome_family  = "binomial",
+  k               = 1L,
+  inner_v         = 5L,
+  seed            = 1L,
+  policy_spec_fun = policy_up
+)
+
+cat(sprintf(
+  "qreg  estimate = %.3f  SE (naive) = %.3f  SE (EIF) = %.3f\n",
+  res_qreg$estimate, res_qreg$se_naive, res_qreg$se_eif
+))
+```
+
+---
+
+## Step 6 — Competing-event (in-hospital mortality) variant
+
+`sdr_competing()` and `itmle_competing()` estimate in-state survival (e.g.
+in-hospital mortality) under the same MTP. They are included specifically to
+allow reuse of **exactly the same weight object** — with the same trim — as
+the main outcome estimators. This matters when the MTP has a limited
+intervention duration: both the outcome and the competing-event analysis must
+operate on identically trimmed weights for the two results to be
+directly comparable.
+
+The estimators are based on the competing-event / survival LMTP framework of
+Díaz, Hoffman & Hejazi (2023). The only reason a separate implementation
+exists within this package (rather than using `lmtp` directly) is to share
+the pre-computed, trimmed density-ratio weights from `density_ratio()`.
+
+One practical detail: the competing-event estimators may require additional
+time points beyond the main `tmax` to cover the full at-risk period.
+Unit weights ($r_t = 1$) for these extra time points are appended to the
+weight object **after** the global trim has been applied, so trimming remains
+consistent with the main analysis.
+
+```{r competing}
+res_mort <- sdr_competing(
+  DT              = df,
+  weights_dt      = wr$weights_dt,
+  policy_spec_fun = policy_up,
+  id              = "id",
+  time            = "time",
+  alive           = "alive",
+  in_state        = "in_state",
+  baseline        = c("age", "sex"),
+  tv_names        = c("L1", "L2"),
+  a_names         = "A",
+  k               = 1L,
+  tmax            = 5L,
+  seed            = 1L,
+  sl_q            = sl_lib,
+  inner_v         = 5L,
+  trim            = 0.99,   # must match trim used in sdr() / itmle()
+  parallel        = FALSE
+)
+
+cat(sprintf("SDR competing  psi = %.3f  SE = %.3f\n",
+            res_mort$psi, res_mort$se))
+```
+
+---
+
+## Diagnostics
+
+All estimators return diagnostic objects alongside the point estimate.
+
+### SuperLearner weights — `sl_summary`
+
+A `data.table` of ensemble weights per fold, time point, and model component
+(`g_remain`, `g_death_exit`, `Q_exit`, `Q_rem`). Check that no single learner
+dominates unexpectedly and that weights are stable across folds.
+
+```{r sl-summary}
+head(res_sdr$sl_summary)
+```
+
+### Per-fold summaries — `fold_diag`
+
+Counts and mean Q predictions per fold and time point. Useful for spotting
+time points with very few at-risk subjects, which can destabilise model fits.
+
+```{r fold-diag}
+res_sdr$fold_diag
+```
+
+### Branch calibration — `diagnostics$branch_cal` (SDR / qreg)
+
+Compares in-fold training vs. held-out validation performance (AUC, Brier
+score, MSE) for each model component at each time point. A large
+training–validation gap signals overfitting.
+
+```{r branch-cal}
+head(res_sdr$diagnostics$branch_cal)
+```
+
+### Targeting diagnostics — `target_diag`, `targeting_gap` (iTMLE only)
+
+`target_diag` tracks the mean EIF and the fluctuation parameter $\epsilon$
+across targeting iterations. `targeting_gap` summarises convergence — values
+near zero confirm the targeting step has solved the efficient score equation.
+
+```{r target-diag}
+res_itmle$targeting_gap
+head(res_itmle$target_diag)
+```
+
+### Density-ratio ESS
+
+`wr$weights_dt` provides `Rt_t` (instantaneous ratio) and `cum_ratio`
+(cumulative product) per subject per time. Monitor the effective sample size
+(ESS) of the cumulative weights — ESS collapse across time is the main
+practical failure mode of density-ratio-based estimators and will inflate
+standard errors even when the point estimate looks stable.
+
+---
+
+## Parallelism
+
+All estimators default to `parallel = FALSE` and `parallel_t = FALSE` and run
+on a single core out of the box.
+
+**Two independent levels of parallelism are available**, both implemented via
+`parallel::mclapply()` (process forking):
+
+1. **Fold-level** (`parallel = TRUE`, `fold_workers`): each cross-fitting
+   fold runs in a separate forked process.
+2. **Within-fold regression** (`reg_workers`): per-time-point regression
+   tasks within each fold are distributed across worker processes.
+3. **Time-point level in `density_ratio()`** (`parallel_t = TRUE`,
+   `t_workers`): time points are parallelised independently of fold workers.
+
+Because forking is used, **this does not work on Windows**. On Linux and
+macOS, set BLAS, xgboost, and dbarts thread counts to 1 before enabling
+process-level parallelism to avoid oversubscription:
+
+```{r parallel}
+# Example: 5-fold outer parallelism on Linux/macOS
+res_sdr_par <- sdr(
+  ...,
+  parallel     = TRUE,
+  fold_workers = 5L,
+  reg_workers  = 1L      # keep inner regressions single-threaded
+)
+```
+
+---
+
+## References
+
+Bang H, Robins JM (2005). Doubly Robust Estimation in Missing Data and
+Causal Inference Models. *Biometrics* 61(4):962–973.
+
+Díaz I, van der Laan MJ (2012). Population Intervention Causal Effects Based
+on Stochastic Interventions. *Biometrics* 68(2):541–549.
+
+Haneuse S, Rotnitzky A (2013). Estimation of the Effect of Interventions
+that Modify the Received Treatment. *Statistics in Medicine*
+32(30):5260–5277.
+
+Luedtke AR, Sofrygin O, van der Laan MJ, Carone M (2017/2018). Sequential
+Double Robustness in Right-Censored Longitudinal Models. arXiv:1705.02459.
+
+Rotnitzky A, Robins J, Babino L (2017). On the Multiply Robust Estimation of
+the Mean of the G-Functional. arXiv:1705.08582.
+
+Díaz I, Williams N, Hoffman KL, Schenck EJ (2021). Nonparametric Causal
+Effects Based on Longitudinal Modified Treatment Policies. *JASA*
+118(542):846–857.
+
+Díaz I, Hoffman KL, Hejazi NS (2023). Causal Survival Analysis under
+Competing Risks using Longitudinal Modified Treatment Policies. *Lifetime
+Data Analysis*. doi:10.1007/s10985-023-09606-7.
+
+Williams NT, Díaz I (2023). lmtp: An R package for estimating the causal
+effects of modified treatment policies. *Observational Studies*.
+
+Wu C, Benkeser D (2024). Nonparametric Efficient Estimation of Marginal
+Structural Models using Targeted Machine Learning. arXiv:2408.10847.
