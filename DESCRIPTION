@@ -1,7 +1,7 @@
 Package: CausalState
 Type: Package
 Title: Sequential Doubly Robust and Infinite-Dimensional TMLE Estimators for State-Aware Longitudinal Modified Treatment Policies
-Version: 0.0.0.9000
+Version: 0.9.0
 Authors@R: 
     person(given = "Sebastiaan",
            family = "Blank",
