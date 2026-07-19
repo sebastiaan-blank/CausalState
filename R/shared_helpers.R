@@ -958,7 +958,7 @@ expand_to_horizon <- function(DT, id, time, alive, in_state, tmax) {
 #' \itemize{
 #'   \item RD: \eqn{IC_{RD,i} = IC_{1,i} - IC_{0,i}}
 #'   \item RR: log-scale IC \eqn{IC_{\log RR,i} = IC_{1,i}/\psi_1 - IC_{0,i}/\psi_0};
-#'     the 95\% CI is exponentiated from the log scale for positive coverage.
+#'     the 95% CI is exponentiated from the log scale for positive coverage.
 #' }
 #'
 #' @param fit1 Fitted object (intervention arm): output of [sdr()] or [itmle()].
@@ -975,9 +975,9 @@ expand_to_horizon <- function(DT, id, time, alive, in_state, tmax) {
 #' @return A list with:
 #'   \describe{
 #'     \item{\code{psi1}, \code{psi0}}{Point estimates for each arm.}
-#'     \item{\code{RD}, \code{se_RD}, \code{ci_RD}}{Risk difference and 95\% Wald CI.}
+#'     \item{\code{RD}, \code{se_RD}, \code{ci_RD}}{Risk difference and 95% Wald CI.}
 #'     \item{\code{RR}, \code{se_log_RR}, \code{ci_RR}}{Risk ratio, SE on log scale,
-#'       and 95\% CI (log-scale, then exponentiated).}
+#'       and 95% CI (log-scale, then exponentiated).}
 #'     \item{\code{n}}{Number of matched subjects.}
 #'   }
 #'

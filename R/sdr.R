@@ -120,7 +120,7 @@
 #'     \item{`psi_shf`}{Plug-in estimate under the MTP (equals `psi`).}
 #'     \item{`rd`}{Risk difference `psi_shf - psi_nat`.}
 #'     \item{`se`}{Standard error from the efficient influence curve.}
-#'     \item{`ci`}{95\% Wald confidence interval.}
+#'     \item{`ci`}{95% Wald confidence interval.}
 #'     \item{`ic_df`}{`data.table` with columns `id` and `ic` (per-subject
 #'       influence curve values). Used by [contrast()].}
 #'     \item{`sl_summary`}{`data.table` of SuperLearner learner weights.

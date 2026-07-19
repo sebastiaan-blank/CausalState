@@ -194,7 +194,7 @@ A named list with:
 \describe{
 \item{\code{psi}}{Point estimate of \code{E[Y(d)]} under the MTP (after targeting).}
 \item{\code{se}}{Standard error from the efficient influence curve.}
-\item{\code{ci}}{95\\% Wald confidence interval.}
+\item{\code{ci}}{95\% Wald confidence interval.}
 \item{\code{ic_df}}{\code{data.table} with columns \code{id} and \code{ic} (per-subject
 influence curve values). Used by \code{\link[=contrast]{contrast()}}.}
 \item{\code{psi_onestep}}{One-step pre-targeting estimate. If substantially

@@ -184,7 +184,7 @@ A named list with:
 \item{\code{psi_shf}}{Plug-in estimate under the MTP (equals \code{psi}).}
 \item{\code{rd}}{Risk difference \code{psi_shf - psi_nat}.}
 \item{\code{se}}{Standard error from the efficient influence curve.}
-\item{\code{ci}}{95\\% Wald confidence interval.}
+\item{\code{ci}}{95\% Wald confidence interval.}
 \item{\code{ic_df}}{\code{data.table} with columns \code{id} and \code{ic} (per-subject
 influence curve values). Used by \code{\link[=contrast]{contrast()}}.}
 \item{\code{sl_summary}}{\code{data.table} of SuperLearner learner weights.

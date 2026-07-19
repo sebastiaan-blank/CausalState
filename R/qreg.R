@@ -49,7 +49,7 @@ make_subject_folds_qreg <- function(ids, v, cluster_by_id, seed) {
 #'     \item{\code{se_naive}}{Naive SE (always present).}
 #'     \item{\code{se_eif}}{EIF-based SE (\code{NULL} if no \code{weight_object}).}
 #'     \item{\code{se}}{Best available SE: \code{se_eif} if available, else \code{se_naive}.}
-#'     \item{\code{ci}}{95\% Wald CI using \code{se}.}
+#'     \item{\code{ci}}{95% Wald CI using \code{se}.}
 #'     \item{\code{psi_natural}}{Plug-in estimate under the natural course.}
 #'     \item{\code{psi_shifted}}{Plug-in estimate under the MTP (= \code{estimate}).}
 #'     \item{\code{sl_summary}}{`data.table` of SuperLearner learner weights per

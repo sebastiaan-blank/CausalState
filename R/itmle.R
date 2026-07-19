@@ -676,7 +676,7 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #'   \describe{
 #'     \item{`psi`}{Point estimate of `E[Y(d)]` under the MTP (after targeting).}
 #'     \item{`se`}{Standard error from the efficient influence curve.}
-#'     \item{`ci`}{95\% Wald confidence interval.}
+#'     \item{`ci`}{95% Wald confidence interval.}
 #'     \item{`ic_df`}{`data.table` with columns `id` and `ic` (per-subject
 #'       influence curve values). Used by [contrast()].}
 #'     \item{`psi_onestep`}{One-step pre-targeting estimate. If substantially
