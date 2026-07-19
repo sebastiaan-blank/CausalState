@@ -2064,9 +2064,10 @@ itmle <- function(
     ),
     
     settings = list(
-      pool_g_death = pool_g_death,
-      trim = trim,
-      variable_info = list(
+      pool_g_death   = pool_g_death,
+      trim           = trim,
+      outcome_family = outcome_family,
+      variable_info  = list(
         id           = id,
         time         = time,
         alive        = alive,

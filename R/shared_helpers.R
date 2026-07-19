@@ -1121,23 +1121,36 @@ contrast <- function(fit1, fit0, df = NULL, id_col = NULL, cluster = NULL) {
   rr         <- psi1 / psi0
   se_log_rr  <- .se(ic_log_rr)
 
-  tbl <- data.frame(
-    Estimate     = c(psi1, psi0, rd, rr),
-    `CI Lower`   = c(
-      psi1 - 1.96 * fit1$se,
-      psi0 - 1.96 * fit0$se,
-      rd   - 1.96 * se_rd,
-      exp(log(rr) - 1.96 * se_log_rr)
-    ),
-    `CI Upper`   = c(
-      psi1 + 1.96 * fit1$se,
-      psi0 + 1.96 * fit0$se,
-      rd   + 1.96 * se_rd,
-      exp(log(rr) + 1.96 * se_log_rr)
-    ),
-    check.names  = FALSE,
-    row.names    = c("Intervention", "Control", "Risk Difference", "Risk Ratio")
-  )
+  gaussian <- identical(fit1$settings$outcome_family, "gaussian") ||
+              identical(fit0$settings$outcome_family, "gaussian")
+
+  if (gaussian) {
+    tbl <- data.frame(
+      Estimate   = c(psi1, psi0, rd),
+      `CI Lower` = c(psi1 - 1.96 * fit1$se, psi0 - 1.96 * fit0$se, rd - 1.96 * se_rd),
+      `CI Upper` = c(psi1 + 1.96 * fit1$se, psi0 + 1.96 * fit0$se, rd + 1.96 * se_rd),
+      check.names = FALSE,
+      row.names   = c("Intervention", "Control", "Mean Difference")
+    )
+  } else {
+    tbl <- data.frame(
+      Estimate   = c(psi1, psi0, rd, rr),
+      `CI Lower` = c(
+        psi1 - 1.96 * fit1$se,
+        psi0 - 1.96 * fit0$se,
+        rd   - 1.96 * se_rd,
+        exp(log(rr) - 1.96 * se_log_rr)
+      ),
+      `CI Upper` = c(
+        psi1 + 1.96 * fit1$se,
+        psi0 + 1.96 * fit0$se,
+        rd   + 1.96 * se_rd,
+        exp(log(rr) + 1.96 * se_log_rr)
+      ),
+      check.names = FALSE,
+      row.names   = c("Intervention", "Control", "Risk Difference", "Risk Ratio")
+    )
+  }
 
   out <- list(
     psi1      = psi1,
@@ -1145,10 +1158,11 @@ contrast <- function(fit1, fit0, df = NULL, id_col = NULL, cluster = NULL) {
     RD        = rd,
     se_RD     = se_rd,
     ci_RD     = c(rd - 1.96 * se_rd, rd + 1.96 * se_rd),
-    RR        = rr,
-    se_log_RR = se_log_rr,
-    ci_RR     = exp(log(rr) + c(-1.96, 1.96) * se_log_rr),
+    RR        = if (gaussian) NULL else rr,
+    se_log_RR = if (gaussian) NULL else se_log_rr,
+    ci_RR     = if (gaussian) NULL else exp(log(rr) + c(-1.96, 1.96) * se_log_rr),
     n         = n,
+    gaussian  = gaussian,
     table     = tbl
   )
   class(out) <- "CausalState_contrast"
