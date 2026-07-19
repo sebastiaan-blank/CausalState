@@ -136,6 +136,77 @@ make_subject_folds_qreg <- function(ids, v, cluster_by_id, seed) {
 #' mean(df$Y)
 #' }
 #'
+#' # Multi-treatment: plug-in estimate under a joint policy over two treatments
+#' \donttest{
+#' library(SuperLearner)
+#'
+#' sim_multi <- function(n = 800L, tmax = 5L) {
+#'   set.seed(42L)
+#'   rows <- vector("list", n)
+#'   for (i in seq_len(n)) {
+#'     age <- round(rnorm(1, 65, 10)); L1 <- rnorm(1)
+#'     pat <- list()
+#'     for (t in seq_len(tmax)) {
+#'       A1    <- rbinom(1, 1, plogis(0.3 * L1 - 0.4))
+#'       A2    <- rbinom(1, 1, plogis(0.2 * L1 + 0.3 * A1 - 0.3))
+#'       u     <- runif(1)
+#'       p_die <- plogis(-4.0 + 0.2 * L1 - 0.1 * age / 10)
+#'       p_dc  <- plogis(-2.5 + 0.4 * A1 + 0.3 * A2)
+#'       if (u < p_die) {
+#'         alive <- 0L; in_state <- 0L
+#'       } else if (u < p_die + p_dc) {
+#'         alive <- 1L; in_state <- 0L
+#'       } else {
+#'         alive <- 1L; in_state <- 1L
+#'       }
+#'       Y <- rbinom(1, 1, plogis(-0.5 + 0.3 * A1 + 0.3 * A2 - 0.2 * L1))
+#'       pat[[length(pat) + 1L]] <- data.frame(
+#'         id = i, time = t, age = age, L1 = L1,
+#'         A1 = A1, A2 = A2, alive = alive, in_state = in_state, Y = Y
+#'       )
+#'       if (in_state == 0L) break
+#'       if (t < tmax) L1 <- L1 + rnorm(1, -0.1 * A1, 0.3)
+#'     }
+#'     rows[[i]] <- do.call(rbind, pat)
+#'   }
+#'   do.call(rbind, rows)
+#' }
+#' df2 <- sim_multi()
+#'
+#' policy_fn2 <- function(D_block, t, a_names) {
+#'   out <- D_block[, ..a_names, drop = FALSE]
+#'   out[[a_names[1]]] <- pmin(D_block[[a_names[1]]] + 0.3, 1)
+#'   out[[a_names[2]]] <- pmin(D_block[[a_names[2]]] + 0.3, 1)
+#'   out
+#' }
+#'
+#' sl_lib <- c("SL.mean", "SL.glm")
+#'
+#' res2 <- qreg(
+#'   df              = df2,
+#'   tmax            = 5L,
+#'   id              = "id",
+#'   time            = "time",
+#'   alive           = "alive",
+#'   in_state        = "in_state",
+#'   y               = "Y",
+#'   baseline        = "age",
+#'   tv_names        = "L1",
+#'   a_names         = c("A1", "A2"),
+#'   sl_remain       = sl_lib,
+#'   sl_death        = sl_lib,
+#'   sl_recursive    = sl_lib,
+#'   sl_y            = sl_lib,
+#'   k               = 1L,
+#'   inner_v         = 3L,
+#'   parallel        = FALSE,
+#'   seed            = 1L,
+#'   policy_spec_fun = policy_fn2
+#' )
+#' res2$estimate
+#' res2$se
+#' }
+#'
 #' @export
 qreg <- function(
     df, tmax,
