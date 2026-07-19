@@ -73,11 +73,36 @@ offset via \code{glmnet::cv.glmnet()}.}
 
 Pre-configured variants (\verb{SL.tmle_*}) expose specific hyperparameter
 choices and are the recommended building blocks for \code{sl_tmle}:
-\code{SL.tmle_empty}, \code{SL.tmle_intercept}, \code{SL.tmle_glm},
-\code{SL.tmle_glmnet_ridge}, \code{SL.tmle_glmnet_enet}, \code{SL.tmle_glmnet_lasso},
-\code{SL.tmle_xgb_d1}, \code{SL.tmle_xgb_d3}, \code{SL.tmle_xgb_d6}.
+\describe{
+\item{\code{SL.tmle_empty}}{No fluctuation (pass-through).}
+\item{\code{SL.tmle_intercept}}{One-parameter intercept (standard TMLE update).}
+\item{\code{SL.tmle_glm}}{Main-terms logistic GLM.}
+\item{\code{SL.tmle_glmnet_ridge}}{Ridge regression (alpha = 0).}
+\item{\code{SL.tmle_glmnet_enet}}{Elastic net (alpha = 0.5).}
+\item{\code{SL.tmle_glmnet_lasso}}{Lasso (alpha = 1).}
+\item{\code{SL.tmle_xgb_d1}}{XGBoost depth 1, CPU, 50 rounds.}
+\item{\code{SL.tmle_xgb_d3}}{XGBoost depth 3, CPU, 50 rounds.}
+\item{\code{SL.tmle_xgb_d6}}{XGBoost depth 6, CPU, 50 rounds.}
+}
 
-The default \code{sl_tmle} character vector contains a recommended set of these.
+The default \code{sl_tmle} vector follows Luedtke et al. (2017) Algorithm 4:
+\code{empty}, \code{intercept}, \code{glm}, and the three XGBoost depths.  The glmnet
+variants are available but must be specified explicitly via \code{sl_tmle}.
+}
+\examples{
+# Default targeting stack (Luedtke et al. Algorithm 4)
+sl_tmle
+
+# Lightweight stack for examples and testing (no XGBoost required)
+sl_tmle_light <- c("SL.tmle_empty", "SL.tmle_intercept", "SL.tmle_glm")
+
+# Add glmnet variants explicitly when desired
+sl_tmle_penalised <- c(
+  "SL.tmle_empty", "SL.tmle_intercept", "SL.tmle_glm",
+  "SL.tmle_glmnet_ridge", "SL.tmle_glmnet_enet",
+  "SL.tmle_xgb_d1", "SL.tmle_xgb_d3", "SL.tmle_xgb_d6"
+)
+
 }
 \seealso{
 \code{\link[=itmle]{itmle()}}

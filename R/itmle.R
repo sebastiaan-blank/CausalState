@@ -674,13 +674,30 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #'     \item{`psi`}{Point estimate of `E[Y(d)]` under the MTP (after targeting).}
 #'     \item{`se`}{Standard error from the efficient influence curve.}
 #'     \item{`ci`}{95\% Wald confidence interval.}
-#'     \item{`ic`}{Per-subject influence curve values (length n).}
-#'     \item{`psi_onestep`}{One-step pre-targeting estimate (diagnostic).}
-#'     \item{`targeting_gap`}{Mean EIF after targeting; near zero indicates convergence.}
-#'     \item{`sl_summary`}{`data.table` of SuperLearner weights per fold/time/component.}
-#'     \item{`fold_diag`}{Per-fold diagnostic summaries.}
-#'     \item{`target_diag`}{Per-iteration targeting diagnostics.}
-#'     \item{`fluct_diag`}{Fluctuation model diagnostics from the targeting step.}
+#'     \item{`ic_df`}{`data.table` with columns `id` and `ic` (per-subject
+#'       influence curve values). Used by [contrast()].}
+#'     \item{`psi_onestep`}{One-step pre-targeting estimate. If substantially
+#'       different from `psi`, the targeting step contributed meaningfully to
+#'       de-biasing.}
+#'     \item{`targeting_gap`}{Mean efficient influence curve after targeting.
+#'       Should be close to zero; a value far from zero indicates non-convergence
+#'       of the targeting loop.}
+#'     \item{`sl_summary`}{`data.table` of SuperLearner learner weights.
+#'       One row per learner per (fold, time-point, model component).
+#'       Columns include `fold`, `t`, `component` (`g_remain`, `g_death`,
+#'       `Q_rem`, `Q_exit`) and one numeric column per learner.}
+#'     \item{`fold_diag`}{`data.table` of per-fold, per-time-point diagnostics.
+#'       Same structure as in [sdr()]: g/Q model predictions, pseudo-outcome
+#'       statistics, and EIF update magnitude.}
+#'     \item{`target_diag`}{`data.table` with one row per targeting iteration.
+#'       Tracks the `targeting_gap` as it decreases across iterations, useful
+#'       for diagnosing slow or non-converging targeting.}
+#'     \item{`fluct_diag`}{`data.table` of SuperLearner learner weights from
+#'       the fluctuation (targeting) model, per fold and time-point. Shows
+#'       which targeting wrappers (from [sl_itmle]) were selected.}
+#'     \item{`diagnostics$branch_cal`}{Per-fold, per-time branch calibration
+#'       table: empirical mean targets vs. predictions for `g_remain`,
+#'       `g_death`, and `Q_remain`.}
 #'   }
 #'
 #' @references
@@ -691,7 +708,88 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #' Effects Based on Longitudinal Modified Treatment Policies. *JASA*
 #' 118(542):846–857.
 #'
-#' @seealso [density_ratio()], [sdr()], [absorb_rule()], [sl_itmle]
+#' @seealso [density_ratio()], [sdr()], [contrast()], [absorb_rule()], [sl_itmle]
+#'
+#' @examples
+#' \donttest{
+#' library(SuperLearner)
+#'
+#' # ICU-like DGP: patients die, discharge, or remain in state each time point
+#' sim_ex <- function(n = 800L, tmax = 5L) {
+#'   set.seed(42L)
+#'   rows <- vector("list", n)
+#'   for (i in seq_len(n)) {
+#'     age <- round(rnorm(1, 65, 10)); L1 <- rnorm(1)
+#'     pat <- list()
+#'     for (t in seq_len(tmax)) {
+#'       A     <- rbinom(1, 1, plogis(0.3 * L1 - 0.4))
+#'       u     <- runif(1)
+#'       p_die <- plogis(-4.0 + 0.2 * L1 - 0.1 * age / 10)
+#'       p_dc  <- plogis(-2.5 + 0.5 * A)
+#'       if (u < p_die) {
+#'         alive <- 0L; in_state <- 0L
+#'       } else if (u < p_die + p_dc) {
+#'         alive <- 1L; in_state <- 0L
+#'       } else {
+#'         alive <- 1L; in_state <- 1L
+#'       }
+#'       Y <- rbinom(1, 1, plogis(-0.5 + 0.4 * A - 0.2 * L1))
+#'       pat[[length(pat) + 1L]] <- data.frame(
+#'         id = i, time = t, age = age, L1 = L1,
+#'         A = A, alive = alive, in_state = in_state, Y = Y
+#'       )
+#'       if (in_state == 0L) break
+#'       if (t < tmax) L1 <- L1 + rnorm(1, -0.1 * A, 0.3)
+#'     }
+#'     rows[[i]] <- do.call(rbind, pat)
+#'   }
+#'   do.call(rbind, rows)
+#' }
+#' df <- sim_ex()
+#'
+#' # Policy: increase treatment probability by 0.3
+#' policy_fn <- function(D_block, t, a_names) {
+#'   out <- D_block[, ..a_names, drop = FALSE]
+#'   out[[a_names[1]]] <- pmin(D_block[[a_names[1]]] + 0.3, 1)
+#'   out
+#' }
+#'
+#' sl_lib <- c("SL.mean", "SL.glm")
+#'
+#' wr <- density_ratio(
+#'   df = df, a_names = "A", tmax = 5L, baseline = "age", tv_names = "L1",
+#'   sl_g = sl_lib, k = 1L, inner_v = 3L, v = 3L, seed = 1L,
+#'   id = "id", time = "time", policy_spec_fun = policy_fn
+#' )
+#'
+#' res <- itmle(
+#'   df               = df,
+#'   weight_object    = wr,
+#'   tmax             = 5L,
+#'   id               = "id",
+#'   time             = "time",
+#'   alive            = "alive",
+#'   in_state         = "in_state",
+#'   y                = "Y",
+#'   baseline         = "age",
+#'   tv_names         = "L1",
+#'   a_names          = "A",
+#'   sl_remain        = sl_lib,
+#'   sl_death         = sl_lib,
+#'   sl_recursive     = sl_lib,
+#'   sl_y             = sl_lib,
+#'   sl_tmle          = c("SL.tmle_empty", "SL.tmle_intercept", "SL.tmle_glm"),
+#'   k                = 1L,
+#'   inner_v          = 3L,
+#'   v_target_itmle   = 3L,
+#'   v_sl_inner_itmle = 3L,
+#'   parallel         = FALSE,
+#'   seed             = 1L,
+#'   policy_spec_fun  = policy_fn
+#' )
+#' res$psi
+#' res$se
+#' }
 #'
 #' @export
 itmle <- function(

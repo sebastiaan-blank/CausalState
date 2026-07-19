@@ -28,7 +28,6 @@ regularisation, k-fold cross-fitting, and pluggable SuperLearner ensembles.
 
 \itemize{
 \item \code{\link[=absorb_rule]{absorb_rule()}} — Define rules for entering absorbing states
-\item \code{\link[=sdr_competing]{sdr_competing()}} — SDR estimator for competing-event outcomes under state transitions
 }
 }
 
@@ -48,4 +47,4 @@ Authors:
 }
 
 }
-\keyword{internal}
+\keyword{package}

@@ -105,9 +105,29 @@
 #'     \item{`psi_shf`}{Plug-in estimate under the MTP (equals `psi`).}
 #'     \item{`rd`}{Risk difference `psi_shf - psi_nat`.}
 #'     \item{`se`}{Standard error from the efficient influence curve.}
-#'     \item{`ic`}{Per-subject influence curve values (length n).}
-#'     \item{`sl_summary`}{`data.table` of SuperLearner weights per fold/time/component.}
-#'     \item{`fold_diag`}{Per-fold diagnostic summaries.}
+#'     \item{`ci`}{95\% Wald confidence interval.}
+#'     \item{`ic_df`}{`data.table` with columns `id` and `ic` (per-subject
+#'       influence curve values). Used by [contrast()].}
+#'     \item{`sl_summary`}{`data.table` of SuperLearner learner weights.
+#'       One row per learner per (fold, time-point, model component).
+#'       Columns include `fold`, `t`, `component` (`g_remain`, `g_death`,
+#'       `Q_rem`, `Q_exit`) and one numeric column per learner in the
+#'       library.  Useful for checking which learners dominate and whether
+#'       any learner receives consistently zero weight.}
+#'     \item{`fold_diag`}{`data.table` of per-fold, per-time-point
+#'       diagnostics (one row per fold × time).  Contains mean and SD of
+#'       g-model predictions under natural and shifted
+#'       (`p_rem_nat/shf_mean`, `p_dex_nat/shf_mean`), Q-model predictions
+#'       (`q_rem_nat/shf_mean`, `q_exit_nat/shf_mean`), pseudo-outcome
+#'       statistics before and after the EIF update (`pseudo_pre/post_mean/sd`),
+#'       EIF update magnitude (`delta_mean`, `delta_q95_abs` — large values
+#'       suggest the EIF correction is substantial), and correlation
+#'       diagnostics for the update step (`corr_mean`).}
+#'     \item{`diagnostics$branch_cal`}{Per-fold, per-time branch
+#'       calibration table: empirical mean of training/validation targets
+#'       vs. mean predictions for `g_remain`, `g_death`, and `Q_remain`.
+#'       A quick calibration check for the three fitted models at each
+#'       time point.}
 #'   }
 #'
 #' @references
@@ -118,7 +138,85 @@
 #' Luedtke AR, Sofrygin O, van der Laan MJ, Carone M (2017). Sequential
 #' Double Robustness in Right-Censored Longitudinal Models. arXiv:1705.02459.
 #'
-#' @seealso [density_ratio()], [itmle()], [absorb_rule()]
+#' @seealso [density_ratio()], [itmle()], [contrast()], [absorb_rule()]
+#'
+#' @examples
+#' \donttest{
+#' library(SuperLearner)
+#'
+#' # ICU-like DGP: patients die, discharge, or remain in state each time point
+#' sim_ex <- function(n = 800L, tmax = 5L) {
+#'   set.seed(42L)
+#'   rows <- vector("list", n)
+#'   for (i in seq_len(n)) {
+#'     age <- round(rnorm(1, 65, 10)); L1 <- rnorm(1)
+#'     pat <- list()
+#'     for (t in seq_len(tmax)) {
+#'       A     <- rbinom(1, 1, plogis(0.3 * L1 - 0.4))
+#'       u     <- runif(1)
+#'       p_die <- plogis(-4.0 + 0.2 * L1 - 0.1 * age / 10)
+#'       p_dc  <- plogis(-2.5 + 0.5 * A)
+#'       if (u < p_die) {
+#'         alive <- 0L; in_state <- 0L
+#'       } else if (u < p_die + p_dc) {
+#'         alive <- 1L; in_state <- 0L
+#'       } else {
+#'         alive <- 1L; in_state <- 1L
+#'       }
+#'       Y <- rbinom(1, 1, plogis(-0.5 + 0.4 * A - 0.2 * L1))
+#'       pat[[length(pat) + 1L]] <- data.frame(
+#'         id = i, time = t, age = age, L1 = L1,
+#'         A = A, alive = alive, in_state = in_state, Y = Y
+#'       )
+#'       if (in_state == 0L) break
+#'       if (t < tmax) L1 <- L1 + rnorm(1, -0.1 * A, 0.3)
+#'     }
+#'     rows[[i]] <- do.call(rbind, pat)
+#'   }
+#'   do.call(rbind, rows)
+#' }
+#' df <- sim_ex()
+#'
+#' # Policy: increase treatment probability by 0.3
+#' policy_fn <- function(D_block, t, a_names) {
+#'   out <- D_block[, ..a_names, drop = FALSE]
+#'   out[[a_names[1]]] <- pmin(D_block[[a_names[1]]] + 0.3, 1)
+#'   out
+#' }
+#'
+#' sl_lib <- c("SL.mean", "SL.glm")
+#'
+#' wr <- density_ratio(
+#'   df = df, a_names = "A", tmax = 5L, baseline = "age", tv_names = "L1",
+#'   sl_g = sl_lib, k = 1L, inner_v = 3L, v = 3L, seed = 1L,
+#'   id = "id", time = "time", policy_spec_fun = policy_fn
+#' )
+#'
+#' res <- sdr(
+#'   df              = df,
+#'   weight_object   = wr,
+#'   tmax            = 5L,
+#'   id              = "id",
+#'   time            = "time",
+#'   alive           = "alive",
+#'   in_state        = "in_state",
+#'   y               = "Y",
+#'   baseline        = "age",
+#'   tv_names        = "L1",
+#'   a_names         = "A",
+#'   sl_remain       = sl_lib,
+#'   sl_death        = sl_lib,
+#'   sl_recursive    = sl_lib,
+#'   sl_y            = sl_lib,
+#'   k               = 1L,
+#'   inner_v         = 3L,
+#'   parallel        = FALSE,
+#'   seed            = 1L,
+#'   policy_spec_fun = policy_fn
+#' )
+#' res$psi
+#' res$se
+#' }
 #'
 #' @export
 sdr <- function(

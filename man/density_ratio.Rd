@@ -100,8 +100,14 @@ A list with components:
 \item{\code{weights_dt}}{A \code{data.table} with one row per subject-time
 containing \code{Rt_t} (instantaneous density ratio) and \code{global_fold}.
 Pass this to \code{\link[=sdr]{sdr()}} or \code{\link[=itmle]{itmle()}} as \code{weight_object}.}
-\item{\code{sl_summary}}{\code{data.table} of SuperLearner weights.}
-\item{\code{fold_diag}}{Per-fold diagnostic information.}
+\item{\code{sl_summary}}{\code{data.table} of SuperLearner learner weights.
+One row per learner per (fold, time-point). Useful for checking
+which treatment models dominate across time points.}
+\item{\code{fold_diag}}{\code{data.table} of per-fold, per-time-point
+diagnostics: mean predicted probabilities, effective sample sizes
+(ESS) for the density ratios, and calibration summaries for
+each treatment model. ESS collapse (ESS much smaller than n)
+indicates extreme density ratios and warrants caution.}
 }
 }
 \description{
@@ -124,6 +130,69 @@ or GPU-based learners (e.g. xgboost with CUDA, OpenMP-based methods) may
 crash in the child processes and should be avoided or limited to one thread.
 }
 
+\examples{
+\donttest{
+library(SuperLearner)
+
+# ICU-like DGP: patients die, discharge, or remain in state each time point
+sim_ex <- function(n = 800L, tmax = 5L) {
+  set.seed(42L)
+  rows <- vector("list", n)
+  for (i in seq_len(n)) {
+    age <- round(rnorm(1, 65, 10)); L1 <- rnorm(1)
+    pat <- list()
+    for (t in seq_len(tmax)) {
+      A     <- rbinom(1, 1, plogis(0.3 * L1 - 0.4))
+      u     <- runif(1)
+      p_die <- plogis(-4.0 + 0.2 * L1 - 0.1 * age / 10)
+      p_dc  <- plogis(-2.5 + 0.5 * A)
+      if (u < p_die) {
+        alive <- 0L; in_state <- 0L
+      } else if (u < p_die + p_dc) {
+        alive <- 1L; in_state <- 0L
+      } else {
+        alive <- 1L; in_state <- 1L
+      }
+      Y <- rbinom(1, 1, plogis(-0.5 + 0.4 * A - 0.2 * L1))
+      pat[[length(pat) + 1L]] <- data.frame(
+        id = i, time = t, age = age, L1 = L1,
+        A = A, alive = alive, in_state = in_state, Y = Y
+      )
+      if (in_state == 0L) break
+      if (t < tmax) L1 <- L1 + rnorm(1, -0.1 * A, 0.3)
+    }
+    rows[[i]] <- do.call(rbind, pat)
+  }
+  do.call(rbind, rows)
+}
+df <- sim_ex()
+
+# Policy: increase treatment probability by 0.3
+policy_fn <- function(D_block, t, a_names) {
+  out <- D_block[, ..a_names, drop = FALSE]
+  out[[a_names[1]]] <- pmin(D_block[[a_names[1]]] + 0.3, 1)
+  out
+}
+
+wr <- density_ratio(
+  df              = df,
+  a_names         = "A",
+  tmax            = 5L,
+  baseline        = "age",
+  tv_names        = "L1",
+  sl_g            = c("SL.mean", "SL.glm"),
+  k               = 1L,
+  inner_v         = 3L,
+  v               = 3L,
+  seed            = 1L,
+  id              = "id",
+  time            = "time",
+  policy_spec_fun = policy_fn
+)
+head(wr$weights_dt)
+}
+
+}
 \references{
 Díaz I, Williams N, Hoffman KL, Schenck EJ (2021). Nonparametric Causal
 Effects Based on Longitudinal Modified Treatment Policies. \emph{JASA}

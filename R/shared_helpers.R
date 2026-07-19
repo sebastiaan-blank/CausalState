@@ -745,7 +745,7 @@ patch_shifted_design <- function(X_nat, D_shifted_tt, rows, a_names, tt, k, t_mi
 #' @return A single numeric value: the bootstrap standard error of the
 #'   cluster-mean influence curve.
 #'
-#' @export
+#' @noRd
 cluster_boot_se <- function(ic, cl, B = 2000L) {
   ok <- is.finite(ic) & !is.na(cl)
   ic <- ic[ok]; cl <- cl[ok]
@@ -950,9 +950,9 @@ expand_to_horizon <- function(DT, id, time, alive, in_state, tmax) {
 
 #' Compute risk difference and risk ratio from two fitted estimators
 #'
-#' Takes an intervention-arm and a control-arm fit (from [sdr()], [itmle()],
-#' or [qreg()]) and returns the risk difference (RD) and risk ratio (RR)
-#' with standard errors derived from the per-subject influence curves.
+#' Takes an intervention-arm and a control-arm fit (from [sdr()] or [itmle()])
+#' and returns the risk difference (RD) and risk ratio (RR) with standard
+#' errors derived from the per-subject influence curves.
 #'
 #' Standard errors use the delta method:
 #' \itemize{
@@ -961,10 +961,9 @@ expand_to_horizon <- function(DT, id, time, alive, in_state, tmax) {
 #'     the 95\% CI is exponentiated from the log scale for positive coverage.
 #' }
 #'
-#' @param fit1 Fitted object (intervention arm): output of [sdr()], [itmle()],
-#'   or [qreg()]. Must contain \code{$psi} and \code{$ic_df} with columns
-#'   \code{id} and \code{ic}.
-#' @param fit0 Fitted object (control arm), same class as \code{fit1}.
+#' @param fit1 Fitted object (intervention arm): output of [sdr()] or [itmle()].
+#'   Must contain \code{$psi} and \code{$ic_df} with columns \code{id} and \code{ic}.
+#' @param fit0 Fitted object (control arm), same type as \code{fit1}.
 #' @param df Optional long-format data frame. Required when \code{cluster}
 #'   is a column name.
 #' @param id_col Name of the subject-id column in \code{df}. Default
@@ -982,7 +981,83 @@ expand_to_horizon <- function(DT, id, time, alive, in_state, tmax) {
 #'     \item{\code{n}}{Number of matched subjects.}
 #'   }
 #'
-#' @seealso [sdr()], [itmle()], [qreg()]
+#' @seealso [sdr()], [itmle()]
+#'
+#' @examples
+#' \donttest{
+#' library(SuperLearner)
+#'
+#' # ICU-like DGP: patients die, discharge, or remain in state each time point
+#' sim_ex <- function(n = 800L, tmax = 5L) {
+#'   set.seed(42L)
+#'   rows <- vector("list", n)
+#'   for (i in seq_len(n)) {
+#'     age <- round(rnorm(1, 65, 10)); L1 <- rnorm(1)
+#'     pat <- list()
+#'     for (t in seq_len(tmax)) {
+#'       A     <- rbinom(1, 1, plogis(0.3 * L1 - 0.4))
+#'       u     <- runif(1)
+#'       p_die <- plogis(-4.0 + 0.2 * L1 - 0.1 * age / 10)
+#'       p_dc  <- plogis(-2.5 + 0.5 * A)
+#'       if (u < p_die) {
+#'         alive <- 0L; in_state <- 0L
+#'       } else if (u < p_die + p_dc) {
+#'         alive <- 1L; in_state <- 0L
+#'       } else {
+#'         alive <- 1L; in_state <- 1L
+#'       }
+#'       Y <- rbinom(1, 1, plogis(-0.5 + 0.4 * A - 0.2 * L1))
+#'       pat[[length(pat) + 1L]] <- data.frame(
+#'         id = i, time = t, age = age, L1 = L1,
+#'         A = A, alive = alive, in_state = in_state, Y = Y
+#'       )
+#'       if (in_state == 0L) break
+#'       if (t < tmax) L1 <- L1 + rnorm(1, -0.1 * A, 0.3)
+#'     }
+#'     rows[[i]] <- do.call(rbind, pat)
+#'   }
+#'   do.call(rbind, rows)
+#' }
+#' df <- sim_ex()
+#' sl_lib <- c("SL.mean", "SL.glm")
+#'
+#' # Natural-course policy (no shift)
+#' policy_nat <- function(D_block, t, a_names) D_block[, ..a_names, drop = FALSE]
+#'
+#' # Shifted policy (delta = 0.3)
+#' policy_sft <- function(D_block, t, a_names) {
+#'   out <- D_block[, ..a_names, drop = FALSE]
+#'   out[[a_names[1]]] <- pmin(D_block[[a_names[1]]] + 0.3, 1)
+#'   out
+#' }
+#'
+#' dr_args <- list(
+#'   df = df, a_names = "A", tmax = 5L, baseline = "age", tv_names = "L1",
+#'   sl_g = sl_lib, k = 1L, inner_v = 3L, v = 3L, seed = 1L,
+#'   id = "id", time = "time"
+#' )
+#' wr_nat <- do.call(density_ratio, c(dr_args, list(policy_spec_fun = policy_nat)))
+#' wr_sft <- do.call(density_ratio, c(dr_args, list(policy_spec_fun = policy_sft)))
+#'
+#' sdr_args <- list(
+#'   df = df, tmax = 5L, id = "id", time = "time",
+#'   alive = "alive", in_state = "in_state", y = "Y",
+#'   baseline = "age", tv_names = "L1", a_names = "A",
+#'   sl_remain = sl_lib, sl_death = sl_lib,
+#'   sl_recursive = sl_lib, sl_y = sl_lib,
+#'   k = 1L, inner_v = 3L, parallel = FALSE, seed = 1L
+#' )
+#' res_nat <- do.call(sdr, c(sdr_args,
+#'   list(weight_object = wr_nat, policy_spec_fun = policy_nat)))
+#' res_sft <- do.call(sdr, c(sdr_args,
+#'   list(weight_object = wr_sft, policy_spec_fun = policy_sft)))
+#'
+#' ctr <- contrast(res_sft, res_nat)
+#' ctr$RD
+#' ctr$ci_RD
+#' ctr$RR
+#' }
+#'
 #' @export
 contrast <- function(fit1, fit0, df = NULL, id_col = NULL, cluster = NULL) {
   psi1 <- fit1$psi

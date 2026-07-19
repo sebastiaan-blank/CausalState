@@ -88,8 +88,9 @@ treatment values under the MTP (one per treatment variable in \code{a_names}).}
 Required.}
 
 \item{sl_rec_simple}{Optional SuperLearner library for the recursive Q-remain
-model at early time points (\code{tt <= rec_transition}). A simpler/more-regularised
-library for the noisiest pseudo-outcome steps. Requires \code{rec_transition}.}
+model at early time points (\code{tt <= rec_transition}). When supplied, a
+simpler/more-regularised library is used for the noisiest pseudo-outcome
+steps. Requires \code{rec_transition}.}
 
 \item{rec_transition}{Integer. Time-point threshold: \code{sl_rec_simple} is used
 for \code{tt <= rec_transition}, \code{sl_recursive} for later time points. Required
@@ -101,12 +102,11 @@ Required.}
 \item{outcome_family}{\code{"binomial"} (default) or \code{"gaussian"}.}
 
 \item{y_bounds}{Optional numeric vector of length 2 giving \code{c(min, max)}
-for scaling a continuous outcome to \verb{[0, 1]}.  When \code{NULL} the
-bounds are inferred from the observed range of \code{y} in \code{df}
-(\code{min(y)}, \code{max(y)}).  Predictions that fall outside the scaling
-range are clipped to \verb{[0, 1]} before back-transformation, so if the
-outcome distribution under the MTP may extend beyond the training range,
-supply explicit bounds wide enough to cover it.  Ignored for
+for scaling a continuous outcome to \verb{[0, 1]}. When \code{NULL} the bounds are
+inferred from the observed range of \code{y} in \code{df} (\code{min(y)}, \code{max(y)}).
+Predictions outside the scaling range are clipped to \verb{[0, 1]} before
+back-transformation, so supply explicit bounds if the outcome distribution
+under the MTP may extend beyond the training range. Ignored for
 \code{outcome_family = "binomial"}.}
 
 \item{bounds}{Numeric. Probability clipping bound for g and Q predictions.
@@ -169,9 +169,29 @@ A named list with:
 \item{\code{psi_shf}}{Plug-in estimate under the MTP (equals \code{psi}).}
 \item{\code{rd}}{Risk difference \code{psi_shf - psi_nat}.}
 \item{\code{se}}{Standard error from the efficient influence curve.}
-\item{\code{ic}}{Per-subject influence curve values (length n).}
-\item{\code{sl_summary}}{\code{data.table} of SuperLearner weights per fold/time/component.}
-\item{\code{fold_diag}}{Per-fold diagnostic summaries.}
+\item{\code{ci}}{95\\% Wald confidence interval.}
+\item{\code{ic_df}}{\code{data.table} with columns \code{id} and \code{ic} (per-subject
+influence curve values). Used by \code{\link[=contrast]{contrast()}}.}
+\item{\code{sl_summary}}{\code{data.table} of SuperLearner learner weights.
+One row per learner per (fold, time-point, model component).
+Columns include \code{fold}, \code{t}, \code{component} (\code{g_remain}, \code{g_death},
+\code{Q_rem}, \code{Q_exit}) and one numeric column per learner in the
+library.  Useful for checking which learners dominate and whether
+any learner receives consistently zero weight.}
+\item{\code{fold_diag}}{\code{data.table} of per-fold, per-time-point
+diagnostics (one row per fold × time).  Contains mean and SD of
+g-model predictions under natural and shifted
+(\code{p_rem_nat/shf_mean}, \code{p_dex_nat/shf_mean}), Q-model predictions
+(\code{q_rem_nat/shf_mean}, \code{q_exit_nat/shf_mean}), pseudo-outcome
+statistics before and after the EIF update (\code{pseudo_pre/post_mean/sd}),
+EIF update magnitude (\code{delta_mean}, \code{delta_q95_abs} — large values
+suggest the EIF correction is substantial), and correlation
+diagnostics for the update step (\code{corr_mean}).}
+\item{\code{diagnostics$branch_cal}}{Per-fold, per-time branch
+calibration table: empirical mean of training/validation targets
+vs. mean predictions for \code{g_remain}, \code{g_death}, and \code{Q_remain}.
+A quick calibration check for the three fitted models at each
+time point.}
 }
 }
 \description{
@@ -190,6 +210,85 @@ or GPU-based learners (e.g. xgboost with CUDA, OpenMP-based methods) may
 crash in the child processes and should be avoided or limited to one thread.
 }
 
+\examples{
+\donttest{
+library(SuperLearner)
+
+# ICU-like DGP: patients die, discharge, or remain in state each time point
+sim_ex <- function(n = 800L, tmax = 5L) {
+  set.seed(42L)
+  rows <- vector("list", n)
+  for (i in seq_len(n)) {
+    age <- round(rnorm(1, 65, 10)); L1 <- rnorm(1)
+    pat <- list()
+    for (t in seq_len(tmax)) {
+      A     <- rbinom(1, 1, plogis(0.3 * L1 - 0.4))
+      u     <- runif(1)
+      p_die <- plogis(-4.0 + 0.2 * L1 - 0.1 * age / 10)
+      p_dc  <- plogis(-2.5 + 0.5 * A)
+      if (u < p_die) {
+        alive <- 0L; in_state <- 0L
+      } else if (u < p_die + p_dc) {
+        alive <- 1L; in_state <- 0L
+      } else {
+        alive <- 1L; in_state <- 1L
+      }
+      Y <- rbinom(1, 1, plogis(-0.5 + 0.4 * A - 0.2 * L1))
+      pat[[length(pat) + 1L]] <- data.frame(
+        id = i, time = t, age = age, L1 = L1,
+        A = A, alive = alive, in_state = in_state, Y = Y
+      )
+      if (in_state == 0L) break
+      if (t < tmax) L1 <- L1 + rnorm(1, -0.1 * A, 0.3)
+    }
+    rows[[i]] <- do.call(rbind, pat)
+  }
+  do.call(rbind, rows)
+}
+df <- sim_ex()
+
+# Policy: increase treatment probability by 0.3
+policy_fn <- function(D_block, t, a_names) {
+  out <- D_block[, ..a_names, drop = FALSE]
+  out[[a_names[1]]] <- pmin(D_block[[a_names[1]]] + 0.3, 1)
+  out
+}
+
+sl_lib <- c("SL.mean", "SL.glm")
+
+wr <- density_ratio(
+  df = df, a_names = "A", tmax = 5L, baseline = "age", tv_names = "L1",
+  sl_g = sl_lib, k = 1L, inner_v = 3L, v = 3L, seed = 1L,
+  id = "id", time = "time", policy_spec_fun = policy_fn
+)
+
+res <- sdr(
+  df              = df,
+  weight_object   = wr,
+  tmax            = 5L,
+  id              = "id",
+  time            = "time",
+  alive           = "alive",
+  in_state        = "in_state",
+  y               = "Y",
+  baseline        = "age",
+  tv_names        = "L1",
+  a_names         = "A",
+  sl_remain       = sl_lib,
+  sl_death        = sl_lib,
+  sl_recursive    = sl_lib,
+  sl_y            = sl_lib,
+  k               = 1L,
+  inner_v         = 3L,
+  parallel        = FALSE,
+  seed            = 1L,
+  policy_spec_fun = policy_fn
+)
+res$psi
+res$se
+}
+
+}
 \references{
 Díaz I, Williams N, Hoffman KL, Schenck EJ (2021). Nonparametric Causal
 Effects Based on Longitudinal Modified Treatment Policies. \emph{JASA}
@@ -199,5 +298,5 @@ Luedtke AR, Sofrygin O, van der Laan MJ, Carone M (2017). Sequential
 Double Robustness in Right-Censored Longitudinal Models. arXiv:1705.02459.
 }
 \seealso{
-\code{\link[=density_ratio]{density_ratio()}}, \code{\link[=itmle]{itmle()}}, \code{\link[=absorb_rule]{absorb_rule()}}
+\code{\link[=density_ratio]{density_ratio()}}, \code{\link[=itmle]{itmle()}}, \code{\link[=contrast]{contrast()}}, \code{\link[=absorb_rule]{absorb_rule()}}
 }

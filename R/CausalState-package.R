@@ -16,12 +16,11 @@
 #'
 #' @section State machinery:
 #' - [absorb_rule()] — Define rules for entering absorbing states
-#' - [sdr_competing()] — SDR estimator for competing-event outcomes under state transitions
 #'
 #' @section Custom SuperLearner wrappers:
 #' SDR-targeted learners ([SL.tgt.glm()], [SL.tgt.glmnet()],
 #' [SL.tgt.xgboost()], etc.) and TMLE learners ([SL.tmle_glm()],
 #' [SL.tmle_glmnet_ridge()], etc.) for use in `SL.library` arguments.
 #'
-#' @keywords internal
+#' @keywords package
 "_PACKAGE"

@@ -10,28 +10,27 @@ make_subject_folds_qreg <- function(ids, v, cluster_by_id, seed) {
 }
 
 
-#' Pure Q-recursion estimator for longitudinal MTPs
+#' Pure Q-recursion estimator — diagnostic use only
 #'
 #' Fits sequential Q-models backwards through time and returns the
-#' plug-in (substitution) estimator \eqn{\hat\Psi = n^{-1}\sum_i \hat Q_1(H_{i1})}
-#' under the modified treatment policy (MTP).  No EIF update is applied, so
-#' the estimate does not depend on density-ratio weights.
+#' plug-in (substitution) estimator \eqn{\hat\Psi = n^{-1}\sum_i \hat Q_1(H_{i1})}.
+#' No EIF update is applied, so the estimate carries first-order bias and
+#' \strong{should not be used as a real causal estimate}.
 #'
-#' Two standard-error options are available:
-#' \itemize{
-#'   \item \strong{Naive SE} (always computed): \eqn{s(\hat Q_1) / \sqrt{n}},
-#'     treating the fitted Q as fixed.  Under-covers because it ignores
-#'     Q-model estimation uncertainty.
-#'   \item \strong{EIF-based SE} (requires \code{weight_object}): applies the
-#'     efficient influence function formula using the cross-fitted Q predictions
-#'     and pre-computed density-ratio weights.  \eqn{\hat\Psi} itself is
-#'     unchanged; only the SE improves.
-#' }
+#' The intended use is to pass the \strong{natural-course} (identity) policy —
+#' that is, no shift — and compare the resulting estimate to the observed mean
+#' of \code{y}.  Close agreement indicates that the Q-models are
+#' well-calibrated under the natural course, which is a prerequisite for the
+#' doubly-robust estimates from [sdr()] or [itmle()] to be trustworthy.  Poor
+#' agreement signals Q-model misspecification.
 #'
-#' The primary use case is as a sensitivity check alongside [sdr()] or
-#' [itmle()]: when density-ratio weights are extreme (ESS collapse),
-#' comparing \eqn{\hat\Psi_Q} to the doubly-robust estimates shows how much
-#' the answer is driven by the weighting step.
+#' \strong{Do not pass a shifted policy to \code{qreg} and interpret the
+#' result as a causal estimate.}  For policy evaluation use [sdr()] or
+#' [itmle()].
+#'
+#' The reported \code{se_naive} is \eqn{s(\hat Q_1) / \sqrt{n}}, which treats
+#' the fitted Q as fixed and should be read only as a rough guide to Monte
+#' Carlo variability of the plug-in.
 #'
 #' @inheritParams sdr
 #' @param weight_object Optional. Output from [density_ratio()].  If supplied,
@@ -53,12 +52,89 @@ make_subject_folds_qreg <- function(ids, v, cluster_by_id, seed) {
 #'     \item{\code{ci}}{95\% Wald CI using \code{se}.}
 #'     \item{\code{psi_natural}}{Plug-in estimate under the natural course.}
 #'     \item{\code{psi_shifted}}{Plug-in estimate under the MTP (= \code{estimate}).}
-#'     \item{\code{sl_summary}}{SuperLearner weights per fold/time/component.}
-#'     \item{\code{fold_diag}}{Per-fold diagnostics.}
-#'     \item{\code{diagnostics}}{List with \code{branch_cal} and \code{diag_table}.}
+#'     \item{\code{sl_summary}}{`data.table` of SuperLearner learner weights per
+#'       (fold, time-point, model component). Same structure as in [sdr()].}
+#'     \item{\code{fold_diag}}{`data.table` of per-fold, per-time-point diagnostics.}
+#'     \item{\code{diagnostics$branch_cal}}{Per-fold, per-time branch calibration
+#'       table: empirical mean targets vs. predictions for `g_remain`, `g_death`,
+#'       and `Q_remain`. Use this to check whether the Q-models are
+#'       well-calibrated under the natural course — the primary diagnostic
+#'       purpose of [qreg()].}
+#'     \item{\code{diagnostics$diag_table}}{Additional per-fold, per-time
+#'       summary statistics (Q prediction ranges, pseudo-outcome statistics).}
 #'   }
 #'
 #' @seealso [sdr()], [itmle()], [density_ratio()]
+#'
+#' @examples
+#' \donttest{
+#' library(SuperLearner)
+#'
+#' # ICU-like DGP: patients die, discharge, or remain in state each time point
+#' sim_ex <- function(n = 800L, tmax = 5L) {
+#'   set.seed(42L)
+#'   rows <- vector("list", n)
+#'   for (i in seq_len(n)) {
+#'     age <- round(rnorm(1, 65, 10)); L1 <- rnorm(1)
+#'     pat <- list()
+#'     for (t in seq_len(tmax)) {
+#'       A     <- rbinom(1, 1, plogis(0.3 * L1 - 0.4))
+#'       u     <- runif(1)
+#'       p_die <- plogis(-4.0 + 0.2 * L1 - 0.1 * age / 10)
+#'       p_dc  <- plogis(-2.5 + 0.5 * A)
+#'       if (u < p_die) {
+#'         alive <- 0L; in_state <- 0L
+#'       } else if (u < p_die + p_dc) {
+#'         alive <- 1L; in_state <- 0L
+#'       } else {
+#'         alive <- 1L; in_state <- 1L
+#'       }
+#'       Y <- rbinom(1, 1, plogis(-0.5 + 0.4 * A - 0.2 * L1))
+#'       pat[[length(pat) + 1L]] <- data.frame(
+#'         id = i, time = t, age = age, L1 = L1,
+#'         A = A, alive = alive, in_state = in_state, Y = Y
+#'       )
+#'       if (in_state == 0L) break
+#'       if (t < tmax) L1 <- L1 + rnorm(1, -0.1 * A, 0.3)
+#'     }
+#'     rows[[i]] <- do.call(rbind, pat)
+#'   }
+#'   do.call(rbind, rows)
+#' }
+#' df <- sim_ex()
+#'
+#' # Natural-course policy (no shift) — the correct use of qreg
+#' policy_nat <- function(D_block, t, a_names) D_block[, ..a_names, drop = FALSE]
+#'
+#' sl_lib <- c("SL.mean", "SL.glm")
+#'
+#' # Q-model calibration check: estimate should be close to mean(df$Y)
+#' res <- qreg(
+#'   df              = df,
+#'   tmax            = 5L,
+#'   id              = "id",
+#'   time            = "time",
+#'   alive           = "alive",
+#'   in_state        = "in_state",
+#'   y               = "Y",
+#'   baseline        = "age",
+#'   tv_names        = "L1",
+#'   a_names         = "A",
+#'   sl_remain       = sl_lib,
+#'   sl_death        = sl_lib,
+#'   sl_recursive    = sl_lib,
+#'   sl_y            = sl_lib,
+#'   k               = 1L,
+#'   inner_v         = 3L,
+#'   parallel        = FALSE,
+#'   seed            = 1L,
+#'   policy_spec_fun = policy_nat
+#' )
+#'
+#' # Compare plug-in to observed mean: close agreement = well-calibrated Q
+#' res$estimate
+#' mean(df$Y)
+#' }
 #'
 #' @export
 qreg <- function(

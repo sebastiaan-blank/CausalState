@@ -49,11 +49,21 @@ tgt_clip <- function(p, bounds = 1e-5) {
 #'
 #' Pre-configured variants (`SL.tmle_*`) expose specific hyperparameter
 #' choices and are the recommended building blocks for `sl_tmle`:
-#' `SL.tmle_empty`, `SL.tmle_intercept`, `SL.tmle_glm`,
-#' `SL.tmle_glmnet_ridge`, `SL.tmle_glmnet_enet`, `SL.tmle_glmnet_lasso`,
-#' `SL.tmle_xgb_d1`, `SL.tmle_xgb_d3`, `SL.tmle_xgb_d6`.
+#' \describe{
+#'   \item{`SL.tmle_empty`}{No fluctuation (pass-through).}
+#'   \item{`SL.tmle_intercept`}{One-parameter intercept (standard TMLE update).}
+#'   \item{`SL.tmle_glm`}{Main-terms logistic GLM.}
+#'   \item{`SL.tmle_glmnet_ridge`}{Ridge regression (alpha = 0).}
+#'   \item{`SL.tmle_glmnet_enet`}{Elastic net (alpha = 0.5).}
+#'   \item{`SL.tmle_glmnet_lasso`}{Lasso (alpha = 1).}
+#'   \item{`SL.tmle_xgb_d1`}{XGBoost depth 1, CPU, 50 rounds.}
+#'   \item{`SL.tmle_xgb_d3`}{XGBoost depth 3, CPU, 50 rounds.}
+#'   \item{`SL.tmle_xgb_d6`}{XGBoost depth 6, CPU, 50 rounds.}
+#' }
 #'
-#' The default `sl_tmle` character vector contains a recommended set of these.
+#' The default `sl_tmle` vector follows Luedtke et al. (2017) Algorithm 4:
+#' `empty`, `intercept`, `glm`, and the three XGBoost depths.  The glmnet
+#' variants are available but must be specified explicitly via `sl_tmle`.
 #'
 #' @param Y Numeric outcome vector (on `[0, 1]` after scaling).
 #' @param X `data.frame` of covariates, **must** include a column named
@@ -69,11 +79,22 @@ tgt_clip <- function(p, bounds = 1e-5) {
 #' @return A list with elements `pred` (numeric predictions on the probability
 #'   scale) and `fit` (a fitted object with a `predict` method).
 #'
+#' @examples
+#' # Default targeting stack (Luedtke et al. Algorithm 4)
+#' sl_tmle
+#'
+#' # Lightweight stack for examples and testing (no XGBoost required)
+#' sl_tmle_light <- c("SL.tmle_empty", "SL.tmle_intercept", "SL.tmle_glm")
+#'
+#' # Add glmnet variants explicitly when desired
+#' sl_tmle_penalised <- c(
+#'   "SL.tmle_empty", "SL.tmle_intercept", "SL.tmle_glm",
+#'   "SL.tmle_glmnet_ridge", "SL.tmle_glmnet_enet",
+#'   "SL.tmle_xgb_d1", "SL.tmle_xgb_d3", "SL.tmle_xgb_d6"
+#' )
+#'
 #' @name sl_itmle
-#' @aliases SL.tgt.empty SL.tgt.intercept SL.tgt.glm SL.tgt.glmnet
-#'   SL.tgt.xgboost SL.tmle_empty SL.tmle_intercept SL.tmle_glm
-#'   SL.tmle_glmnet_ridge SL.tmle_glmnet_enet SL.tmle_glmnet_lasso
-#'   SL.tmle_xgb_d1 SL.tmle_xgb_d3 SL.tmle_xgb_d6
+#' @aliases SL.tgt.empty SL.tgt.intercept SL.tgt.glm SL.tgt.glmnet SL.tgt.xgboost SL.tmle_empty SL.tmle_intercept SL.tmle_glm SL.tmle_glmnet_ridge SL.tmle_glmnet_enet SL.tmle_glmnet_lasso SL.tmle_xgb_d1 SL.tmle_xgb_d3 SL.tmle_xgb_d6
 #'
 #' @seealso [itmle()]
 #'
@@ -82,6 +103,8 @@ tgt_clip <- function(p, bounds = 1e-5) {
 #' @export SL.tgt.glm
 #' @export SL.tgt.glmnet
 #' @export SL.tgt.xgboost
+#' @export SL.tmle_empty
+#' @export SL.tmle_intercept
 #' @export SL.tmle_glm
 #' @export SL.tmle_glmnet_ridge
 #' @export SL.tmle_glmnet_enet
@@ -505,7 +528,6 @@ sl_tmle <- c(
   "SL.tmle_empty",
   "SL.tmle_intercept",
   "SL.tmle_glm",
-  "SL.tmle_glmnet_ridge",
   "SL.tmle_xgb_d1",
   "SL.tmle_xgb_d3",
   "SL.tmle_xgb_d6"
