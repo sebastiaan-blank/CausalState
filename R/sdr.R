@@ -23,7 +23,11 @@
 #'   names.
 #' @param tv_names Character vector of time-varying covariate names (excluding
 #'   treatment).
-#' @param a_names Character vector of treatment variable names.
+#' @param a_names Character vector of treatment variable names. Can contain
+#'   one or more variables for joint multi-treatment policies (e.g.
+#'   `c("A1", "A2")`). The `policy_spec_fun` must return shifted values for
+#'   all variables in `a_names`, and `density_ratio()` must have been called
+#'   with the same `a_names` to produce compatible weights.
 #' @param no_lag_vars Character vector of variables in `tv_names` or `a_names`
 #'   that should not be lagged (e.g. already-encoded temporal features).
 #' @param policy_names Character vector of column names holding the shifted
@@ -44,13 +48,19 @@
 #' @param sl_y SuperLearner library for the Q-exit (outcome-at-exit) model.
 #'   Required.
 #' @param outcome_family `"binomial"` (default) or `"gaussian"`.
-#' @param y_bounds Optional numeric vector of length 2 giving `c(min, max)`
-#'   for scaling a continuous outcome to `[0, 1]`. When `NULL` the bounds are
-#'   inferred from the observed range of `y` in `df` (`min(y)`, `max(y)`).
-#'   Predictions outside the scaling range are clipped to `[0, 1]` before
-#'   back-transformation, so supply explicit bounds if the outcome distribution
-#'   under the MTP may extend beyond the training range. Ignored for
-#'   `outcome_family = "binomial"`.
+#' @param y_bounds Optional numeric vector of length 2, `c(min, max)`.
+#'   For `outcome_family = "gaussian"`, all outcome values are internally
+#'   scaled to `[0, 1]` before model fitting and back-transformed to the
+#'   original scale for the final estimate — this keeps Q-model predictions
+#'   bounded and stabilises the recursive regression.  By default (`NULL`)
+#'   the bounds are taken from the observed range of `y` in `df`
+#'   (`min(y)`, `max(y)`).  Supply explicit bounds to widen or narrow this
+#'   range: wider bounds (e.g. extending beyond the observed range) give the
+#'   models more room under the MTP if the shifted distribution may produce
+#'   values outside the training range; narrower bounds clip more aggressively.
+#'   Predictions outside the supplied range are clipped to `[0, 1]` before
+#'   back-transformation.  Ignored for `outcome_family = "binomial"` (binary
+#'   outcomes are already in `[0, 1]`).
 #' @param bounds Numeric. Probability clipping bound for g and Q predictions.
 #'   Default `1e-5`.
 #' @param trim Quantile used to cap instantaneous density ratios before they

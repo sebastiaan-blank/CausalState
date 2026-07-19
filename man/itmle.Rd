@@ -73,7 +73,11 @@ names.}
 \item{tv_names}{Character vector of time-varying covariate names (excluding
 treatment).}
 
-\item{a_names}{Character vector of treatment variable names.}
+\item{a_names}{Character vector of treatment variable names. Can contain
+one or more variables for joint multi-treatment policies (e.g.
+\code{c("A1", "A2")}). The \code{policy_spec_fun} must return shifted values for
+all variables in \code{a_names}, and \code{density_ratio()} must have been called
+with the same \code{a_names} to produce compatible weights.}
 
 \item{no_lag_vars}{Character vector of variables in \code{tv_names} or \code{a_names}
 that should not be lagged (e.g. already-encoded temporal features).}
@@ -104,13 +108,19 @@ Required.}
 
 \item{outcome_family}{\code{"binomial"} (default) or \code{"gaussian"}.}
 
-\item{y_bounds}{Optional numeric vector of length 2 giving \code{c(min, max)}
-for scaling a continuous outcome to \verb{[0, 1]}. When \code{NULL} the bounds are
-inferred from the observed range of \code{y} in \code{df} (\code{min(y)}, \code{max(y)}).
-Predictions outside the scaling range are clipped to \verb{[0, 1]} before
-back-transformation, so supply explicit bounds if the outcome distribution
-under the MTP may extend beyond the training range. Ignored for
-\code{outcome_family = "binomial"}.}
+\item{y_bounds}{Optional numeric vector of length 2, \code{c(min, max)}.
+For \code{outcome_family = "gaussian"}, all outcome values are internally
+scaled to \verb{[0, 1]} before model fitting and back-transformed to the
+original scale for the final estimate — this keeps Q-model predictions
+bounded and stabilises the recursive regression.  By default (\code{NULL})
+the bounds are taken from the observed range of \code{y} in \code{df}
+(\code{min(y)}, \code{max(y)}).  Supply explicit bounds to widen or narrow this
+range: wider bounds (e.g. extending beyond the observed range) give the
+models more room under the MTP if the shifted distribution may produce
+values outside the training range; narrower bounds clip more aggressively.
+Predictions outside the supplied range are clipped to \verb{[0, 1]} before
+back-transformation.  Ignored for \code{outcome_family = "binomial"} (binary
+outcomes are already in \verb{[0, 1]}).}
 
 \item{bounds}{Numeric. Probability clipping bound for g and Q predictions.
 Default \code{1e-5}.}

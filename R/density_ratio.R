@@ -106,7 +106,11 @@ dr_from_prob <- function(p_mat, beta, bounds, denom_cap) {
 #' structure is inherited by the downstream estimator.
 #'
 #' @param df A `data.frame` in long format (one row per subject per time point).
-#' @param a_names Character vector of treatment variable names.
+#' @param a_names Character vector of treatment variable names. Can contain
+#'   one or more variables for joint multi-treatment policies (e.g.
+#'   `c("A1", "A2")`). The joint density ratio for the full treatment vector
+#'   is estimated at each time point. Pass the same `a_names` to the
+#'   downstream estimators (`sdr()`, `itmle()`, `qreg()`).
 #' @param tmax Integer. Maximum follow-up time (number of time points).
 #' @param baseline Character vector of baseline covariate names.
 #'   Default `NULL` (no baseline covariates).

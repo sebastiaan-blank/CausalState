@@ -33,7 +33,11 @@ density_ratio(
 \arguments{
 \item{df}{A \code{data.frame} in long format (one row per subject per time point).}
 
-\item{a_names}{Character vector of treatment variable names.}
+\item{a_names}{Character vector of treatment variable names. Can contain
+one or more variables for joint multi-treatment policies (e.g.
+\code{c("A1", "A2")}). The joint density ratio for the full treatment vector
+is estimated at each time point. Pass the same \code{a_names} to the
+downstream estimators (\code{sdr()}, \code{itmle()}, \code{qreg()}).}
 
 \item{tmax}{Integer. Maximum follow-up time (number of time points).}
 
