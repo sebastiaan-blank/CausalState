@@ -6,7 +6,7 @@ Authors@R:
     person(given = "Sebastiaan",
            family = "Blank",
            role = c("aut", "cre", "cph"),
-           email = "sebastiaanblank@gmail.com")
+           email = "sebastiaan.bank@mail.com")
 Description: Implements Sequential Doubly Robust (SDR) and infinite-dimensional
     Targeted Maximum Likelihood (iTMLE) estimators for longitudinal modified treatment
     policies in settings with absorbing state transitions, such as ICU, ward,
