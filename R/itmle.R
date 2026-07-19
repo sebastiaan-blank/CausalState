@@ -679,12 +679,6 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #'     \item{`ci`}{95% Wald confidence interval.}
 #'     \item{`ic_df`}{`data.table` with columns `id` and `ic` (per-subject
 #'       influence curve values). Used by [contrast()].}
-#'     \item{`psi_onestep`}{One-step pre-targeting estimate. If substantially
-#'       different from `psi`, the targeting step contributed meaningfully to
-#'       de-biasing.}
-#'     \item{`targeting_gap`}{Mean efficient influence curve after targeting.
-#'       Should be close to zero; a value far from zero indicates non-convergence
-#'       of the targeting loop.}
 #'     \item{`sl_summary`}{`data.table` of SuperLearner learner weights.
 #'       One row per learner per (fold, time-point, model component).
 #'       Columns include `fold`, `t`, `component` (`g_remain`, `g_death`,
@@ -692,9 +686,8 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #'     \item{`fold_diag`}{`data.table` of per-fold, per-time-point diagnostics.
 #'       Same structure as in [sdr()]: g/Q model predictions, pseudo-outcome
 #'       statistics, and EIF update magnitude.}
-#'     \item{`target_diag`}{`data.table` with one row per targeting iteration.
-#'       Tracks the `targeting_gap` as it decreases across iterations, useful
-#'       for diagnosing slow or non-converging targeting.}
+#'     \item{`target_diag`}{`data.table` with one row per targeting iteration,
+#'       tracking EIF magnitude across iterations to diagnose convergence.}
 #'     \item{`fluct_diag`}{`data.table` of SuperLearner learner weights from
 #'       the fluctuation (targeting) model, per fold and time-point. Shows
 #'       which targeting wrappers (from [sl_itmle]) were selected.}
@@ -1972,21 +1965,11 @@ itmle <- function(
   ic_shifted_scaled <- as.numeric(eic_t0_scaled + eic_tplus_all)
   ic_scaled         <- ic_shifted_scaled
   
-  targeting_gap_scaled <- mean(ic_scaled[is.finite(ic_scaled)], na.rm = TRUE)
-  psi_shifted_onestep_scaled <- psi_shifted_scaled + targeting_gap_scaled
-  
   se_fit <- itmle_eic_se(
     ic = ic_scaled,
     cluster_by_id = cluster_by_id,
     use_second_moment = TRUE
   )
-  
-  se_fit$targeting_gap_scaled <- targeting_gap_scaled
-  se_fit$targeting_gap_z      <- if (is.finite(se_fit$se) && se_fit$se > 0) {
-    targeting_gap_scaled / se_fit$se
-  } else {
-    NA_real_
-  }
   
   se_scaled <- se_fit$se
   ci_scaled <- psi_scaled + c(-1, 1) * 1.96 * se_scaled
@@ -1999,10 +1982,7 @@ itmle <- function(
     se <- scale_info$y_rng * se_scaled
     
     ci <- psi + c(-1, 1) * 1.96 * se
-    
-    psi_shifted_onestep <- scale_info$from_unit(psi_shifted_onestep_scaled)
-    targeting_gap       <- scale_info$y_rng * targeting_gap_scaled
-    
+
     if (!is.null(diag_table) && nrow(diag_table)) {
       diag_table$mean_Q_nat <- scale_info$from_unit(diag_table$mean_Q_nat)
       diag_table$mean_Q_int <- scale_info$from_unit(diag_table$mean_Q_int)
@@ -2017,8 +1997,6 @@ itmle <- function(
     se <- se_scaled
     ci <- ci_scaled
     
-    psi_shifted_onestep <- psi_shifted_onestep_scaled
-    targeting_gap       <- targeting_gap_scaled
   }
   
   
@@ -2029,13 +2007,10 @@ itmle <- function(
   }
   
   out <- list(
-    psi = psi,
-    se  = se,
-    ci  = ci,
+    psi   = psi,
+    se    = se,
+    ci    = ci,
     ic_df = data.table::data.table(id = ids, ic = ic),
-
-    psi_shifted_onestep = psi_shifted_onestep,
-    targeting_gap       = targeting_gap,
 
     start_t = start_t_global,
 
@@ -2043,7 +2018,7 @@ itmle <- function(
       natural = pred_nat_all,
       shifted = pred_shf_all
     ),
-    
+
     diagnostics = list(
       diag_table     = diag_table,
       recursion_diag = fold_diag,
@@ -2575,18 +2550,11 @@ itmle_competing <- function(
   eic_t0 <- pred_shf_all[, 1L] - psi
   ic     <- as.numeric(eic_t0 + eic_tplus_all)
 
-  targeting_gap <- mean(ic[is.finite(ic)], na.rm = TRUE)
-  psi_onestep   <- psi + targeting_gap
-
   se_fit <- itmle_eic_se(
     ic                = ic,
     cluster_by_id     = cluster_by_id,
     use_second_moment = TRUE
   )
-  se_fit$targeting_gap <- targeting_gap
-  se_fit$targeting_gap_z <- if (is.finite(se_fit$se) && se_fit$se > 0) {
-    targeting_gap / se_fit$se
-  } else NA_real_
 
   se <- se_fit$se
   ci <- psi + c(-1, 1) * 1.96 * se
@@ -2597,21 +2565,19 @@ itmle_competing <- function(
   } else NULL
 
   list(
-    psi           = psi,
-    se            = se,
-    ci            = ci,
-    ic_df         = data.table::data.table(id = ids, ic = ic),
-    psi_onestep   = psi_onestep,
-    targeting_gap = targeting_gap,
-    predictions   = list(
+    psi        = psi,
+    se         = se,
+    ci         = ci,
+    ic_df      = data.table::data.table(id = ids, ic = ic),
+    predictions = list(
       natural = pred_nat_all,
       shifted = pred_shf_all
     ),
-    sl_summary    = sl_summary,
-    fold_diag     = fold_diag,
-    target_diag   = target_diag,
-    target_sl     = target_sl,
-    fluct_diag    = fluct_diag
+    sl_summary = sl_summary,
+    fold_diag  = fold_diag,
+    target_diag = target_diag,
+    target_sl  = target_sl,
+    fluct_diag = fluct_diag
   )
 }
 

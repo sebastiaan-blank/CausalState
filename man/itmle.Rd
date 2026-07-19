@@ -197,12 +197,6 @@ A named list with:
 \item{\code{ci}}{95\% Wald confidence interval.}
 \item{\code{ic_df}}{\code{data.table} with columns \code{id} and \code{ic} (per-subject
 influence curve values). Used by \code{\link[=contrast]{contrast()}}.}
-\item{\code{psi_onestep}}{One-step pre-targeting estimate. If substantially
-different from \code{psi}, the targeting step contributed meaningfully to
-de-biasing.}
-\item{\code{targeting_gap}}{Mean efficient influence curve after targeting.
-Should be close to zero; a value far from zero indicates non-convergence
-of the targeting loop.}
 \item{\code{sl_summary}}{\code{data.table} of SuperLearner learner weights.
 One row per learner per (fold, time-point, model component).
 Columns include \code{fold}, \code{t}, \code{component} (\code{g_remain}, \code{g_death},
@@ -210,9 +204,8 @@ Columns include \code{fold}, \code{t}, \code{component} (\code{g_remain}, \code{
 \item{\code{fold_diag}}{\code{data.table} of per-fold, per-time-point diagnostics.
 Same structure as in \code{\link[=sdr]{sdr()}}: g/Q model predictions, pseudo-outcome
 statistics, and EIF update magnitude.}
-\item{\code{target_diag}}{\code{data.table} with one row per targeting iteration.
-Tracks the \code{targeting_gap} as it decreases across iterations, useful
-for diagnosing slow or non-converging targeting.}
+\item{\code{target_diag}}{\code{data.table} with one row per targeting iteration,
+tracking EIF magnitude across iterations to diagnose convergence.}
 \item{\code{fluct_diag}}{\code{data.table} of SuperLearner learner weights from
 the fluctuation (targeting) model, per fold and time-point. Shows
 which targeting wrappers (from \link{sl_itmle}) were selected.}
