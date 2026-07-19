@@ -63,6 +63,8 @@ export(SL.tmle_xgb_d6)
 
 # --- S3 method registration -----------------------------------------------
 
+S3method(print, CausalState_contrast)
+
 S3method(predict, SL.tgt.empty)
 S3method(predict, SL.tgt.intercept)
 S3method(predict, SL.tgt.glm)

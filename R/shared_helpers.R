@@ -1121,7 +1121,25 @@ contrast <- function(fit1, fit0, df = NULL, id_col = NULL, cluster = NULL) {
   rr         <- psi1 / psi0
   se_log_rr  <- .se(ic_log_rr)
 
-  list(
+  tbl <- data.frame(
+    Estimate     = c(psi1, psi0, rd, rr),
+    `CI Lower`   = c(
+      psi1 - 1.96 * fit1$se,
+      psi0 - 1.96 * fit0$se,
+      rd   - 1.96 * se_rd,
+      exp(log(rr) - 1.96 * se_log_rr)
+    ),
+    `CI Upper`   = c(
+      psi1 + 1.96 * fit1$se,
+      psi0 + 1.96 * fit0$se,
+      rd   + 1.96 * se_rd,
+      exp(log(rr) + 1.96 * se_log_rr)
+    ),
+    check.names  = FALSE,
+    row.names    = c("Intervention", "Control", "Risk Difference", "Risk Ratio")
+  )
+
+  out <- list(
     psi1      = psi1,
     psi0      = psi0,
     RD        = rd,
@@ -1130,6 +1148,18 @@ contrast <- function(fit1, fit0, df = NULL, id_col = NULL, cluster = NULL) {
     RR        = rr,
     se_log_RR = se_log_rr,
     ci_RR     = exp(log(rr) + c(-1.96, 1.96) * se_log_rr),
-    n         = n
+    n         = n,
+    table     = tbl
   )
+  class(out) <- "CausalState_contrast"
+  out
+}
+
+#' @export
+print.CausalState_contrast <- function(x, digits = 3L, ...) {
+  tbl <- x$table
+  tbl[] <- lapply(tbl, round, digits = digits)
+  cat(sprintf("n = %d subjects\n\n", x$n))
+  print(tbl)
+  invisible(x)
 }
