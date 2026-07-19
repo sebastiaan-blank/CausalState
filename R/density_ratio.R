@@ -188,7 +188,7 @@ dr_from_prob <- function(p_mat, beta, bounds, denom_cap) {
 #' library(SuperLearner)
 #'
 #' # ICU-like DGP: patients die, discharge, or remain in state each time point
-#' sim_ex <- function(n = 800L, tmax = 5L) {
+#' sim_ex <- function(n = 2000L, tmax = 5L) {
 #'   set.seed(42L)
 #'   rows <- vector("list", n)
 #'   for (i in seq_len(n)) {
@@ -249,7 +249,7 @@ dr_from_prob <- function(p_mat, beta, bounds, denom_cap) {
 #' \donttest{
 #' library(SuperLearner)
 #'
-#' sim_multi <- function(n = 800L, tmax = 5L) {
+#' sim_multi <- function(n = 2000L, tmax = 5L) {
 #'   set.seed(42L)
 #'   rows <- vector("list", n)
 #'   for (i in seq_len(n)) {

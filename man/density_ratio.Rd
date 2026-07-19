@@ -139,7 +139,7 @@ crash in the child processes and should be avoided or limited to one thread.
 library(SuperLearner)
 
 # ICU-like DGP: patients die, discharge, or remain in state each time point
-sim_ex <- function(n = 800L, tmax = 5L) {
+sim_ex <- function(n = 2000L, tmax = 5L) {
   set.seed(42L)
   rows <- vector("list", n)
   for (i in seq_len(n)) {
@@ -200,7 +200,7 @@ head(wr$weights_dt)
 \donttest{
 library(SuperLearner)
 
-sim_multi <- function(n = 800L, tmax = 5L) {
+sim_multi <- function(n = 2000L, tmax = 5L) {
   set.seed(42L)
   rows <- vector("list", n)
   for (i in seq_len(n)) {
