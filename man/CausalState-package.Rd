@@ -19,15 +19,15 @@ regularisation, k-fold cross-fitting, and pluggable SuperLearner ensembles.
 \section{Main estimators}{
 
 \itemize{
-\item \code{\link[=sdr]{sdr()}} — Sequential Doubly Robust estimator (EIF-based pseudo-outcome update)
-\item \code{\link[=itmle]{itmle()}} — Infinite-dimensional TMLE (infinite-dimensional targeting step; also SDR)
+\item \code{\link[=sdr]{sdr()}} - Sequential Doubly Robust estimator (EIF-based pseudo-outcome update)
+\item \code{\link[=itmle]{itmle()}} - Infinite-dimensional TMLE (infinite-dimensional targeting step; also SDR)
 }
 }
 
 \section{State machinery}{
 
 \itemize{
-\item \code{\link[=absorb_rule]{absorb_rule()}} — Define rules for entering absorbing states
+\item \code{\link[=absorb_rule]{absorb_rule()}} - Define rules for entering absorbing states
 }
 }
 
@@ -39,11 +39,11 @@ SDR-targeted learners (\code{\link[=SL.tgt.glm]{SL.tgt.glm()}}, \code{\link[=SL.
 }
 
 \author{
-\strong{Maintainer}: Sebastiaan Blank \email{sebastiaanblank@gmail.com} [copyright holder]
+\strong{Maintainer}: Sebastiaan Blank \email{sebastiaan.bank@mail.com} [copyright holder]
 
 Authors:
 \itemize{
-  \item Sebastiaan Blank \email{sebastiaanblank@gmail.com} [copyright holder]
+  \item Sebastiaan Blank \email{sebastiaan.bank@mail.com} [copyright holder]
 }
 
 }

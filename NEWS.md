@@ -1,10 +1,10 @@
-# CausalState 0.0.0.9000
+# CausalState 0.9.0
 
-* Initial development version.
-* Imported from prior research pipeline (`manual_function_4reg.R`).
-* All code consolidated in `R/functions.R`; will be split into thematic
-  files during refactoring.
-* User-facing exports: `sdr()`, `itmle()`,
-  `density_ratio()`, `absorb_rule()`, `expand_to_horizon()`,
-  `cluster_boot_se()`, `data_check()`, plus the `SL.tgt.*` and
-  `SL.tmle_*` learner wrappers.
+* First public pre-release.
+* Main estimators: `sdr()`, `itmle()`, `density_ratio()`, `qreg()`.
+* Supports joint multi-treatment policies via `a_names = c("A1", "A2", ...)`.
+* Gaussian outcome support with internal `[0, 1]` scaling via `y_bounds`.
+* Pooled death model option (`pool_g_death`) for sparse late time points.
+* Custom SuperLearner wrappers for SDR (`SL.tgt.*`) and iTMLE (`SL.tmle_*`) targeting steps.
+* Cross-fitted density ratio weights reusable across estimators and time horizons.
+* Cluster-robust standard errors via `cluster` argument.

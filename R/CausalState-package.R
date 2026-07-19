@@ -11,11 +11,11 @@
 #' regularisation, k-fold cross-fitting, and pluggable SuperLearner ensembles.
 #'
 #' @section Main estimators:
-#' - [sdr()] — Sequential Doubly Robust estimator (EIF-based pseudo-outcome update)
-#' - [itmle()] — Infinite-dimensional TMLE (infinite-dimensional targeting step; also SDR)
+#' - [sdr()] - Sequential Doubly Robust estimator (EIF-based pseudo-outcome update)
+#' - [itmle()] - Infinite-dimensional TMLE (infinite-dimensional targeting step; also SDR)
 #'
 #' @section State machinery:
-#' - [absorb_rule()] — Define rules for entering absorbing states
+#' - [absorb_rule()] - Define rules for entering absorbing states
 #'
 #' @section Custom SuperLearner wrappers:
 #' SDR-targeted learners ([SL.tgt.glm()], [SL.tgt.glmnet()],
