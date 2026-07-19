@@ -270,15 +270,17 @@ density_ratio <- function(
 
     if (length(A_cols) <= 3L) {
       for (ac in A_cols) {
-        pre <- A_nat_mat[changed, ac]
-        pst <- A_shf_mat[changed, ac]
-        d   <- A_delta[changed, ac]
-        change_row[[paste0("mean_A_pre_",    ac)]] <- mean(pre, na.rm = TRUE)
-        change_row[[paste0("mean_A_post_",   ac)]] <- mean(pst, na.rm = TRUE)
-        change_row[[paste0("mean_A_delta_",   ac)]] <- mean(d, na.rm = TRUE)
-        change_row[[paste0("median_A_delta_", ac)]] <- median(d, na.rm = TRUE)
-        change_row[[paste0("q05_A_delta_",    ac)]] <- as.numeric(stats::quantile(d, 0.05, na.rm = TRUE))
-        change_row[[paste0("q95_A_delta_",    ac)]] <- as.numeric(stats::quantile(d, 0.95, na.rm = TRUE))
+        # pre/post means over whole population; delta quantiles among changed only
+        # (unchanged have delta = 0 by construction and dilute the shift distribution)
+        change_row[[paste0("mean_A_pre_",    ac)]] <- mean(A_nat_mat[, ac], na.rm = TRUE)
+        change_row[[paste0("mean_A_post_",   ac)]] <- mean(A_shf_mat[, ac], na.rm = TRUE)
+        if (any(changed)) {
+          d <- A_delta[changed, ac]
+          change_row[[paste0("mean_A_delta_",   ac)]] <- mean(d, na.rm = TRUE)
+          change_row[[paste0("median_A_delta_", ac)]] <- median(d, na.rm = TRUE)
+          change_row[[paste0("q05_A_delta_",    ac)]] <- as.numeric(stats::quantile(d, 0.05, na.rm = TRUE))
+          change_row[[paste0("q95_A_delta_",    ac)]] <- as.numeric(stats::quantile(d, 0.95, na.rm = TRUE))
+        }
       }
     } else {
       change_row[, `:=`(mean_A_pre = NA_real_, mean_A_post = NA_real_,
@@ -630,6 +632,13 @@ density_ratio <- function(
       k          = k,
       dr_sl      = dr_sl,
       bounds     = bounds,
+      v          = v,
+      inner_v    = inner_v,
+      seed       = seed,
+      a_names    = as.character(a_names),
+      baseline   = as.character(baseline  %||% character(0)),
+      tv_names   = as.character(tv_names  %||% character(0)),
+      cluster    = cluster,
       created_at = Sys.time()
     )
   )
