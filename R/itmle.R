@@ -646,7 +646,10 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #'
 #' Estimates the mean counterfactual outcome under a modified treatment policy
 #' (MTP) using the infinite-dimensional targeted minimum loss-based estimator
-#' (iTMLE) of Luedtke et al. (2017), Section 5 / Algorithm 4.  The companion
+#' (iTMLE) of Luedtke et al. (2017), Section 5 (Algorithm 4), using the
+#' cross-validated variant recommended in Appendix 12 of the same paper
+#' (the basic ERM variant in Algorithm 4 is prone to overfitting; the
+#' cross-validated version is what the authors recommend for practice).  The companion
 #' [sdr()] function implements the LMTP-SDR estimator of Díaz et al. (2021),
 #' which applies the Luedtke et al. SDR construction to the density-ratio / MTP
 #' setting.  The two estimators share the same backward Q-regression; they
@@ -697,8 +700,20 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #'       which targeting wrappers (from [sl_itmle]) were selected.}
 #'     \item{`diagnostics$branch_cal`}{Per-fold, per-time branch calibration
 #'       table: empirical mean targets vs. predictions for `g_remain`,
-#'       `g_death`, and `Q_remain`.}
+#'       `g_death`, and `Q_remain`.  **Note:** the `Q_remain` calibration
+#'       target equals `mean(Y)` only under the natural-course policy; under
+#'       a shifted policy the pseudo-outcome reflects the counterfactual
+#'       distribution and is not directly comparable to observed outcomes.
+#'       The `Q_rem` column is therefore only interpretable as a calibration
+#'       diagnostic when running under the natural-course policy.}
 #'   }
+#'
+#' @section Natural-course diagnostic value:
+#'   Unlike [sdr()], iTMLE does not collapse to `mean(Y)` under the
+#'   natural-course policy (see [sdr()] for why SDR does).  A natural-course
+#'   iTMLE run reflects the calibration of Q* (Q after the fluctuation
+#'   update).  To assess the Q models before targeting, use [qreg()] under
+#'   the natural course.
 #'
 #' @references
 #' Luedtke AR, Sofrygin O, van der Laan MJ, Carone M (2017). Sequential

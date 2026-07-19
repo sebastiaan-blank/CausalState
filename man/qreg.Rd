@@ -132,7 +132,12 @@ standard errors (e.g. hospital). If \code{NULL}, subject id is used.}
 
 \item{pool_g_death}{Logical. If \code{TRUE}, fit a single pooled
 \code{g_death_exit} model across all time points (with time as a covariate)
-rather than a separate model per time point. Default \code{FALSE}.}
+rather than a separate model per time point. Useful when deaths are sparse
+at individual time steps — pooling borrows strength across time and avoids
+near-empty training sets in late time points where mortality is rare.
+Use with caution if the death hazard changes substantially over time, as
+the pooled model must then capture that trend through the time covariate.
+Default \code{FALSE}.}
 
 \item{weight_object}{Optional. Output from \code{\link[=density_ratio]{density_ratio()}}.  If supplied,
 an EIF-based SE is computed in addition to the naive SE.  The fold

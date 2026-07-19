@@ -96,7 +96,12 @@
 #'   the fold structure for SE computation. Default `FALSE`.
 #' @param pool_g_death Logical. If `TRUE`, fit a single pooled
 #'   `g_death_exit` model across all time points (with time as a covariate)
-#'   rather than a separate model per time point. Default `FALSE`.
+#'   rather than a separate model per time point. Useful when deaths are sparse
+#'   at individual time steps — pooling borrows strength across time and avoids
+#'   near-empty training sets in late time points where mortality is rare.
+#'   Use with caution if the death hazard changes substantially over time, as
+#'   the pooled model must then capture that trend through the time covariate.
+#'   Default `FALSE`.
 #'
 #' @return A named list with:
 #'   \describe{
@@ -127,8 +132,24 @@
 #'       calibration table: empirical mean of training/validation targets
 #'       vs. mean predictions for `g_remain`, `g_death`, and `Q_remain`.
 #'       A quick calibration check for the three fitted models at each
-#'       time point.}
+#'       time point.  **Note:** the `Q_remain` calibration target is the
+#'       empirical mean of the pseudo-outcome used to fit `Q_rem` at that
+#'       step.  This target equals the observed `mean(Y)` only under the
+#'       natural course; under a shifted policy the pseudo-outcome reflects
+#'       the counterfactual distribution and the target is no longer
+#'       comparable to observed outcomes.  The `Q_rem` column of
+#'       `branch_cal` is therefore only interpretable as a calibration
+#'       diagnostic when running under the natural-course policy.}
 #'   }
+#'
+#' @section Natural-course caution:
+#'   Under the natural-course policy the cumulative density ratios equal one
+#'   and the SDR pseudo-outcome recursion collapses algebraically to
+#'   `mean(Y)`, regardless of Q-model quality.  A natural-course SDR run
+#'   cannot detect model misspecification.  To assess model calibration use
+#'   `diagnostics$branch_cal`, `fold_diag`, and `sl_summary`, or run
+#'   [itmle()] under the natural course (iTMLE does not collapse in the same
+#'   way).
 #'
 #' @references
 #' Díaz I, Williams N, Hoffman KL, Schenck EJ (2021). Nonparametric Causal

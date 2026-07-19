@@ -159,7 +159,12 @@ the fold structure for SE computation. Default \code{FALSE}.}
 
 \item{pool_g_death}{Logical. If \code{TRUE}, fit a single pooled
 \code{g_death_exit} model across all time points (with time as a covariate)
-rather than a separate model per time point. Default \code{FALSE}.}
+rather than a separate model per time point. Useful when deaths are sparse
+at individual time steps — pooling borrows strength across time and avoids
+near-empty training sets in late time points where mortality is rare.
+Use with caution if the death hazard changes substantially over time, as
+the pooled model must then capture that trend through the time covariate.
+Default \code{FALSE}.}
 }
 \value{
 A named list with:
@@ -191,7 +196,14 @@ diagnostics for the update step (\code{corr_mean}).}
 calibration table: empirical mean of training/validation targets
 vs. mean predictions for \code{g_remain}, \code{g_death}, and \code{Q_remain}.
 A quick calibration check for the three fitted models at each
-time point.}
+time point.  \strong{Note:} the \code{Q_remain} calibration target is the
+empirical mean of the pseudo-outcome used to fit \code{Q_rem} at that
+step.  This target equals the observed \code{mean(Y)} only under the
+natural course; under a shifted policy the pseudo-outcome reflects
+the counterfactual distribution and the target is no longer
+comparable to observed outcomes.  The \code{Q_rem} column of
+\code{branch_cal} is therefore only interpretable as a calibration
+diagnostic when running under the natural-course policy.}
 }
 }
 \description{
@@ -208,6 +220,17 @@ or together. Using a single level is robust with all learners. Combining
 two or more creates nested \code{mclapply} calls; in that case multi-threaded
 or GPU-based learners (e.g. xgboost with CUDA, OpenMP-based methods) may
 crash in the child processes and should be avoided or limited to one thread.
+}
+
+\section{Natural-course caution}{
+
+Under the natural-course policy the cumulative density ratios equal one
+and the SDR pseudo-outcome recursion collapses algebraically to
+\code{mean(Y)}, regardless of Q-model quality.  A natural-course SDR run
+cannot detect model misspecification.  To assess model calibration use
+\code{diagnostics$branch_cal}, \code{fold_diag}, and \code{sl_summary}, or run
+\code{\link[=itmle]{itmle()}} under the natural course (iTMLE does not collapse in the same
+way).
 }
 
 \examples{

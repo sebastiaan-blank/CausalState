@@ -172,7 +172,12 @@ the fold structure for SE computation. Default \code{FALSE}.}
 
 \item{pool_g_death}{Logical. If \code{TRUE}, fit a single pooled
 \code{g_death_exit} model across all time points (with time as a covariate)
-rather than a separate model per time point. Default \code{FALSE}.}
+rather than a separate model per time point. Useful when deaths are sparse
+at individual time steps — pooling borrows strength across time and avoids
+near-empty training sets in late time points where mortality is rare.
+Use with caution if the death hazard changes substantially over time, as
+the pooled model must then capture that trend through the time covariate.
+Default \code{FALSE}.}
 }
 \value{
 A named list with:
@@ -203,13 +208,21 @@ the fluctuation (targeting) model, per fold and time-point. Shows
 which targeting wrappers (from \link{sl_itmle}) were selected.}
 \item{\code{diagnostics$branch_cal}}{Per-fold, per-time branch calibration
 table: empirical mean targets vs. predictions for \code{g_remain},
-\code{g_death}, and \code{Q_remain}.}
+\code{g_death}, and \code{Q_remain}.  \strong{Note:} the \code{Q_remain} calibration
+target equals \code{mean(Y)} only under the natural-course policy; under
+a shifted policy the pseudo-outcome reflects the counterfactual
+distribution and is not directly comparable to observed outcomes.
+The \code{Q_rem} column is therefore only interpretable as a calibration
+diagnostic when running under the natural-course policy.}
 }
 }
 \description{
 Estimates the mean counterfactual outcome under a modified treatment policy
 (MTP) using the infinite-dimensional targeted minimum loss-based estimator
-(iTMLE) of Luedtke et al. (2017), Section 5 / Algorithm 4.  The companion
+(iTMLE) of Luedtke et al. (2017), Section 5 (Algorithm 4), using the
+cross-validated variant recommended in Appendix 12 of the same paper
+(the basic ERM variant in Algorithm 4 is prone to overfitting; the
+cross-validated version is what the authors recommend for practice).  The companion
 \code{\link[=sdr]{sdr()}} function implements the LMTP-SDR estimator of Díaz et al. (2021),
 which applies the Luedtke et al. SDR construction to the density-ratio / MTP
 setting.  The two estimators share the same backward Q-regression; they
@@ -223,6 +236,15 @@ learner wrappers (see \link{sl_itmle}) that handle the logit-offset structure
 required for cross-validated TMLE.  Requires pre-computed density ratio
 weights from \code{\link[=density_ratio]{density_ratio()}}.
 }
+\section{Natural-course diagnostic value}{
+
+Unlike \code{\link[=sdr]{sdr()}}, iTMLE does not collapse to \code{mean(Y)} under the
+natural-course policy (see \code{\link[=sdr]{sdr()}} for why SDR does).  A natural-course
+iTMLE run reflects the calibration of Q* (Q after the fluctuation
+update).  To assess the Q models before targeting, use \code{\link[=qreg]{qreg()}} under
+the natural course.
+}
+
 \examples{
 \donttest{
 library(SuperLearner)
