@@ -133,19 +133,31 @@ Naming, now that the file carries the scope:
 
 ## SuperLearner conventions
 
-The user supplies their own SuperLearner stack — these are **recommended
-defaults from development**, not configs the package imposes.
+The user supplies their own SuperLearner stack — these are **design principles
+from development**, not configs the package imposes.
 
 - **Asymmetric g/Q regularisation:** g-models tuned sharper (better
   density-ratio discrimination); Q-models more regularised (stability). This
-  asymmetry is the guiding principle behind the per-learner settings below.
-- Per-learner settings used in development:
-  - **dbarts** — `k = 1.5` for g, `k = 2.5` for Q.
-  - **xgboost** — GPU-enabled; pinned CUDA tarball (see Gotchas).
-  - **HAL** — asymmetric `smoothness_orders` between g and Q.
-  - **BAM (mgcv)** — `bs = "cs"` with fREML for g; `bs = "ts"` for Q.
-  - **earth / MARS.**
-  - **glmnet.**
+  asymmetry is the guiding principle across all learner choices.
+- **Q must cover the intervention trajectory, not just the natural arm.** A
+  model that fits E[Y|H, A_obs] well may extrapolate poorly under the shift.
+  The Q SL library needs enough flexibility to capture the counterfactual arm
+  without chasing recursion noise — this is the primary design tension for the
+  Q stack.
+- **Recursive Q-regression is the hardest fitting problem** in these estimators.
+  Noise accumulates backward through time, so the SL library for intermediate
+  time steps should be more parsimonious than the terminal-Y library: favour
+  shallow trees and strong regularisation over complex learners.
+- **Density-ratio metalearner:** `density_ratio()` accepts `method = :wb_dr`
+  to use the Wu-Benkeser DR metalearner (log-DR loss, analytical gradient) in
+  place of the default NNLS. The WB metalearner combines base learners in DR
+  space; `sl_predict` on a `:wb_dr` fit returns density ratios directly (not
+  probabilities). Pair with `ExpTiltLearner` (parametric KLIEP) for a
+  complementary direct-DR component alongside tree-based classifiers.
+- **All learners are CPU-only when SL folds run in parallel** — concurrent GPU
+  fits contend for VRAM. Set `nthread = 1` on tree learners and rely on
+  Julia/R's process-level parallelism for the outer folds, not within-learner
+  threading.
 - The iTMLE targeting step uses the **offset-as-column hack** to survive
   SuperLearner's CV fold subsetting (offset carried as a data column, not via
   the `offset` argument, so it gets subset correctly inside folds). This is
@@ -156,10 +168,9 @@ defaults from development**, not configs the package imposes.
 
 ## Environment & build
 
-- **OS:** Ubuntu 24.04 · **GPU:** NVIDIA RTX · **RAM:** 128 GB DDR5.
-- **Threads:** `mclapply` controls process-level parallelism; set BLAS, xgboost,
-  and dbarts thread counts **explicitly** to avoid oversubscription. Note:
-  dbarts `n.threads` is the *total* budget across chains, not per-chain.
+- **OS:** Ubuntu 24.04 · **GPU:** NVIDIA RTX · **RAM:** 196 GB DDR5 (frequently heavily used by concurrent R analysis).
+- **Threads:** `mclapply` controls process-level parallelism; set BLAS and
+  learner thread counts **explicitly** to avoid oversubscription.
 - Dev loop (adjust to the actual project setup):
   - `devtools::load_all()` — load during development
   - `devtools::test()` — run tests
@@ -173,8 +184,6 @@ defaults from development**, not configs the package imposes.
 
 - **xgboost + CUDA:** version 3.2.1.1 breaks GPU support — stay on **3.1.1.1**.
   If GPU training suddenly fails after an xgboost update, check this first.
-- **dbarts threading:** `n.threads` is the total across chains; do not multiply
-  by chain count.
 - **Density-ratio ESS collapse:** cumulative density ratios compound across time
   and can collapse effective sample size. Watch ESS diagnostics rather than
   assuming the weights are well-behaved.

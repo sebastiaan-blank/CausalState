@@ -723,6 +723,21 @@ qreg <- function(
     diagnostics = list(
       branch_cal = branch_diag,
       diag_table = diag_table
+    ),
+    settings = list(
+      variable_info = list(
+        id           = id,
+        time         = time,
+        alive        = alive,
+        in_state     = in_state,
+        cluster      = cluster,
+        baseline     = baseline,
+        time_varying = tv_names,
+        treatment    = a_names,
+        outcome      = y,
+        tmax         = tmax,
+        k            = k
+      )
     )
   )
 }

@@ -86,8 +86,13 @@ Required.}
 \item{outcome_family}{\code{"binomial"} (default) or \code{"gaussian"}.}
 
 \item{y_bounds}{Optional numeric vector of length 2 giving \code{c(min, max)}
-for scaling a continuous outcome to \verb{[0, 1]}. Inferred from data if
-\code{NULL}.}
+for scaling a continuous outcome to \verb{[0, 1]}.  When \code{NULL} the
+bounds are inferred from the observed range of \code{y} in \code{df}
+(\code{min(y)}, \code{max(y)}).  Predictions that fall outside the scaling
+range are clipped to \verb{[0, 1]} before back-transformation, so if the
+outcome distribution under the MTP may extend beyond the training range,
+supply explicit bounds wide enough to cover it.  Ignored for
+\code{outcome_family = "binomial"}.}
 
 \item{bounds}{Numeric. Probability clipping bound for g and Q predictions.
 Default \code{1e-5}.}

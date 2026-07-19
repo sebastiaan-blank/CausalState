@@ -38,8 +38,12 @@
 #'   Required.
 #' @param outcome_family `"binomial"` (default) or `"gaussian"`.
 #' @param y_bounds Optional numeric vector of length 2 giving `c(min, max)`
-#'   for scaling a continuous outcome to `[0, 1]`. Inferred from data if
-#'   `NULL`.
+#'   for scaling a continuous outcome to `[0, 1]`. When `NULL` the bounds are
+#'   inferred from the observed range of `y` in `df` (`min(y)`, `max(y)`).
+#'   Predictions outside the scaling range are clipped to `[0, 1]` before
+#'   back-transformation, so supply explicit bounds if the outcome distribution
+#'   under the MTP may extend beyond the training range. Ignored for
+#'   `outcome_family = "binomial"`.
 #' @param bounds Numeric. Probability clipping bound for g and Q predictions.
 #'   Default `1e-5`.
 #' @param trim Quantile used to cap instantaneous density ratios before they
@@ -1175,6 +1179,9 @@ sdr <- function(
       trim = trim,
       variable_info = list(
         id           = id,
+        time         = time,
+        alive        = alive,
+        in_state     = in_state,
         cluster      = cluster,
         baseline     = baseline,
         time_varying = tv_names,

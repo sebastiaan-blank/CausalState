@@ -1866,6 +1866,9 @@ itmle <- function(
       trim = trim,
       variable_info = list(
         id           = id,
+        time         = time,
+        alive        = alive,
+        in_state     = in_state,
         cluster      = cluster,
         baseline     = baseline,
         time_varying = tv_names,
