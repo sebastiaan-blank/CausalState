@@ -34,6 +34,13 @@
 #'   (probability of death among exiters). Required.
 #' @param sl_recursive SuperLearner library for the recursive Q-remain model.
 #'   Required.
+#' @param sl_rec_simple Optional SuperLearner library for the recursive Q-remain
+#'   model at early time points (`tt <= rec_transition`). When supplied, a
+#'   simpler/more-regularised library is used for the noisiest pseudo-outcome
+#'   steps. Requires `rec_transition`.
+#' @param rec_transition Integer. Time-point threshold: `sl_rec_simple` is used
+#'   for `tt <= rec_transition`, `sl_recursive` for later time points. Required
+#'   when `sl_rec_simple` is provided.
 #' @param sl_y SuperLearner library for the Q-exit (outcome-at-exit) model.
 #'   Required.
 #' @param outcome_family `"binomial"` (default) or `"gaussian"`.
@@ -52,10 +59,7 @@
 #'   before any subsetting to the current `tmax`.  Consequently the trim
 #'   threshold is identical whether you call the estimator with `tmax = 2` or
 #'   `tmax = 14`, making results directly comparable across horizons that share
-#'   the same weight object.  The same `trim` value must be passed to
-#'   [sdr_competing()] when reusing the same weight object, so
-#'   that the competing-event analysis operates on identically trimmed weights.
-#'   Default `0.99`.
+#'   the same weight object.  Default `0.99`.
 #' @param absorb List of [absorb_rule()] objects specifying outcome overrides
 #'   at absorbing states.
 #' @param policy_spec_fun A function `(D_block, t, a_names)` returning a
@@ -125,10 +129,12 @@ sdr <- function(
     a_names = character(0),
     no_lag_vars = character(0),
     policy_names = character(0),
-    sl_remain = NULL,   # SL library for g_remain
-    sl_death  = NULL,   # SL library for g_death_exit
-    sl_recursive = NULL, # SL fro REM 
-    sl_y = NULL, # SL library for Q_exit
+    sl_remain = NULL,
+    sl_death  = NULL,
+    sl_recursive = NULL,
+    sl_rec_simple = NULL,
+    rec_transition = NULL,
+    sl_y = NULL,
     outcome_family = c("binomial", "gaussian"),
     y_bounds = NULL,
     bounds = 1e-5,
@@ -144,7 +150,7 @@ sdr <- function(
     inner_v = 5L,
     cluster = NULL,
     cluster_se_only = FALSE,
-    pool_g_death = FALSE              # if TRUE, fit g_death once pooled over time with t as covariate
+    pool_g_death = FALSE
 ) {
   stopifnot(requireNamespace("data.table", quietly = TRUE))
   stopifnot(requireNamespace("SuperLearner", quietly = TRUE))
@@ -177,8 +183,11 @@ sdr <- function(
   if (is.null(sl_remain)) stop("`sl_remain` must be provided (SL library for g_remain).", call. = FALSE)
   if (is.null(sl_death))  stop("`sl_death` must be provided (SL library for g_death_exit).", call. = FALSE)
   if (is.null(sl_y)) stop("`sl_exit` must be provided (SL library for Q_exit).", call. = FALSE)
-  if (is.null(sl_recursive))  stop("`sl_rem` must be provided (SL library for Q_rem).", call. = FALSE)
-  
+  if (is.null(sl_recursive))  stop("`sl_recursive` must be provided (SL library for Q_rem).", call. = FALSE)
+  if (!is.null(sl_rec_simple) && is.null(rec_transition)) {
+    stop("`sl_rec_simple` requires `rec_transition` to be specified.", call. = FALSE)
+  }
+
   outcome_family <- match.arg(outcome_family, c("binomial", "gaussian"))
   
   prep <- prepare_long(DT, id, time, y, cluster = cluster)
@@ -450,6 +459,8 @@ sdr <- function(
         sl_death = sl_death,
         sl_y = sl_y,
         sl_recursive = sl_recursive,
+        sl_rec_simple = sl_rec_simple,
+        rec_transition = rec_transition,
         inner_v = inner_v,
         seed = seed,
         f_idx = f_idx,
@@ -462,7 +473,7 @@ sdr <- function(
       r_dex  <- reg_res$g_death_exit
       r_exit <- reg_res$Q_exit
       r_qrem <- reg_res$Q_rem
-      
+
       sl_rem      <- r_rem$sl_rem
       fit_rem     <- r_rem$fit_rem
       p_rem_const <- r_rem$p_rem_const
@@ -691,10 +702,6 @@ sdr <- function(
       m_gdeath_tr <- binom_metric(D_tr[exit_idx], p_dex_nat[exit_idx])
       m_gdeath_vl <- binom_metric(D_vl[exit_idx_vl], p_dex_nat_vl[exit_idx_vl])
 
-      # Q_rem target is observed Y (terminal outcome) for remainers.
-      # Calibration is only directly interpretable under a natural course run;
-      # under a shifted policy the target is still natural-course Y, not the
-      # counterfactual, so treat this metric as a model-quality check only.
       m_qrem_tr <- gauss_metric(Y_init[id_tr_ar[rem_idx]], q_rem_nat[rem_idx])
       m_qrem_vl <- gauss_metric(Y_init[id_vl_ar[rem_idx_vl]], q_rem_nat_vl[rem_idx_vl])
       
@@ -1198,37 +1205,6 @@ sdr <- function(
   class(out) <- c("sdr_fit", "list")
   out
 }
-
-
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-
-
 
 
 

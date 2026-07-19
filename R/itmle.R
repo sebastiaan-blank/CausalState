@@ -1,9 +1,3 @@
-
-#
-
-
-
-
 itmle_make_cols <- function(t, baseline, tv_names, a_names, all_names) {
   cols <- intersect(baseline, all_names)
   
@@ -652,17 +646,19 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #'
 #' Estimates the mean counterfactual outcome under a modified treatment policy
 #' (MTP) using the infinite-dimensional targeted minimum loss-based estimator
-#' (iTMLE) of Luedtke et al. (2017), Section 5 / Algorithm 4.  SDR and iTMLE
-#' share the same backward Q-regression; they differ only in the update step:
-#' iTMLE applies an infinite-dimensional TMLE fluctuation rather than the
-#' EIF-based pseudo-outcome update used by [sdr()].  Both are sequentially
-#' doubly robust (SDR): consistent whenever, at each time point t, either the
+#' (iTMLE) of Luedtke et al. (2017), Section 5 / Algorithm 4.  The companion
+#' [sdr()] function implements the LMTP-SDR estimator of Díaz et al. (2021),
+#' which applies the Luedtke et al. SDR construction to the density-ratio / MTP
+#' setting.  The two estimators share the same backward Q-regression; they
+#' differ only in the update step: iTMLE applies an infinite-dimensional TMLE
+#' fluctuation rather than the EIF-based pseudo-outcome update used by [sdr()].
+#' Both are sequentially doubly robust (2^\eqn{K}-robust, Luedtke et al.
+#' Definition 2): consistent whenever, at each time point t, either the
 #' treatment model \eqn{g_t} or the outcome model \eqn{Q_t} is consistently
-#' estimated (2^\eqn{K}-robust, Luedtke et al. Definition 2).  The targeting
-#' step uses a SuperLearner ensemble with custom learner wrappers (see
-#' [sl_itmle]) that handle the logit-offset structure required for
-#' cross-validated TMLE.  Requires pre-computed density ratio weights from
-#' [density_ratio()].
+#' estimated.  The targeting step uses a SuperLearner ensemble with custom
+#' learner wrappers (see [sl_itmle]) that handle the logit-offset structure
+#' required for cross-validated TMLE.  Requires pre-computed density ratio
+#' weights from [density_ratio()].
 #'
 #' @inheritParams sdr
 #' @param sl_tmle SuperLearner library for the iTMLE targeting step. Should
@@ -709,6 +705,8 @@ itmle <- function(
     sl_remain = NULL,
     sl_death  = NULL,
     sl_recursive = NULL,
+    sl_rec_simple = NULL,
+    rec_transition = NULL,
     sl_y = NULL,
     outcome_family = c("binomial", "gaussian"),
     y_bounds = NULL,
@@ -761,15 +759,17 @@ itmle <- function(
   
   if (is.null(sl_remain)) stop("`sl_remain` must be provided (SL library for g_remain).", call. = FALSE)
   if (is.null(sl_death))  stop("`sl_death` must be provided (SL library for g_death_exit).", call. = FALSE)
-  if (is.null(sl_y)) stop("`sl_exit` must be provided (SL library for Q_exit).", call. = FALSE)
-  if (is.null(sl_recursive))  stop("`sl_rem` must be provided (SL library for Q_rem).", call. = FALSE)
-  
+  if (is.null(sl_y)) stop("`sl_y` must be provided (SL library for Q_exit).", call. = FALSE)
+  if (is.null(sl_recursive))  stop("`sl_recursive` must be provided (SL library for Q_rem).", call. = FALSE)
+  if (!is.null(sl_rec_simple) && is.null(rec_transition)) {
+    stop("`sl_rec_simple` requires `rec_transition` to be specified.", call. = FALSE)
+  }
+
   outcome_family <- match.arg(outcome_family, c("binomial", "gaussian"))
-  
+
   prep <- prepare_long(DT, id, time, y, cluster = cluster)
   D      <- prep$D
-  
-  
+
   cols_to_pivot <- intersect(c(tv_names, a_names), names(D))
   
   D_wide <- data.table::dcast(
@@ -1053,6 +1053,8 @@ itmle <- function(
         sl_death = sl_death,
         sl_y = sl_y,
         sl_recursive = sl_recursive,
+        sl_rec_simple = sl_rec_simple,
+        rec_transition = rec_transition,
         inner_v = inner_v,
         seed = seed,
         f_idx = f_idx,
@@ -1065,13 +1067,13 @@ itmle <- function(
       r_dex  <- reg_res$g_death_exit
       r_exit <- reg_res$Q_exit
       r_qrem <- reg_res$Q_rem
-      
+
       sl_rem      <- r_rem$sl_rem
       fit_rem     <- r_rem$fit_rem
       p_rem_const <- r_rem$p_rem_const
       p_rem_nat   <- r_rem$p_rem_nat
       p_rem_shf   <- r_rem$p_rem_shf
-      
+
       sl_dex      <- r_dex$sl_dex
       fit_dex     <- r_dex$fit_dex
       p_dex_const <- r_dex$p_dex_const
@@ -1294,10 +1296,6 @@ itmle <- function(
       m_gdeath_tr <- binom_metric(D_tr[exit_idx], p_dex_nat[exit_idx])
       m_gdeath_vl <- binom_metric(D_vl[exit_idx_vl], p_dex_nat_vl[exit_idx_vl])
 
-      # Q_rem target is observed Y (terminal outcome) for remainers.
-      # Calibration is only directly interpretable under a natural course run;
-      # under a shifted policy the target is still natural-course Y, not the
-      # counterfactual, so treat this metric as a model-quality check only.
       m_qrem_tr <- gauss_metric(Y_init[id_tr_ar[rem_idx]], q_rem_nat[rem_idx])
       m_qrem_vl <- gauss_metric(Y_init[id_vl_ar[rem_idx_vl]], q_rem_nat_vl[rem_idx_vl])
       
@@ -1885,59 +1883,6 @@ itmle <- function(
   class(out) <- c("itmle_fit", "list")
   out
 }
-
-
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-
-
-
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-
-#
-#
-#
-#
 
 itmle_competing <- function(
     DT,

@@ -1,14 +1,14 @@
 Package: CausalState
 Type: Package
-Title: Sequential Doubly Robust and Iterative TMLE Estimators for State-Aware Longitudinal Modified Treatment Policies
+Title: Sequential Doubly Robust and Infinite-Dimensional TMLE Estimators for State-Aware Longitudinal Modified Treatment Policies
 Version: 0.0.0.9000
 Authors@R: 
     person(given = "Sebastiaan",
            family = "Blank",
            role = c("aut", "cre", "cph"),
            email = "sebastiaanblank@gmail.com")
-Description: Implements Sequential Doubly Robust (SDR) and iterative Targeted
-    Maximum Likelihood (iTMLE) estimators for longitudinal modified treatment
+Description: Implements Sequential Doubly Robust (SDR) and infinite-dimensional
+    Targeted Maximum Likelihood (iTMLE) estimators for longitudinal modified treatment
     policies in settings with absorbing state transitions, such as ICU, ward,
     or emergency department care episodes. Treatment is permitted in active
     states and becomes structurally inapplicable after transition to an

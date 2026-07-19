@@ -20,6 +20,19 @@ R package for longitudinal causal inference under state transitions.
   Splitting files and renaming must not change outputs. Where feasible, confirm
   results are unchanged before and after.
 
+### GitHub / CRAN preparation rules (apply before every push)
+
+- **Before any GitHub push, ask explicitly** whether `sdr_competing` and
+  `itmle_competing` should be included. The default answer is **no** — they are
+  excluded from the public release until they have been rewritten and more
+  thoroughly tested. Do not push them silently.
+- **Remove all unnecessary inline comments** from every file before it goes to
+  GitHub. "Unnecessary" means anything that describes what the code does
+  (readable from the code itself), any TODO/FIXME left-overs, any commented-out
+  code blocks, and any `#` placeholder lines. The only comments that belong in
+  the public source are those that explain a non-obvious *why* (hidden
+  constraint, subtle invariant, workaround for a specific external bug).
+
 ---
 
 ## What CausalState is
@@ -44,10 +57,12 @@ methodology — see References):
 
 Both are heavily based on the **LMTP** framework and the `lmtp` package.
 
-The package also includes a **simpler competing-event variant** of both
-estimators for the strictly-survival case (ICU / in-hospital mortality). It
-lives in the same package — rather than standalone — specifically to **reuse the
-density-ratio weights** computed for the main estimators.
+The package also includes a **competing-event variant** of both estimators
+(`sdr_competing`, `itmle_competing`) for the strictly-survival case (ICU /
+in-hospital mortality). These live in `sdr.R` / `itmle.R` locally and reuse the
+density-ratio weights from the main estimators. **They are excluded from the
+public GitHub release** until rewritten and more thoroughly tested — see the
+GitHub / CRAN preparation rules above.
 
 > NOTE: applications (e.g. any MIMIC-IV diuretics analysis) are *not* part of
 > this package; they are downstream users of it.
@@ -56,11 +71,11 @@ density-ratio weights** computed for the main estimators.
 
 ## Current status & priorities
 
-- Main estimator functions: **done**; core estimator logic is unchanged
-  recently — the main recent additions are an expanded set of diagnostics.
-- The **survival / competing-event** estimator: **needs to be rewritten**, but
-  is **not** a current priority.
-- **Active task: reorganisation** of the codebase (see below).
+- Main estimator functions (`sdr`, `itmle`, `density_ratio`, `qreg`): **done**.
+- The **competing-event** functions (`sdr_competing`, `itmle_competing`): present
+  locally, excluded from GitHub. Needs rewriting before public release.
+- **Active focus: CRAN preparation** — documentation, `R CMD check` clean,
+  vignette.
 
 ---
 
@@ -83,8 +98,8 @@ R/
                      #   Used by density_ratio, sdr, and itmle.
   density_ratio.R    # g-side density-ratio estimation; consumes sl.R
   shared_helpers.R   # helpers shared by sdr & itmle (e.g. EIF assembly, pseudo-outcome scaffolding)
-  sdr.R              # SDR estimator + SDR-specific helpers + SDR competing-event / survival variant
-  itmle.R            # iTMLE estimator + iTMLE-specific helpers + iTMLE survival variant
+  sdr.R              # SDR estimator + SDR-specific helpers (+ sdr_competing locally, excluded from GitHub)
+  itmle.R            # iTMLE estimator + iTMLE-specific helpers (+ itmle_competing locally, excluded from GitHub)
   sl_itmle.R         # custom iTMLE SL wrappers — custom because the targeting offset
                      #   (offset-as-column hack) isn't handled by standard wrappers. Own file
                      #   so it also serves as an easy, tunable worked example users can adapt.

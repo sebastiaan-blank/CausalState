@@ -4,14 +4,16 @@
 \description{
 Estimates the mean counterfactual outcome under a modified treatment policy
 (MTP) using the infinite-dimensional targeted minimum loss-based estimator
-(iTMLE) of Luedtke et al. (2017), Section 5 / Algorithm 4.  SDR and iTMLE
-share the same backward Q-regression; they differ only in the update step:
-iTMLE applies an infinite-dimensional TMLE fluctuation rather than the
-EIF-based pseudo-outcome update used by \code{\link[=sdr]{sdr()}}.  Both are sequentially
-doubly robust (SDR): consistent whenever, at each time point t, either the
-treatment model \eqn{g_t} or the outcome model \eqn{Q_t} is consistently
-estimated (2^\eqn{K}-robust, Luedtke et al. Definition 2).  The targeting
-step uses a SuperLearner ensemble with custom learner wrappers (see
+(iTMLE) of Luedtke et al. (2017), Section 5 / Algorithm 4.  The companion
+\code{\link[=sdr]{sdr()}} function implements the LMTP-SDR estimator of Díaz et al. (2021),
+which applies the Luedtke et al. SDR construction to the density-ratio / MTP
+setting.  The two estimators share the same backward Q-regression; they differ
+only in the update step: iTMLE applies an infinite-dimensional TMLE fluctuation
+rather than the EIF-based pseudo-outcome update used by \code{\link[=sdr]{sdr()}}.
+Both are sequentially doubly robust (2^\eqn{K}-robust, Luedtke et al.
+Definition 2): consistent whenever, at each time point t, either the treatment
+model \eqn{g_t} or the outcome model \eqn{Q_t} is consistently estimated.  The
+targeting step uses a SuperLearner ensemble with custom learner wrappers (see
 \link{sl_itmle}) that handle the logit-offset structure required for
 cross-validated TMLE.  Requires pre-computed density ratio weights from
 \code{\link[=density_ratio]{density_ratio()}}.
@@ -31,8 +33,11 @@ itmle(
   a_names = character(0),
   no_lag_vars = character(0),
   policy_names = character(0),
-  sl_g = NULL,
+  sl_remain = NULL,
+  sl_death = NULL,
   sl_recursive = NULL,
+  sl_rec_simple = NULL,
+  rec_transition = NULL,
   sl_y = NULL,
   outcome_family = c("binomial", "gaussian"),
   y_bounds = NULL,
@@ -91,11 +96,22 @@ that should not be lagged (e.g. already-encoded temporal features).}
 \item{policy_names}{Character vector of column names holding the shifted
 treatment values under the MTP (one per treatment variable in \code{a_names}).}
 
-\item{sl_g}{SuperLearner library for the treatment/censoring models
-(\code{g_remain} and \code{g_death_exit}). Required.}
+\item{sl_remain}{SuperLearner library for the \code{g_remain} model
+(probability of remaining in state at each time point). Required.}
+
+\item{sl_death}{SuperLearner library for the \code{g_death_exit} model
+(probability of death among exiters). Required.}
 
 \item{sl_recursive}{SuperLearner library for the recursive Q-remain model.
 Required.}
+
+\item{sl_rec_simple}{Optional SuperLearner library for the recursive Q-remain
+model at early time points (\code{tt <= rec_transition}). A simpler/more-regularised
+library for the noisiest pseudo-outcome steps. Requires \code{rec_transition}.}
+
+\item{rec_transition}{Integer. Time-point threshold: \code{sl_rec_simple} is used
+for \code{tt <= rec_transition}, \code{sl_recursive} for later time points. Required
+when \code{sl_rec_simple} is provided.}
 
 \item{sl_y}{SuperLearner library for the Q-exit (outcome-at-exit) model.
 Required.}
@@ -120,10 +136,7 @@ the \strong{full} \code{weights_dt} (all time points computed by \code{\link[=de
 before any subsetting to the current \code{tmax}.  Consequently the trim
 threshold is identical whether you call the estimator with \code{tmax = 2} or
 \code{tmax = 14}, making results directly comparable across horizons that share
-the same weight object.  The same \code{trim} value must be passed to
-\code{\link[=sdr_competing]{sdr_competing()}} when reusing the same weight object, so
-that the competing-event analysis operates on identically trimmed weights.
-Default \code{0.99}.}
+the same weight object.  Default \code{0.99}.}
 
 \item{absorb}{List of \code{\link[=absorb_rule]{absorb_rule()}} objects specifying outcome overrides
 at absorbing states.}
@@ -151,7 +164,7 @@ each SuperLearner call via \code{\link[SuperLearner:mcSuperLearner]{SuperLearner
 Linux/Mac only). Ignored when \code{parallel = FALSE}. Default \code{NULL}
 (sequential). \strong{Note:} incompatible with \code{dbarts}/\code{SL.dbarts} learners —
 dbarts' C-level RNG state does not survive forking. Remove dbarts from
-\code{sl_g}/\code{sl_y}/\code{sl_recursive} when \code{sl_workers} is set.}
+\code{sl_remain}/\code{sl_death}/\code{sl_y}/\code{sl_recursive} when \code{sl_workers} is set.}
 
 \item{inner_v}{Integer. Number of inner cross-validation folds for
 SuperLearner. Default \code{5L}.}

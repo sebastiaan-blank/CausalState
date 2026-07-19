@@ -162,6 +162,8 @@ fit_transition_regressions <- function(
   sl_death,
   sl_y,
   sl_recursive,
+  sl_rec_simple = NULL,
+  rec_transition = NULL,
   inner_v,
   seed,
   f_idx,
@@ -372,7 +374,13 @@ fit_transition_regressions <- function(
           Y = Y_rem,
           X = X_rem,
           family = if (is_binom && tt == tmax) stats::binomial() else stats::gaussian(),
-          sl_lib = if (tt == tmax) sl_y else sl_recursive,
+          sl_lib = if (tt == tmax) {
+            sl_y
+          } else if (!is.null(sl_rec_simple) && tt <= rec_transition) {
+            sl_rec_simple
+          } else {
+            sl_recursive
+          },
           v_inner = max(2L, min(as.integer(inner_v), length(rem_idx))),
           cluster_inner = cl_rem_ar,
           seed_inner = est_seed_for(seed, f_idx, tt, "Q_remain", "fit"),

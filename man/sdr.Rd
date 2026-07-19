@@ -21,6 +21,8 @@ sdr(
   sl_remain = NULL,
   sl_death = NULL,
   sl_recursive = NULL,
+  sl_rec_simple = NULL,
+  rec_transition = NULL,
   sl_y = NULL,
   outcome_family = c("binomial", "gaussian"),
   y_bounds = NULL,
@@ -85,6 +87,14 @@ treatment values under the MTP (one per treatment variable in \code{a_names}).}
 \item{sl_recursive}{SuperLearner library for the recursive Q-remain model.
 Required.}
 
+\item{sl_rec_simple}{Optional SuperLearner library for the recursive Q-remain
+model at early time points (\code{tt <= rec_transition}). A simpler/more-regularised
+library for the noisiest pseudo-outcome steps. Requires \code{rec_transition}.}
+
+\item{rec_transition}{Integer. Time-point threshold: \code{sl_rec_simple} is used
+for \code{tt <= rec_transition}, \code{sl_recursive} for later time points. Required
+when \code{sl_rec_simple} is provided.}
+
 \item{sl_y}{SuperLearner library for the Q-exit (outcome-at-exit) model.
 Required.}
 
@@ -108,10 +118,7 @@ the \strong{full} \code{weights_dt} (all time points computed by \code{\link[=de
 before any subsetting to the current \code{tmax}.  Consequently the trim
 threshold is identical whether you call the estimator with \code{tmax = 2} or
 \code{tmax = 14}, making results directly comparable across horizons that share
-the same weight object.  The same \code{trim} value must be passed to
-\code{\link[=sdr_competing]{sdr_competing()}} when reusing the same weight object, so
-that the competing-event analysis operates on identically trimmed weights.
-Default \code{0.99}.}
+the same weight object.  Default \code{0.99}.}
 
 \item{absorb}{List of \code{\link[=absorb_rule]{absorb_rule()}} objects specifying outcome overrides
 at absorbing states.}
