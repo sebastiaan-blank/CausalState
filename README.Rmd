@@ -21,7 +21,7 @@ knitr::opts_chunk$set(
 [![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 <!-- badges: end -->
 
-**CausalState** provides Sequential Doubly Robust (SDR) and iterative Targeted Maximum Likelihood (iTMLE) estimators for longitudinal modified treatment policies in settings with absorbing state transitions — for example, ICU, ward, or emergency department care episodes where treatment is applicable while in the active state and becomes structurally inapplicable after discharge or death.
+**CausalState** provides Sequential Doubly Robust (SDR) and infinite-dimensional Targeted Maximum Likelihood (iTMLE) estimators for longitudinal modified treatment policies in settings with absorbing state transitions — for example, ICU, ward, or emergency department care episodes where treatment is applicable while in the active state and becomes structurally inapplicable after discharge or death.
 
 The package complements [`lmtp`](https://github.com/nt-williams/lmtp) by handling settings where the timing of state transitions is itself endogenous to the treatment policy.
 
@@ -32,7 +32,7 @@ Designed for **medium-horizon** care episodes (5–10 daily blocks). Beyond that
 ## Features
 
 - Sequential Doubly Robust (SDR) estimator with k-fold cross-fitting
-- Iterative TMLE (iTMLE) estimator
+- Infinite-dimensional TMLE (iTMLE) estimator
 - First-class handling of single absorbing transitions (alive-discharge vs death as competing terminal events)
 - Asymmetric g- and Q-model regularisation defaults (sharper g, more-regularised Q)
 - Pluggable SuperLearner ensembles via included custom learner wrappers (`SL.tgt.*`, `SL.tmle_*`)

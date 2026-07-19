@@ -8,12 +8,12 @@
 [![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 <!-- badges: end -->
 
-**CausalState** provides Sequential Doubly Robust (SDR) and iterative
-Targeted Maximum Likelihood (iTMLE) estimators for longitudinal modified
-treatment policies in settings with absorbing state transitions — for
-example, ICU, ward, or emergency department care episodes where treatment
-is applicable while in the active state and becomes structurally
-inapplicable after discharge or death.
+**CausalState** provides Sequential Doubly Robust (SDR) and
+infinite-dimensional Targeted Maximum Likelihood (iTMLE) estimators for
+longitudinal modified treatment policies in settings with absorbing state
+transitions — for example, ICU, ward, or emergency department care
+episodes where treatment is applicable while in the active state and
+becomes structurally inapplicable after discharge or death.
 
 The package complements [`lmtp`](https://github.com/nt-williams/lmtp) by
 handling settings where the timing of state transitions is itself
