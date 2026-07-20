@@ -138,12 +138,20 @@ dr_from_prob <- function(p_mat, beta, bounds, denom_cap) {
 #'   `FALSE` (default): standard SuperLearner with NNLS metalearner — each base
 #'   learner outputs a propensity score (probability scale) and the metalearner
 #'   combines them with non-negative least squares; the combined probability is
-#'   then converted to a density ratio via `p / (1 - p)`.  `TRUE`: the
-#'   Wu-Benkeser metalearner ([method.WB_dr]) — combines base learners directly
-#'   in density-ratio space by minimising a log density-ratio loss, which can
-#'   give better-calibrated density ratios when the propensity score is far from
-#'   0.5.  When `dr_sl = TRUE` the SuperLearner fit returns density ratios
-#'   directly rather than probabilities.
+#'   then converted to a density ratio via `p / (1 - p)`.
+#'   `TRUE`: the Wu-Benkeser metalearner ([method.WB_dr]) — combines base
+#'   learners directly in density-ratio space by minimising a log density-ratio
+#'   loss rather than a squared-error loss on the probability scale.  This can
+#'   give better-calibrated density ratios when the propensity is far from 0.5
+#'   and extreme ratios are a concern.  When `dr_sl = TRUE` the SuperLearner
+#'   object returns density ratios directly rather than probabilities.
+#'   **Important:** the Wu-Benkeser pathway requires base learners whose
+#'   `predict` method returns density ratios on the positive real line, not
+#'   probabilities in `[0, 1]`.  Standard SuperLearner wrappers (e.g.
+#'   `SL.glm`, `SL.xgboost`) are not compatible — you must supply custom
+#'   wrappers that internally fit a classifier and convert predictions to
+#'   density ratios before returning them.  This package does not currently
+#'   include such wrappers; support is planned for a future release.
 #' @param drop_small_cluster_splits Logical. Drop time points where a fold
 #'   has too few clusters to fit a model. Default `TRUE`.
 #' @param parallel_t Logical. Parallelise across time points. Default `FALSE`.
