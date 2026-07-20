@@ -677,7 +677,15 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #'   \describe{
 #'     \item{`psi`}{EIF point estimate of `E[Y(d)]` under the MTP, after
 #'       the iTMLE targeting step.}
-#'     \item{`se`}{Standard error from the efficient influence curve.}
+#'     \item{`se`}{Standard error from the efficient influence curve, computed
+#'       as `sqrt(mean(IC^2) / n)` — the uncentered second-moment estimator
+#'       (or its cluster-robust analogue). Unlike the standard `sd(IC)/sqrt(n)`
+#'       used by [sdr()], this does not assume `E[IC] = 0`: it remains
+#'       conservative when the targeting loop has not fully converged to a
+#'       zero-mean IC. When targeting converges well the two are essentially
+#'       identical. The centered and second-moment SEs are both available in
+#'       `diagnostics$se_info` (`se_centered` and `se_second_moment`) for
+#'       comparison.}
 #'     \item{`ci`}{95% Wald confidence interval: `psi ± 1.96 * se`.}
 #'     \item{`Y_obs`}{Observed mean outcome `mean(Y)`. Quick sanity check
 #'       against `psi` under the natural-course policy.}

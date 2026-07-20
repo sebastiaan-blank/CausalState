@@ -116,7 +116,12 @@
 #' @return A named list. Top-level elements:
 #'   \describe{
 #'     \item{`psi`}{EIF-corrected point estimate of `E[Y(d)]` under the MTP.}
-#'     \item{`se`}{Standard error from the efficient influence curve.}
+#'     \item{`se`}{Standard error from the efficient influence curve, computed
+#'       as `sd(IC) / sqrt(n)` (or the cluster-robust sandwich equivalent when
+#'       a cluster variable is supplied). This is the standard centered variance
+#'       estimator and assumes `E[IC] = 0`, which holds exactly under the natural
+#'       course and approximately under an MTP when the Q and g models are
+#'       well-specified.}
 #'     \item{`ci`}{95% Wald confidence interval: `psi ± 1.96 * se`.}
 #'     \item{`Y_obs`}{Observed mean outcome `mean(Y)` across all subjects.
 #'       Quick sanity check: under the natural-course policy `psi` should

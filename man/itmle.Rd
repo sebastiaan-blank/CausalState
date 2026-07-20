@@ -195,7 +195,15 @@ noted. Top-level elements:
 \describe{
 \item{\code{psi}}{EIF point estimate of \code{E[Y(d)]} under the MTP, after
 the iTMLE targeting step.}
-\item{\code{se}}{Standard error from the efficient influence curve.}
+\item{\code{se}}{Standard error from the efficient influence curve, computed
+as \code{sqrt(mean(IC^2) / n)} — the uncentered second-moment estimator
+(or its cluster-robust analogue). Unlike the standard \code{sd(IC)/sqrt(n)}
+used by \code{\link[=sdr]{sdr()}}, this does not assume \code{E[IC] = 0}: it remains
+conservative when the targeting loop has not fully converged to a
+zero-mean IC. When targeting converges well the two are essentially
+identical. The centered and second-moment SEs are both available in
+\code{diagnostics$se_info} (\code{se_centered} and \code{se_second_moment}) for
+comparison.}
 \item{\code{ci}}{95\% Wald confidence interval: \verb{psi ± 1.96 * se}.}
 \item{\code{Y_obs}}{Observed mean outcome \code{mean(Y)}. Quick sanity check
 against \code{psi} under the natural-course policy.}

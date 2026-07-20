@@ -180,7 +180,12 @@ Default \code{FALSE}.}
 A named list. Top-level elements:
 \describe{
 \item{\code{psi}}{EIF-corrected point estimate of \code{E[Y(d)]} under the MTP.}
-\item{\code{se}}{Standard error from the efficient influence curve.}
+\item{\code{se}}{Standard error from the efficient influence curve, computed
+as \code{sd(IC) / sqrt(n)} (or the cluster-robust sandwich equivalent when
+a cluster variable is supplied). This is the standard centered variance
+estimator and assumes \code{E[IC] = 0}, which holds exactly under the natural
+course and approximately under an MTP when the Q and g models are
+well-specified.}
 \item{\code{ci}}{95\% Wald confidence interval: \verb{psi ± 1.96 * se}.}
 \item{\code{Y_obs}}{Observed mean outcome \code{mean(Y)} across all subjects.
 Quick sanity check: under the natural-course policy \code{psi} should
