@@ -8,7 +8,7 @@ vignette: >
 ---
 
 ```{r, include = FALSE}
-knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE, purl = FALSE)
 ```
 
 ```{r setup}
@@ -233,7 +233,8 @@ res_sdr <- sdr(
   baseline        = c("age", "sex"),
   tv_names        = c("L1", "L2"),
   a_names         = "A",
-  sl_g            = sl_lib,
+  sl_remain       = sl_lib,
+  sl_death        = sl_lib,
   sl_recursive    = sl_lib,
   sl_y            = sl_lib,
   outcome_family  = "binomial",
@@ -284,7 +285,8 @@ res_itmle <- itmle(
   baseline         = c("age", "sex"),
   tv_names         = c("L1", "L2"),
   a_names          = "A",
-  sl_g             = sl_lib,
+  sl_remain        = sl_lib,
+  sl_death         = sl_lib,
   sl_recursive     = sl_lib,
   sl_y             = sl_lib,
   sl_tmle          = c("SL.tgt.intercept", "SL.tgt.glm"),
@@ -339,7 +341,8 @@ res_qreg <- qreg(
   baseline        = c("age", "sex"),
   tv_names        = c("L1", "L2"),
   a_names         = "A",
-  sl_g            = sl_lib,
+  sl_remain       = sl_lib,
+  sl_death        = sl_lib,
   sl_recursive    = sl_lib,
   sl_y            = sl_lib,
   outcome_family  = "binomial",
