@@ -210,7 +210,7 @@ test_that("itmle estimate is within 3 SE of MC truth", {
 # ── sdr_competing ─────────────────────────────────────────────────────────────
 
 test_that("sdr_competing estimate is within 3 SE of MC mortality truth", {
-  res <- sdr_competing(
+  res <- CausalState:::sdr_competing(
     DT              = df_est,
     weights_dt      = wr$weights_dt,
     policy_spec_fun = policy_fn,
@@ -236,7 +236,7 @@ test_that("sdr_competing estimate is within 3 SE of MC mortality truth", {
 # ── itmle_competing ───────────────────────────────────────────────────────────
 
 test_that("itmle_competing estimate is within 3 SE of MC mortality truth", {
-  res <- itmle_competing(
+  res <- CausalState:::itmle_competing(
     DT               = df_est,
     weights_dt       = wr$weights_dt,
     policy_spec_fun  = policy_fn,
