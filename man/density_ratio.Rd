@@ -94,7 +94,8 @@ probabilities in \verb{[0, 1]}.  Standard SuperLearner wrappers (e.g.
 \code{SL.glm}, \code{SL.xgboost}) are not compatible — you must supply custom
 wrappers that internally fit a classifier and convert predictions to
 density ratios before returning them.  This package does not currently
-include such wrappers; support is planned for a future release.}
+include such wrappers; built-in DR-returning wrappers compatible with
+the WB pathway are planned for version 1.0.}
 
 \item{drop_small_cluster_splits}{Logical. Drop time points where a fold
 has too few clusters to fit a model. Default \code{TRUE}.}
