@@ -1,0 +1,245 @@
+---
+title: "Wu-Benkeser density-ratio metalearner"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Wu-Benkeser density-ratio metalearner}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+```
+
+## Overview
+
+By default, `density_ratio()` estimates each instantaneous density ratio
+r_t(h, a) = dP~(A_t = a | H_t = h) / dP(A_t = a | H_t = h) via a binary
+classification approach: a SuperLearner is trained to distinguish natural-course
+from shifted-course observations, and the ratio is recovered as
+r = p-hat / (1 - p-hat) where p-hat is the predicted probability of belonging
+to the shifted arm.
+
+Setting `dr_sl = TRUE` activates the **Wu-Benkeser (WB) metalearner**
+(`method.WB_dr()`), which combines base learners differently: instead of the
+default non-negative least squares (NNLS) on the probability scale, it
+minimises a log-density-ratio loss directly in density-ratio space.
+
+---
+
+## Standard approach: classify then convert
+
+In the standard (`dr_sl = FALSE`) pathway:
+
+1. Observations from the natural-course arm are labelled 0; observations from
+   the shifted arm are labelled 1.  The combined dataset is passed to a binary
+   SuperLearner.
+2. Each base learner outputs a probability p-hat in (0, 1).
+3. NNLS combines the per-learner predictions on the probability scale.
+4. The density ratio is recovered as r = p-hat-ensemble / (1 - p-hat-ensemble).
+5. Predictions are clipped to [bounds, 1 - bounds] before conversion (where
+   `bounds` is the user-supplied clipping parameter, default 1e-5).
+
+This is the approach used in the `lmtp` package and is the safe default.
+Standard SuperLearner wrappers (`SL.glm`, `SL.xgboost`, `SL.earth`, etc.)
+all work here because they return probabilities.
+
+---
+
+## WB approach: combine in density-ratio space
+
+The Wu-Benkeser metalearner (`dr_sl = TRUE`) replaces step 3 above.
+
+**Core idea.**  Let r_1, ..., r_K be the density-ratio predictions from K
+base learners.  Rather than finding NNLS weights on the probability scale, WB
+finds weights beta = (beta_1, ..., beta_K) on the simplex that minimise
+
+  L(beta) = mean[ s_i * log( sum_k beta_k * r_k(x_i) ) ]
+
+where s_i = 1 - 2 * Y_i (so s_i = -1 for the shifted arm and +1 for the
+natural arm).  This is a cross-entropy loss expressed directly in
+density-ratio space; it arises from the log-likelihood of an exponential
+tilt model.
+
+Weights are found by BFGS on the softmax reparameterisation alpha_k such that
+beta_k = exp(alpha_k) / sum_j exp(alpha_j), which enforces the simplex
+constraint automatically.  If BFGS fails to converge, equal weights are
+used as a fallback with a warning.
+
+**The key distinction: where selection happens.**  All metalearners --
+including WB -- combine base learner predictions into an ensemble.  The
+difference is the scale on which learners are evaluated and selected.
+
+Standard metalearners (NNLS, log-likelihood, etc.) evaluate base learners
+on their **probability predictions**: learners are scored by how well they
+classify natural-course vs shifted-course observations, and the ensemble
+weights are chosen to minimise a loss on that probability scale.  The
+resulting ensemble probability is then converted to a density ratio via
+p / (1 - p).  This works well when all base learners output probabilities in
+(0, 1), but it means that the selection criterion is one step removed from
+the quantity of interest (the density ratio itself).
+
+The WB metalearner evaluates and selects base learners **directly on the
+density-ratio scale**, using a log-DR loss that is natural to that space.
+This has two practical consequences:
+
+1. Learners are selected for their density-ratio estimation accuracy, not
+   their probability classification accuracy -- which is the more relevant
+   criterion for downstream estimators.
+2. Base learners that **directly output density ratios** (rather than
+   probabilities) can be included in the library and combined under the same
+   loss.  Direct density-ratio estimators such as KLIEP (Kullback-Leibler
+   Importance Estimation Procedure), RuLSIF (relative unconstrained
+   Least-Squares Importance Fitting), and parametric exponential-tilt models
+   fit on the log-ratio scale are natural candidates.  These methods estimate
+   the ratio r(x) = dP~(A|x) / dP(A|x) directly without going through a
+   classification step, and are often more efficient when the ratio is far
+   from 1 or the covariate dimension is high.
+
+---
+
+## Clipping in the WB pathway
+
+The standard clipping applied to all SL predictions elsewhere in the
+pipeline -- via `scale_info$clip` with the user-supplied `bounds` parameter
+-- does **not** apply to WB base learners, because those learners return
+density ratios (not probabilities) and there is no probability-space
+analogue to clip against.
+
+Clipping in the WB pathway is instead handled by `dr_floor` inside
+`method.WB_dr()`:
+
+```{r dr-floor}
+# dr_floor floors every base-learner density-ratio prediction before
+# the log is taken.  Prevents log(0) during BFGS and in computePred.
+method.WB_dr(dr_floor = 1e-10)
+```
+
+Pass this to `density_ratio()` via the `method_g` argument:
+
+```{r wb-call}
+wr <- density_ratio(
+  ...,
+  dr_sl    = TRUE,
+  method_g = method.WB_dr(dr_floor = 1e-10)
+)
+```
+
+---
+
+## Custom DR-returning wrappers (required)
+
+**Standard SuperLearner wrappers are incompatible with `dr_sl = TRUE`.**
+Wrappers such as `SL.glm` or `SL.xgboost` return probabilities in (0, 1).
+When WB's `computePred` multiplies them as density ratios, the result is
+numerically meaningless.
+
+The WB pathway requires base learners whose `predict` method returns a
+**density ratio**, not a probability.  The interface a DR-returning wrapper
+must satisfy:
+
+- `SL.my_dr_learner(Y, X, newX, family, ...)` is called during SuperLearner
+  cross-validation.  `Y` is the 0/1 arm indicator (0 = natural, 1 = shifted).
+  `X` and `newX` are the covariate matrices.
+- The returned `pred` field must contain **density-ratio predictions**
+  r-hat(x) = dP~(A|x) / dP(A|x) evaluated at the rows of `newX`.
+- The returned `predict` S3 method must also return density ratios (not
+  probabilities).
+- Predictions should be non-negative; apply `dr_floor` or equivalent
+  flooring inside the wrapper before returning.
+
+A concrete example structure:
+
+```{r wrapper-example}
+SL.my_kliep_learner <- function(Y, X, newX, family, obsWeights, ...) {
+  # Fit a kernel density-ratio model (KLIEP, RuLSIF, etc.)
+  # Y = 0 for natural-course rows, Y = 1 for shifted rows.
+  fit <- my_kliep_fit(X[Y == 0, ], X[Y == 1, ])
+
+  # Predictions must be density ratios, not probabilities
+  dr_pred <- predict(fit, newX)
+  dr_pred <- pmax(dr_pred, 1e-10)   # floor -- not the same as bounds clipping
+
+  list(
+    pred = dr_pred,
+    fit  = structure(list(model = fit), class = "SL.my_kliep_learner")
+  )
+}
+
+predict.SL.my_kliep_learner <- function(object, newdata, ...) {
+  dr_pred <- predict(object$model, newdata)
+  pmax(dr_pred, 1e-10)
+}
+```
+
+Built-in DR-returning wrappers compatible with the WB pathway are planned
+for version 1.0 of CausalState.
+
+---
+
+## When to prefer WB over NNLS
+
+The WB metalearner may perform better than NNLS when:
+
+- Base learners span very different density-ratio scales and NNLS
+  averaging on the probability scale creates a poor ensemble.
+- The density ratio is far from 1 (strong treatment shift), where
+  probability-scale averaging introduces more distortion.
+- You are including a direct density-ratio learner (e.g. KLIEP or RuLSIF)
+  alongside classification learners, and want all learners combined on a
+  common DR scale.
+
+NNLS on the probability scale is generally more stable and is the
+recommended default.  Use WB only when you have a specific reason and
+appropriate DR-returning wrappers.
+
+---
+
+## Full example
+
+```{r full-example}
+library(CausalState)
+library(SuperLearner)
+
+# Assume sl_g_dr is a character vector of DR-returning wrapper names
+# registered in the current R session.
+
+wr_wb <- density_ratio(
+  df              = patient_data,
+  a_names         = "A",
+  tmax            = 7L,
+  baseline        = c("age", "sex"),
+  tv_names        = c("L1", "L2"),
+  sl_g            = sl_g_dr,           # DR-returning wrappers only
+  dr_sl           = TRUE,
+  method_g        = method.WB_dr(dr_floor = 1e-10),
+  k               = 5L,
+  inner_v         = 5L,
+  v               = 5L,
+  seed            = 1L,
+  id              = "id",
+  time            = "time",
+  policy_spec_fun = policy_up
+)
+
+# Pass wr_wb to sdr() / itmle() as usual
+res_sdr_wb <- sdr(
+  df              = patient_data,
+  weight_object   = wr_wb,
+  ...
+)
+```
+
+---
+
+## References
+
+Wu C, Benkeser D (2024). Nonparametric Efficient Estimation of Marginal
+Structural Models using Targeted Machine Learning. arXiv:2408.10847.
+
+Sugiyama M, Suzuki T, Kanamori T (2012). *Density Ratio Estimation in
+Machine Learning*. Cambridge University Press.
+
+Diaz I, Williams N, Hoffman KL, Schenck EJ (2021). Nonparametric Causal
+Effects Based on Longitudinal Modified Treatment Policies. *JASA*
+118(542):846-857.
