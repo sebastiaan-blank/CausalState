@@ -15,7 +15,7 @@ Description: Implements Sequential Doubly Robust (SDR) and infinite-dimensional
     absorbing state (e.g. discharge or death). Supports asymmetric g- and
     Q-model regularisation, k-fold cross-fitting, and pluggable SuperLearner
     ensembles via included custom learner wrappers.
-License: AGPL-3
+License: AGPL-3 + file LICENSE
 Encoding: UTF-8
 Depends:
     R (>= 4.1.0)
@@ -30,8 +30,7 @@ Imports:
     rlang,
     magrittr,
     parallel,
-    stats,
-    utils
+    stats
 Suggests:
     testthat (>= 3.0.0),
     knitr,

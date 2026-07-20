@@ -81,7 +81,7 @@ itmle_weight <- function(density_ratios, t, s) {
 }
 
 itmle_update <- function(Q, eps, bounds = 1e-5, clip_fun = NULL) {
-  if (is.null(clip_fun)) clip_fun <- function(x) clip(x, bounds)
+  if (is.null(clip_fun)) clip_fun <- function(x) pmin(pmax(as.numeric(x), bounds), 1 - bounds)
   out <- plogis(qlogis(clip_fun(Q)) + eps)
   clip_fun(out)
 }
@@ -372,7 +372,7 @@ itmle_inner_target <- function(
     clip_fun     = NULL
 ) {
   if (is.null(clip_fun)) {
-    clip_fun <- function(x) clip(x, bounds)
+    clip_fun <- function(x) pmin(pmax(as.numeric(x), bounds), 1 - bounds)
   }
   
   Q_run_nat_tr <- Q_mix_nat_tr
@@ -648,12 +648,12 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #' (MTP) using the infinite-dimensional targeted minimum loss-based estimator
 #' (iTMLE).  The estimator fits a backward Q-regression to approximate the
 #' counterfactual outcome trajectory, then applies an infinite-dimensional
-#' fluctuation — a targeting step that solves the efficient influence equation
+#' fluctuation -- a targeting step that solves the efficient influence equation
 #' without restricting the fluctuation to a finite-dimensional parametric
 #' submodel.  The algorithm follows Luedtke et al. (2017, Section 5 and Appendix 12):
 #' Section 5 introduces the infinite-dimensional fluctuation, Appendix 12
 #' the cross-validated variant used here to prevent overfitting of Q estimates.  Density-ratio weights from [density_ratio()] adapt the
-#' estimator to general MTPs following the framework of Díaz et al. (2021).
+#' estimator to general MTPs following the framework of Diaz et al. (2021).
 #' The estimator is sequentially doubly robust (2^\eqn{K}-robust): consistent
 #' whenever, at each time point t, either the treatment model \eqn{g_t} or the
 #' outcome model \eqn{Q_t} is consistently estimated.  The targeting step uses
@@ -666,7 +666,7 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #' models after the fluctuation update; (2) the mean efficient influence curve
 #' is not zero by construction (targeting converges to near-zero but not
 #' exactly zero), so the SE uses the uncentered second-moment estimator
-#' \eqn{\sqrt{\text{mean}(IC^2)/n}} rather than \eqn{sd(IC)/\sqrt{n}} — see
+#' \eqn{\sqrt{\text{mean}(IC^2)/n}} rather than \eqn{sd(IC)/\sqrt{n}} -- see
 #' the `se` entry in `Value` for details.
 #'
 #' @inheritParams sdr
@@ -684,7 +684,7 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #'     \item{`psi`}{EIF point estimate of `E[Y(d)]` under the MTP, after
 #'       the iTMLE targeting step.}
 #'     \item{`se`}{Standard error from the efficient influence curve, computed
-#'       as `sqrt(mean(IC^2) / n)` — the uncentered second-moment estimator
+#'       as `sqrt(mean(IC^2) / n)` -- the uncentered second-moment estimator
 #'       (or its cluster-robust analogue). Unlike the standard `sd(IC)/sqrt(n)`
 #'       used by [sdr()], this does not assume `E[IC] = 0`: it remains
 #'       conservative when the targeting loop has not fully converged to a
@@ -692,7 +692,7 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #'       identical. The centered and second-moment SEs are both available in
 #'       `diagnostics$se_info` (`se_centered` and `se_second_moment`) for
 #'       comparison.}
-#'     \item{`ci`}{95% Wald confidence interval: `psi ± 1.96 * se`.}
+#'     \item{`ci`}{95% Wald confidence interval: `psi +/- 1.96 * se`.}
 #'     \item{`Y_obs`}{Observed mean outcome `mean(Y)`. Quick sanity check
 #'       against `psi` under the natural-course policy.}
 #'     \item{`ic_df`}{`data.table` with columns `id` and `ic` (per-subject
@@ -709,7 +709,7 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #'   **Diagnostics** (`$diagnostics`): model fit, calibration, and targeting
 #'   summaries. iTMLE-specific additions are noted.
 #'   \describe{
-#'     \item{`$recursion_diag`}{`data.table`, one row per fold × time point.
+#'     \item{`$recursion_diag`}{`data.table`, one row per fold x time point.
 #'       Tracks g/Q predictions under natural and shifted policy; also
 #'       includes pre- and post-targeting Q means on the validation set
 #'       (`Q_nat_vl_pre_mean`, `Q_shf_vl_pre_mean`, `Q_nat_vl_post_mean`,
@@ -717,7 +717,7 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #'     \item{`$branch_cal`}{Per-fold, per-time calibration table for
 #'       `g_remain`, `g_death`, and `Q_rem`. Same structure as [sdr()].}
 #'     \item{`$target_cal`}{*(iTMLE only)* `data.table` with one row per
-#'       targeting iteration (fold × time × iteration), tracking EIF
+#'       targeting iteration (fold x time x iteration), tracking EIF
 #'       magnitude as it decreases toward convergence.}
 #'     \item{`$target_sl`}{*(iTMLE only)* `data.table` of SuperLearner
 #'       weights from the fluctuation (targeting) model, per fold and time
@@ -743,9 +743,9 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #' Luedtke AR, Sofrygin O, van der Laan MJ, Carone M (2017). Sequential
 #' Double Robustness in Right-Censored Longitudinal Models. arXiv:1705.02459.
 #'
-#' Díaz I, Williams N, Hoffman KL, Schenck EJ (2021). Nonparametric Causal
+#' Diaz I, Williams N, Hoffman KL, Schenck EJ (2021). Nonparametric Causal
 #' Effects Based on Longitudinal Modified Treatment Policies. *JASA*
-#' 118(542):846–857.
+#' 118(542):846-857.
 #'
 #' @seealso [density_ratio()], [sdr()], [contrast()], [absorb_rule()], [sl_itmle]
 #'
@@ -2437,7 +2437,7 @@ itmle_competing <- function(
   failed <- sapply(res_by_fold, function(x) inherits(x, "error") || is.character(x))
   if (any(failed)) {
     for (i in which(failed)) message(sprintf("fold %d: %s", i, as.character(res_by_fold[[i]])))
-    stop("itmle_competing: fold worker(s) failed — see messages above", call. = FALSE)
+    stop("itmle_competing: fold worker(s) failed -- see messages above", call. = FALSE)
   }
 
   for (res in res_by_fold) {

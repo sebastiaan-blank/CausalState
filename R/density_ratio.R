@@ -135,11 +135,11 @@ dr_from_prob <- function(p_mat, beta, bounds, denom_cap) {
 #' @param bounds Numeric. Probability floor for clipping predicted probabilities
 #'   before conversion to density ratios (standard pathway only). Default `1e-5`.
 #' @param dr_sl Logical. Selects the metalearner used to combine base learners.
-#'   `FALSE` (default): standard SuperLearner with NNLS metalearner — each base
+#'   `FALSE` (default): standard SuperLearner with NNLS metalearner -- each base
 #'   learner outputs a propensity score (probability scale) and the metalearner
 #'   combines them with non-negative least squares; the combined probability is
 #'   then converted to a density ratio via `p / (1 - p)`.
-#'   `TRUE`: the Wu-Benkeser metalearner ([method.WB_dr]) — combines base
+#'   `TRUE`: the Wu-Benkeser metalearner ([method.WB_dr]) -- combines base
 #'   learners directly in density-ratio space by minimising a log density-ratio
 #'   loss rather than a squared-error loss on the probability scale.  This can
 #'   give better-calibrated density ratios when the propensity is far from 0.5
@@ -148,7 +148,7 @@ dr_from_prob <- function(p_mat, beta, bounds, denom_cap) {
 #'   **Important:** the Wu-Benkeser pathway requires base learners whose
 #'   `predict` method returns density ratios on the positive real line, not
 #'   probabilities in `[0, 1]`.  Standard SuperLearner wrappers (e.g.
-#'   `SL.glm`, `SL.xgboost`) are not compatible — you must supply custom
+#'   `SL.glm`, `SL.xgboost`) are not compatible -- you must supply custom
 #'   wrappers that internally fit a classifier and convert predictions to
 #'   density ratios before returning them.  This package does not currently
 #'   include such wrappers; built-in DR-returning wrappers compatible with
@@ -166,7 +166,7 @@ dr_from_prob <- function(p_mat, beta, bounds, denom_cap) {
 #' @param sl_workers Integer. Workers for parallel learner evaluation within
 #'   each SuperLearner call via [SuperLearner::mcSuperLearner()] (fork-based;
 #'   Linux/Mac only). `NULL` disables. Default `NULL`. **Note:** incompatible
-#'   with `dbarts`/`SL.dbarts` learners — remove dbarts from `sl_g` when
+#'   with `dbarts`/`SL.dbarts` learners -- remove dbarts from `sl_g` when
 #'   `sl_workers` is set.
 #'
 #' @section Parallelism:
@@ -192,11 +192,11 @@ dr_from_prob <- function(p_mat, beta, bounds, denom_cap) {
 #'   }
 #'
 #' @references
-#' Díaz I, Williams N, Hoffman KL, Schenck EJ (2021). Nonparametric Causal
+#' Diaz I, Williams N, Hoffman KL, Schenck EJ (2021). Nonparametric Causal
 #' Effects Based on Longitudinal Modified Treatment Policies. *JASA*
-#' 118(542):846–857.
+#' 118(542):846-857.
 #'
-#' Williams NT, Díaz I (2023). lmtp: An R package for estimating the causal
+#' Williams NT, Diaz I (2023). lmtp: An R package for estimating the causal
 #' effects of modified treatment policies. *Observational Studies*.
 #'
 #' @seealso [sdr()], [itmle()]
@@ -442,7 +442,7 @@ density_ratio <- function(
     }
 
     if (no_shift) {
-      message(sprintf("t=%d: no shift — ratios set to 1 (n=%d)", t, n_nat))
+      message(sprintf("t=%d: no shift -- ratios set to 1 (n=%d)", t, n_nat))
       return(list(
         idx    = stk$rows_idx,
         r_t    = rep(1, n_nat),
@@ -608,7 +608,7 @@ density_ratio <- function(
   for (res in res_by_t) {
     if (is.null(res)) next
     if (inherits(res, "try-error")) {
-      stop(sprintf("density_ratio: worker failed — %s",
+      stop(sprintf("density_ratio: worker failed -- %s",
                    conditionMessage(attr(res, "condition"))),
            call. = FALSE)
     }

@@ -514,7 +514,7 @@ build_density_ratios <- function(weights_dt, id, time, ids, tmax, row_index = NU
     miss_obs <- observed_mask & is.na(dens)
     if (any(miss_obs)) {
       warning(sprintf(
-        "Missing/invalid Rt_t for %d observed id×time cells; setting those to 1.",
+        "Missing/invalid Rt_t for %d observed idxtime cells; setting those to 1.",
         sum(miss_obs)
       ), call. = FALSE)
       dens[miss_obs] <- 1
@@ -733,7 +733,7 @@ patch_shifted_design <- function(X_nat, D_shifted_tt, rows, a_names, tt, k, t_mi
 #' Cluster bootstrap standard error from influence curve values
 #'
 #' Estimates a standard error by resampling clusters (with replacement) from
-#' the influence curve contributions. This is a post-estimation utility — it
+#' the influence curve contributions. This is a post-estimation utility -- it
 #' operates on the IC values already stored in the estimator output, not on
 #' the full dataset.
 #'
@@ -945,7 +945,7 @@ expand_to_horizon <- function(DT, id, time, alive, in_state, tmax) {
 
 
 # ------------------------------------------------------------------
-# contrast — risk difference and risk ratio from two fitted estimators
+# contrast -- risk difference and risk ratio from two fitted estimators
 # ------------------------------------------------------------------
 
 #' Compute risk difference and risk ratio from two fitted estimators
@@ -1116,7 +1116,7 @@ contrast <- function(fit1, fit0, df = NULL, id_col = NULL, cluster = NULL) {
   rd    <- psi1 - psi0
   se_rd <- .se(ic_rd)
 
-  # Risk ratio — SE and CI on log scale
+  # Risk ratio -- SE and CI on log scale
   ic_log_rr <- merged$ic1 / psi1 - merged$ic0 / psi0
   rr         <- psi1 / psi0
   se_log_rr  <- .se(ic_log_rr)

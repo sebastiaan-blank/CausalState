@@ -61,3 +61,13 @@
 #'
 #' @keywords package
 "_PACKAGE"
+
+utils::globalVariables(c(
+  ".", "..a_names", "..cols", "..cols_hist", "..cols_t", "..L_now_cols",
+  ".__cl", ".__id", ".__time", ".__y",
+  "Rt_cum", "Rt_t", "S",
+  "alive_last", "changed", "component", "delta", "fold",
+  "global_fold", "ic", "id", "id_std", "in_state_last",
+  "n", "natural", "p_raw", "r_raw", "row_type",
+  "shifted", "time_std", "value", "weight", "y", "y1"
+))

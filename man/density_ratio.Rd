@@ -78,11 +78,11 @@ MTP cannot be pre-computed as static columns.}
 before conversion to density ratios (standard pathway only). Default \code{1e-5}.}
 
 \item{dr_sl}{Logical. Selects the metalearner used to combine base learners.
-\code{FALSE} (default): standard SuperLearner with NNLS metalearner — each base
+\code{FALSE} (default): standard SuperLearner with NNLS metalearner -- each base
 learner outputs a propensity score (probability scale) and the metalearner
 combines them with non-negative least squares; the combined probability is
 then converted to a density ratio via \code{p / (1 - p)}.
-\code{TRUE}: the Wu-Benkeser metalearner (\link{method.WB_dr}) — combines base
+\code{TRUE}: the Wu-Benkeser metalearner (\link{method.WB_dr}) -- combines base
 learners directly in density-ratio space by minimising a log density-ratio
 loss rather than a squared-error loss on the probability scale.  This can
 give better-calibrated density ratios when the propensity is far from 0.5
@@ -91,7 +91,7 @@ object returns density ratios directly rather than probabilities.
 \strong{Important:} the Wu-Benkeser pathway requires base learners whose
 \code{predict} method returns density ratios on the positive real line, not
 probabilities in \verb{[0, 1]}.  Standard SuperLearner wrappers (e.g.
-\code{SL.glm}, \code{SL.xgboost}) are not compatible — you must supply custom
+\code{SL.glm}, \code{SL.xgboost}) are not compatible -- you must supply custom
 wrappers that internally fit a classifier and convert predictions to
 density ratios before returning them.  This package does not currently
 include such wrappers; built-in DR-returning wrappers compatible with
@@ -114,7 +114,7 @@ or GPU-based learners. Default \code{NULL}.}
 \item{sl_workers}{Integer. Workers for parallel learner evaluation within
 each SuperLearner call via \code{\link[SuperLearner:mcSuperLearner]{SuperLearner::mcSuperLearner()}} (fork-based;
 Linux/Mac only). \code{NULL} disables. Default \code{NULL}. \strong{Note:} incompatible
-with \code{dbarts}/\code{SL.dbarts} learners — remove dbarts from \code{sl_g} when
+with \code{dbarts}/\code{SL.dbarts} learners -- remove dbarts from \code{sl_g} when
 \code{sl_workers} is set.}
 }
 \value{
@@ -154,7 +154,7 @@ crash in the child processes and should be avoided or limited to one thread.
 }
 
 \examples{
-\donttest{
+\dontrun{
 library(SuperLearner)
 
 # ICU-like DGP: patients die, discharge, or remain in state each time point
@@ -216,7 +216,7 @@ head(wr$weights_dt)
 }
 
 # Multi-treatment: joint density ratio for two binary treatments (A1, A2)
-\donttest{
+\dontrun{
 library(SuperLearner)
 
 sim_multi <- function(n = 2000L, tmax = 5L) {
@@ -280,11 +280,11 @@ head(wr2$weights_dt)
 
 }
 \references{
-Díaz I, Williams N, Hoffman KL, Schenck EJ (2021). Nonparametric Causal
+Diaz I, Williams N, Hoffman KL, Schenck EJ (2021). Nonparametric Causal
 Effects Based on Longitudinal Modified Treatment Policies. \emph{JASA}
-118(542):846–857.
+118(542):846-857.
 
-Williams NT, Díaz I (2023). lmtp: An R package for estimating the causal
+Williams NT, Diaz I (2023). lmtp: An R package for estimating the causal
 effects of modified treatment policies. \emph{Observational Studies}.
 }
 \seealso{

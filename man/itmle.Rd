@@ -111,7 +111,7 @@ Required.}
 \item{y_bounds}{Optional numeric vector of length 2, \code{c(min, max)}.
 For \code{outcome_family = "gaussian"}, all outcome values are internally
 scaled to \verb{[0, 1]} before model fitting and back-transformed to the
-original scale for the final estimate — this keeps Q-model predictions
+original scale for the final estimate -- this keeps Q-model predictions
 bounded and stabilises the recursive regression.  By default (\code{NULL})
 the bounds are taken from the observed range of \code{y} in \code{df}
 (\code{min(y)}, \code{max(y)}).  Supply explicit bounds to widen or narrow this
@@ -157,7 +157,7 @@ regression parallelism.}
 \item{sl_workers}{Integer. Workers for parallel learner evaluation within
 each SuperLearner call via \code{\link[SuperLearner:mcSuperLearner]{SuperLearner::mcSuperLearner()}} (fork-based;
 Linux/Mac only). Ignored when \code{parallel = FALSE}. Default \code{NULL}
-(sequential). \strong{Note:} incompatible with \code{dbarts}/\code{SL.dbarts} learners —
+(sequential). \strong{Note:} incompatible with \code{dbarts}/\code{SL.dbarts} learners --
 dbarts' C-level RNG state does not survive forking. Remove dbarts from
 \code{sl_remain}/\code{sl_death}/\code{sl_y}/\code{sl_recursive} when \code{sl_workers} is set.}
 
@@ -183,7 +183,7 @@ the fold structure for SE computation. Default \code{FALSE}.}
 \item{pool_g_death}{Logical. If \code{TRUE}, fit a single pooled
 \code{g_death_exit} model across all time points (with time as a covariate)
 rather than a separate model per time point. Useful when deaths are sparse
-at individual time steps — pooling borrows strength across time and avoids
+at individual time steps -- pooling borrows strength across time and avoids
 near-empty training sets in late time points where mortality is rare.
 Use with caution if the death hazard changes substantially over time, as
 the pooled model must then capture that trend through the time covariate.
@@ -196,7 +196,7 @@ noted. Top-level elements:
 \item{\code{psi}}{EIF point estimate of \code{E[Y(d)]} under the MTP, after
 the iTMLE targeting step.}
 \item{\code{se}}{Standard error from the efficient influence curve, computed
-as \code{sqrt(mean(IC^2) / n)} — the uncentered second-moment estimator
+as \code{sqrt(mean(IC^2) / n)} -- the uncentered second-moment estimator
 (or its cluster-robust analogue). Unlike the standard \code{sd(IC)/sqrt(n)}
 used by \code{\link[=sdr]{sdr()}}, this does not assume \code{E[IC] = 0}: it remains
 conservative when the targeting loop has not fully converged to a
@@ -204,7 +204,7 @@ zero-mean IC. When targeting converges well the two are essentially
 identical. The centered and second-moment SEs are both available in
 \code{diagnostics$se_info} (\code{se_centered} and \code{se_second_moment}) for
 comparison.}
-\item{\code{ci}}{95\% Wald confidence interval: \verb{psi ± 1.96 * se}.}
+\item{\code{ci}}{95\% Wald confidence interval: \verb{psi +/- 1.96 * se}.}
 \item{\code{Y_obs}}{Observed mean outcome \code{mean(Y)}. Quick sanity check
 against \code{psi} under the natural-course policy.}
 \item{\code{ic_df}}{\code{data.table} with columns \code{id} and \code{ic} (per-subject
@@ -221,7 +221,7 @@ per time point, one row per subject.
 \strong{Diagnostics} (\verb{$diagnostics}): model fit, calibration, and targeting
 summaries. iTMLE-specific additions are noted.
 \describe{
-\item{\verb{$recursion_diag}}{\code{data.table}, one row per fold × time point.
+\item{\verb{$recursion_diag}}{\code{data.table}, one row per fold x time point.
 Tracks g/Q predictions under natural and shifted policy; also
 includes pre- and post-targeting Q means on the validation set
 (\code{Q_nat_vl_pre_mean}, \code{Q_shf_vl_pre_mean}, \code{Q_nat_vl_post_mean},
@@ -229,7 +229,7 @@ includes pre- and post-targeting Q means on the validation set
 \item{\verb{$branch_cal}}{Per-fold, per-time calibration table for
 \code{g_remain}, \code{g_death}, and \code{Q_rem}. Same structure as \code{\link[=sdr]{sdr()}}.}
 \item{\verb{$target_cal}}{\emph{(iTMLE only)} \code{data.table} with one row per
-targeting iteration (fold × time × iteration), tracking EIF
+targeting iteration (fold x time x iteration), tracking EIF
 magnitude as it decreases toward convergence.}
 \item{\verb{$target_sl}}{\emph{(iTMLE only)} \code{data.table} of SuperLearner
 weights from the fluctuation (targeting) model, per fold and time
@@ -249,12 +249,12 @@ Estimates the mean counterfactual outcome under a modified treatment policy
 (MTP) using the infinite-dimensional targeted minimum loss-based estimator
 (iTMLE).  The estimator fits a backward Q-regression to approximate the
 counterfactual outcome trajectory, then applies an infinite-dimensional
-fluctuation — a targeting step that solves the efficient influence equation
+fluctuation -- a targeting step that solves the efficient influence equation
 without restricting the fluctuation to a finite-dimensional parametric
 submodel.  The algorithm follows Luedtke et al. (2017, Section 5 and Appendix 12):
 Section 5 introduces the infinite-dimensional fluctuation, Appendix 12
 the cross-validated variant used here to prevent overfitting of Q estimates.  Density-ratio weights from \code{\link[=density_ratio]{density_ratio()}} adapt the
-estimator to general MTPs following the framework of Díaz et al. (2021).
+estimator to general MTPs following the framework of Diaz et al. (2021).
 The estimator is sequentially doubly robust (2^\eqn{K}-robust): consistent
 whenever, at each time point t, either the treatment model \eqn{g_t} or the
 outcome model \eqn{Q_t} is consistently estimated.  The targeting step uses
@@ -268,7 +268,7 @@ so a natural-course run provides a genuine calibration check on the Q
 models after the fluctuation update; (2) the mean efficient influence curve
 is not zero by construction (targeting converges to near-zero but not
 exactly zero), so the SE uses the uncentered second-moment estimator
-\eqn{\sqrt{\text{mean}(IC^2)/n}} rather than \eqn{sd(IC)/\sqrt{n}} — see
+\eqn{\sqrt{\text{mean}(IC^2)/n}} rather than \eqn{sd(IC)/\sqrt{n}} -- see
 the \code{se} entry in \code{Value} for details.
 }
 \section{Natural-course diagnostic value}{
@@ -281,7 +281,7 @@ the natural course.
 }
 
 \examples{
-\donttest{
+\dontrun{
 library(SuperLearner)
 
 # ICU-like DGP: patients die, discharge, or remain in state each time point
@@ -362,7 +362,7 @@ res$se
 }
 
 # Multi-treatment: joint policy over two binary treatments (A1, A2)
-\donttest{
+\dontrun{
 library(SuperLearner)
 
 sim_multi <- function(n = 800L, tmax = 5L) {
@@ -457,9 +457,9 @@ res2$se
 Luedtke AR, Sofrygin O, van der Laan MJ, Carone M (2017). Sequential
 Double Robustness in Right-Censored Longitudinal Models. arXiv:1705.02459.
 
-Díaz I, Williams N, Hoffman KL, Schenck EJ (2021). Nonparametric Causal
+Diaz I, Williams N, Hoffman KL, Schenck EJ (2021). Nonparametric Causal
 Effects Based on Longitudinal Modified Treatment Policies. \emph{JASA}
-118(542):846–857.
+118(542):846-857.
 }
 \seealso{
 \code{\link[=density_ratio]{density_ratio()}}, \code{\link[=sdr]{sdr()}}, \code{\link[=contrast]{contrast()}}, \code{\link[=absorb_rule]{absorb_rule()}}, \link{sl_itmle}

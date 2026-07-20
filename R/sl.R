@@ -156,7 +156,7 @@ method.WB_dr <- function(dr_floor = 1e-10) {
         stats::optim(rep(0, K), loss_fn, method = "BFGS",
                      control = list(maxit = 500L, reltol = 1e-8)),
         error = function(e) {
-          warning(sprintf("[method.WB_dr] BFGS error: %s — using equal weights",
+          warning(sprintf("[method.WB_dr] BFGS error: %s -- using equal weights",
                           conditionMessage(e)))
           NULL
         }
@@ -164,7 +164,7 @@ method.WB_dr <- function(dr_floor = 1e-10) {
       if (is.null(opt) || opt$convergence > 1L) {
         if (!is.null(opt)) {
           warning(sprintf(
-            "[method.WB_dr] BFGS did not converge (code %d) — using equal weights",
+            "[method.WB_dr] BFGS did not converge (code %d) -- using equal weights",
             opt$convergence))
         }
         beta <- rep(1 / K, K)

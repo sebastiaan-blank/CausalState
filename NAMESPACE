@@ -17,6 +17,7 @@ importFrom(magrittr, "%>%")
 importFrom(dplyr, filter, summarise, mutate, across, all_of)
 importFrom(tidyr, pivot_longer)
 importFrom(rlang, .data)
+importFrom(stats, median, na.omit, plogis, predict, qlogis, sd, setNames)
 
 # Everything else is called via explicit pkg:: prefixes in the source.
 
@@ -24,7 +25,6 @@ importFrom(rlang, .data)
 
 export(sdr)
 export(itmle)
-export(itmle_competing)
 export(qreg)
 
 # --- Exports: building blocks (advanced users) ----------------------------
@@ -33,7 +33,6 @@ export(density_ratio)
 export(contrast)
 export(method.WB_dr)
 export(absorb_rule)
-export(sdr_competing)
 
 # --- Exports: default targeting library vector ----------------------------
 

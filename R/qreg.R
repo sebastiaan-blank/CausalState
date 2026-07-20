@@ -10,15 +10,15 @@ make_subject_folds_qreg <- function(ids, v, cluster_by_id, seed) {
 }
 
 
-#' Pure Q-recursion estimator — diagnostic use only
+#' Pure Q-recursion estimator -- diagnostic use only
 #'
 #' Fits sequential Q-models backwards through time and returns the
 #' plug-in (substitution) estimator \eqn{\hat\Psi = n^{-1}\sum_i \hat Q_1(H_{i1})}.
 #' No EIF update is applied, so the estimate carries first-order bias and
 #' \strong{should not be used as a real causal estimate}.
 #'
-#' The intended use is to pass the \strong{natural-course} (identity) policy —
-#' that is, no shift — and compare the resulting estimate to the observed mean
+#' The intended use is to pass the \strong{natural-course} (identity) policy --
+#' that is, no shift -- and compare the resulting estimate to the observed mean
 #' of \code{y}.  Close agreement indicates that the Q-models are
 #' well-calibrated under the natural course, which is a prerequisite for the
 #' doubly-robust estimates from [sdr()] or [itmle()] to be trustworthy.  Poor
@@ -58,7 +58,7 @@ make_subject_folds_qreg <- function(ids, v, cluster_by_id, seed) {
 #'     \item{\code{diagnostics$branch_cal}}{Per-fold, per-time branch calibration
 #'       table: empirical mean targets vs. predictions for `g_remain`, `g_death`,
 #'       and `Q_remain`. Use this to check whether the Q-models are
-#'       well-calibrated under the natural course — the primary diagnostic
+#'       well-calibrated under the natural course -- the primary diagnostic
 #'       purpose of [qreg()].}
 #'     \item{\code{diagnostics$diag_table}}{Additional per-fold, per-time
 #'       summary statistics (Q prediction ranges, pseudo-outcome statistics).}
@@ -103,7 +103,7 @@ make_subject_folds_qreg <- function(ids, v, cluster_by_id, seed) {
 #' }
 #' df <- sim_ex()
 #'
-#' # Natural-course policy (no shift) — the correct use of qreg
+#' # Natural-course policy (no shift) -- the correct use of qreg
 #' policy_nat <- function(D_block, t, a_names) D_block[, ..a_names, drop = FALSE]
 #'
 #' sl_lib <- c("SL.mean", "SL.glm")
@@ -766,7 +766,7 @@ qreg <- function(
   failed <- sapply(res_by_fold, function(x) inherits(x, "error") || is.character(x))
   if (any(failed)) {
     for (i in which(failed)) message(sprintf("fold %d: %s", i, as.character(res_by_fold[[i]])))
-    stop("qreg: fold worker(s) failed — see messages above")
+    stop("qreg: fold worker(s) failed -- see messages above")
   }
 
   for (fr in res_by_fold) {

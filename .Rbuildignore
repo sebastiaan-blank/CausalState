@@ -11,3 +11,6 @@
 ^\.DS_Store$
 ^cran-comments\.md$
 ^NEXT_STEPS\.md$
+^CLAUDE\.md$
+^\.claude$
+^itmle_2017\.pdf$

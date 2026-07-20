@@ -2,7 +2,7 @@
 % Please edit documentation in R/qreg.R
 \name{qreg}
 \alias{qreg}
-\title{Pure Q-recursion estimator — diagnostic use only}
+\title{Pure Q-recursion estimator -- diagnostic use only}
 \usage{
 qreg(
   df,
@@ -92,7 +92,7 @@ Required.}
 \item{y_bounds}{Optional numeric vector of length 2, \code{c(min, max)}.
 For \code{outcome_family = "gaussian"}, all outcome values are internally
 scaled to \verb{[0, 1]} before model fitting and back-transformed to the
-original scale for the final estimate — this keeps Q-model predictions
+original scale for the final estimate -- this keeps Q-model predictions
 bounded and stabilises the recursive regression.  By default (\code{NULL})
 the bounds are taken from the observed range of \code{y} in \code{df}
 (\code{min(y)}, \code{max(y)}).  Supply explicit bounds to widen or narrow this
@@ -130,7 +130,7 @@ regression parallelism.}
 \item{sl_workers}{Integer. Workers for parallel learner evaluation within
 each SuperLearner call via \code{\link[SuperLearner:mcSuperLearner]{SuperLearner::mcSuperLearner()}} (fork-based;
 Linux/Mac only). Ignored when \code{parallel = FALSE}. Default \code{NULL}
-(sequential). \strong{Note:} incompatible with \code{dbarts}/\code{SL.dbarts} learners —
+(sequential). \strong{Note:} incompatible with \code{dbarts}/\code{SL.dbarts} learners --
 dbarts' C-level RNG state does not survive forking. Remove dbarts from
 \code{sl_remain}/\code{sl_death}/\code{sl_y}/\code{sl_recursive} when \code{sl_workers} is set.}
 
@@ -143,7 +143,7 @@ standard errors (e.g. hospital). If \code{NULL}, subject id is used.}
 \item{pool_g_death}{Logical. If \code{TRUE}, fit a single pooled
 \code{g_death_exit} model across all time points (with time as a covariate)
 rather than a separate model per time point. Useful when deaths are sparse
-at individual time steps — pooling borrows strength across time and avoids
+at individual time steps -- pooling borrows strength across time and avoids
 near-empty training sets in late time points where mortality is rare.
 Use with caution if the death hazard changes substantially over time, as
 the pooled model must then capture that trend through the time covariate.
@@ -177,7 +177,7 @@ A list with:
 \item{\code{diagnostics$branch_cal}}{Per-fold, per-time branch calibration
 table: empirical mean targets vs. predictions for \code{g_remain}, \code{g_death},
 and \code{Q_remain}. Use this to check whether the Q-models are
-well-calibrated under the natural course — the primary diagnostic
+well-calibrated under the natural course -- the primary diagnostic
 purpose of \code{\link[=qreg]{qreg()}}.}
 \item{\code{diagnostics$diag_table}}{Additional per-fold, per-time
 summary statistics (Q prediction ranges, pseudo-outcome statistics).}
@@ -190,8 +190,8 @@ No EIF update is applied, so the estimate carries first-order bias and
 \strong{should not be used as a real causal estimate}.
 }
 \details{
-The intended use is to pass the \strong{natural-course} (identity) policy —
-that is, no shift — and compare the resulting estimate to the observed mean
+The intended use is to pass the \strong{natural-course} (identity) policy --
+that is, no shift -- and compare the resulting estimate to the observed mean
 of \code{y}.  Close agreement indicates that the Q-models are
 well-calibrated under the natural course, which is a prerequisite for the
 doubly-robust estimates from \code{\link[=sdr]{sdr()}} or \code{\link[=itmle]{itmle()}} to be trustworthy.  Poor
@@ -206,7 +206,7 @@ the fitted Q as fixed and should be read only as a rough guide to Monte
 Carlo variability of the plug-in.
 }
 \examples{
-\donttest{
+\dontrun{
 library(SuperLearner)
 
 # ICU-like DGP: patients die, discharge, or remain in state each time point
@@ -242,7 +242,7 @@ sim_ex <- function(n = 2000L, tmax = 5L) {
 }
 df <- sim_ex()
 
-# Natural-course policy (no shift) — the correct use of qreg
+# Natural-course policy (no shift) -- the correct use of qreg
 policy_nat <- function(D_block, t, a_names) D_block[, ..a_names, drop = FALSE]
 
 sl_lib <- c("SL.mean", "SL.glm")
@@ -276,7 +276,7 @@ mean(df$Y)
 }
 
 # Multi-treatment: plug-in estimate under a joint policy over two treatments
-\donttest{
+\dontrun{
 library(SuperLearner)
 
 sim_multi <- function(n = 2000L, tmax = 5L) {

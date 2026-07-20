@@ -46,11 +46,11 @@ the 95\% CI is exponentiated from the log scale for positive coverage.
 }
 }
 \examples{
-\donttest{
+\dontrun{
 library(SuperLearner)
 
 # ICU-like DGP: patients die, discharge, or remain in state each time point
-sim_ex <- function(n = 800L, tmax = 5L) {
+sim_ex <- function(n = 2000L, tmax = 5L) {
   set.seed(42L)
   rows <- vector("list", n)
   for (i in seq_len(n)) {
