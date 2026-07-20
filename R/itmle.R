@@ -672,34 +672,51 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #' @param v_sl_inner_itmle Integer. Number of inner CV folds inside the
 #'   targeting SuperLearner. Default `10L`.
 #'
-#' @return A named list with:
+#' @return A named list with the same structure as [sdr()], except where
+#'   noted. Top-level elements:
 #'   \describe{
-#'     \item{`psi`}{Point estimate of `E[Y(d)]` under the MTP (after targeting).}
+#'     \item{`psi`}{EIF point estimate of `E[Y(d)]` under the MTP, after
+#'       the iTMLE targeting step.}
 #'     \item{`se`}{Standard error from the efficient influence curve.}
-#'     \item{`ci`}{95% Wald confidence interval.}
+#'     \item{`ci`}{95% Wald confidence interval: `psi ± 1.96 * se`.}
+#'     \item{`Y_obs`}{Observed mean outcome `mean(Y)`. Quick sanity check
+#'       against `psi` under the natural-course policy.}
 #'     \item{`ic_df`}{`data.table` with columns `id` and `ic` (per-subject
 #'       influence curve values). Used by [contrast()].}
-#'     \item{`sl_summary`}{`data.table` of SuperLearner learner weights.
-#'       One row per learner per (fold, time-point, model component).
-#'       Columns include `fold`, `t`, `component` (`g_remain`, `g_death`,
-#'       `Q_rem`, `Q_exit`) and one numeric column per learner.}
-#'     \item{`fold_diag`}{`data.table` of per-fold, per-time-point diagnostics.
-#'       Same structure as in [sdr()]: g/Q model predictions, pseudo-outcome
-#'       statistics, and EIF update magnitude.}
-#'     \item{`target_diag`}{`data.table` with one row per targeting iteration,
-#'       tracking EIF magnitude across iterations to diagnose convergence.}
-#'     \item{`fluct_diag`}{`data.table` of SuperLearner learner weights from
-#'       the fluctuation (targeting) model, per fold and time-point. Shows
-#'       which targeting wrappers (from [sl_itmle]) were selected.}
-#'     \item{`diagnostics$branch_cal`}{Per-fold, per-time branch calibration
-#'       table: empirical mean targets vs. predictions for `g_remain`,
-#'       `g_death`, and `Q_remain`.  **Note:** the `Q_remain` calibration
-#'       target equals `mean(Y)` only under the natural-course policy; under
-#'       a shifted policy the pseudo-outcome reflects the counterfactual
-#'       distribution and is not directly comparable to observed outcomes.
-#'       The `Q_rem` column is therefore only interpretable as a calibration
-#'       diagnostic when running under the natural-course policy.}
 #'   }
+#'
+#'   **Predictions** (`$predictions`): cross-fitted Q matrices, one column
+#'   per time point, one row per subject.
+#'   \describe{
+#'     \item{`$natural`}{`Q(t)` under the natural-course policy.}
+#'     \item{`$shifted`}{`Q(t)` under the MTP, after the targeting step.}
+#'   }
+#'
+#'   **Diagnostics** (`$diagnostics`): model fit, calibration, and targeting
+#'   summaries. iTMLE-specific additions are noted.
+#'   \describe{
+#'     \item{`$recursion_diag`}{`data.table`, one row per fold × time point.
+#'       Tracks g/Q predictions under natural and shifted policy; also
+#'       includes pre- and post-targeting Q means on the validation set
+#'       (`Q_nat_vl_pre_mean`, `Q_shf_vl_pre_mean`, `Q_nat_vl_post_mean`,
+#'       `Q_shf_vl_post_mean`) and targeting update magnitudes.}
+#'     \item{`$branch_cal`}{Per-fold, per-time calibration table for
+#'       `g_remain`, `g_death`, and `Q_rem`. Same structure as [sdr()].}
+#'     \item{`$target_cal`}{*(iTMLE only)* `data.table` with one row per
+#'       targeting iteration (fold × time × iteration), tracking EIF
+#'       magnitude as it decreases toward convergence.}
+#'     \item{`$target_sl`}{*(iTMLE only)* `data.table` of SuperLearner
+#'       weights from the fluctuation (targeting) model, per fold and time
+#'       point. Shows which wrappers from [sl_itmle] were selected.}
+#'     \item{`$sl_summary`}{`data.table` of SuperLearner learner weights
+#'       for the Q/g models. Same structure as [sdr()].}
+#'     \item{`$se_info`}{*(iTMLE only)* List with SE computation details:
+#'       `se`, `n`, `n_eff`, and cluster-adjustment bookkeeping.}
+#'   }
+#'
+#'   **Weights** (`$weights`), **Settings** (`$settings`), and **Call**
+#'   (`$call`) have the same structure as [sdr()]. `$settings$start_t`
+#'   records the first time point used.
 #'
 #' @section Natural-course diagnostic value:
 #'   Unlike [sdr()], iTMLE does not collapse to `mean(Y)` under the
@@ -1915,43 +1932,7 @@ itmle <- function(
     data.table::rbindlist(target_sl_chunks, use.names = TRUE, fill = TRUE)
   } else NULL
   
-  t_vec      <- seq_len(tmax)
-  n_at_risk  <- integer(tmax)
-  mean_Q_nat <- numeric(tmax)
-  mean_Q_int <- numeric(tmax)
-  delta      <- numeric(tmax)
-  mean_Y_obs <- numeric(tmax)
-  
-  for (tt in t_vec) {
-    at_risk <- !is.na(row_index[, tt])
-    n_risk  <- sum(at_risk)
-    
-    if (!n_risk) {
-      n_at_risk[tt]  <- 0L
-      mean_Q_nat[tt] <- NA_real_
-      mean_Q_int[tt] <- NA_real_
-      delta[tt]      <- NA_real_
-      mean_Y_obs[tt] <- NA_real_
-    } else {
-      n_at_risk[tt]  <- n_risk
-      mean_Q_nat[tt] <- mean(pred_nat_all[at_risk, tt], na.rm = TRUE)
-      mean_Q_int[tt] <- mean(pred_shf_all[at_risk, tt], na.rm = TRUE)
-      delta[tt]      <- mean_Q_int[tt] - mean_Q_nat[tt]
-      mean_Y_obs[tt] <- mean(Y_init[at_risk], na.rm = TRUE)
-    }
-  }
-  
-  diag_table <- data.frame(
-    t          = t_vec,
-    n_at_risk  = n_at_risk,
-    mean_Q_nat = mean_Q_nat,
-    mean_Q_int = mean_Q_int,
-    delta      = delta,
-    mean_Y_obs = mean_Y_obs
-  )
-  
-  diag_table <- diag_table[diag_table$n_at_risk > 0L, , drop = FALSE]
-  
+  Y_obs_scaled <- mean(Y_init, na.rm = TRUE)
 
   stopifnot(all(!is.na(row_index[, 1L])))
 
@@ -1976,27 +1957,17 @@ itmle <- function(
   
   
   if (scale_info$bounded) {
-    psi <- scale_info$from_unit(psi_scaled)
-    
-    ic <- scale_info$y_rng * ic_scaled
-    se <- scale_info$y_rng * se_scaled
-    
-    ci <- psi + c(-1, 1) * 1.96 * se
-
-    if (!is.null(diag_table) && nrow(diag_table)) {
-      diag_table$mean_Q_nat <- scale_info$from_unit(diag_table$mean_Q_nat)
-      diag_table$mean_Q_int <- scale_info$from_unit(diag_table$mean_Q_int)
-      diag_table$delta      <- scale_info$y_rng * diag_table$delta
-      diag_table$mean_Y_obs <- scale_info$from_unit(diag_table$mean_Y_obs)
-    }
-    
+    psi   <- scale_info$from_unit(psi_scaled)
+    ic    <- scale_info$y_rng * ic_scaled
+    se    <- scale_info$y_rng * se_scaled
+    ci    <- psi + c(-1, 1) * 1.96 * se
+    Y_obs <- scale_info$from_unit(Y_obs_scaled)
   } else {
-    psi <- psi_scaled
-    
-    ic <- ic_scaled
-    se <- se_scaled
-    ci <- ci_scaled
-    
+    psi   <- psi_scaled
+    ic    <- ic_scaled
+    se    <- se_scaled
+    ci    <- ci_scaled
+    Y_obs <- Y_obs_scaled
   }
   
   
@@ -2010,9 +1981,8 @@ itmle <- function(
     psi   = psi,
     se    = se,
     ci    = ci,
+    Y_obs = Y_obs,
     ic_df = data.table::data.table(id = ids, ic = ic),
-
-    start_t = start_t_global,
 
     predictions = list(
       natural = pred_nat_all,
@@ -2020,9 +1990,8 @@ itmle <- function(
     ),
 
     diagnostics = list(
-      diag_table     = diag_table,
       recursion_diag = fold_diag,
-      branch_diag    = branch_diag,
+      branch_cal     = branch_diag,
       target_cal     = target_diag,
       target_sl      = target_sl,
       sl_summary     = sl_summary,
@@ -2039,6 +2008,7 @@ itmle <- function(
     ),
     
     settings = list(
+      start_t        = start_t_global,
       pool_g_death   = pool_g_death,
       trim           = trim,
       outcome_family = outcome_family,
@@ -2056,10 +2026,10 @@ itmle <- function(
         k            = k
       )
     ),
-    
+
     call = match.call()
   )
-  
+
   class(out) <- c("itmle_fit", "list")
   out
 }

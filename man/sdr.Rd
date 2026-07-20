@@ -177,44 +177,76 @@ the pooled model must then capture that trend through the time covariate.
 Default \code{FALSE}.}
 }
 \value{
-A named list with:
+A named list. Top-level elements:
 \describe{
-\item{\code{psi}}{Point estimate of \code{E[Y(d)]} under the MTP.}
-\item{\code{psi_nat}}{Plug-in estimate under the natural course.}
-\item{\code{psi_shf}}{Plug-in estimate under the MTP (equals \code{psi}).}
-\item{\code{rd}}{Risk difference \code{psi_shf - psi_nat}.}
+\item{\code{psi}}{EIF-corrected point estimate of \code{E[Y(d)]} under the MTP.}
 \item{\code{se}}{Standard error from the efficient influence curve.}
-\item{\code{ci}}{95\% Wald confidence interval.}
+\item{\code{ci}}{95\% Wald confidence interval: \verb{psi ± 1.96 * se}.}
+\item{\code{Y_obs}}{Observed mean outcome \code{mean(Y)} across all subjects.
+Quick sanity check: under the natural-course policy \code{psi} should
+be close to \code{Y_obs}; a large gap suggests a data or model issue.}
 \item{\code{ic_df}}{\code{data.table} with columns \code{id} and \code{ic} (per-subject
 influence curve values). Used by \code{\link[=contrast]{contrast()}}.}
-\item{\code{sl_summary}}{\code{data.table} of SuperLearner learner weights.
-One row per learner per (fold, time-point, model component).
-Columns include \code{fold}, \code{t}, \code{component} (\code{g_remain}, \code{g_death},
-\code{Q_rem}, \code{Q_exit}) and one numeric column per learner in the
-library.  Useful for checking which learners dominate and whether
-any learner receives consistently zero weight.}
-\item{\code{fold_diag}}{\code{data.table} of per-fold, per-time-point
-diagnostics (one row per fold × time).  Contains mean and SD of
-g-model predictions under natural and shifted
-(\code{p_rem_nat/shf_mean}, \code{p_dex_nat/shf_mean}), Q-model predictions
-(\code{q_rem_nat/shf_mean}, \code{q_exit_nat/shf_mean}), pseudo-outcome
-statistics before and after the EIF update (\code{pseudo_pre/post_mean/sd}),
-EIF update magnitude (\code{delta_mean}, \code{delta_q95_abs} — large values
-suggest the EIF correction is substantial), and correlation
-diagnostics for the update step (\code{corr_mean}).}
-\item{\code{diagnostics$branch_cal}}{Per-fold, per-time branch
-calibration table: empirical mean of training/validation targets
-vs. mean predictions for \code{g_remain}, \code{g_death}, and \code{Q_remain}.
-A quick calibration check for the three fitted models at each
-time point.  \strong{Note:} the \code{Q_remain} calibration target is the
-empirical mean of the pseudo-outcome used to fit \code{Q_rem} at that
-step.  This target equals the observed \code{mean(Y)} only under the
-natural course; under a shifted policy the pseudo-outcome reflects
-the counterfactual distribution and the target is no longer
-comparable to observed outcomes.  The \code{Q_rem} column of
-\code{branch_cal} is therefore only interpretable as a calibration
-diagnostic when running under the natural-course policy.}
 }
+
+\strong{Predictions} (\verb{$predictions}): cross-fitted Q matrices, one column
+per time point, one row per subject.
+\describe{
+\item{\verb{$natural}}{\code{Q(t)} under the natural-course policy.}
+\item{\verb{$shifted}}{\code{Q(t)} under the MTP.}
+}
+
+\strong{Decomposition} (\verb{$decomposition}): plug-in components explaining
+the EIF correction relative to the raw plug-in.
+\describe{
+\item{\verb{$psi_plugin_nat}}{Plug-in estimate under the natural course.}
+\item{\verb{$psi_plugin_shf}}{Plug-in estimate under the MTP.}
+\item{\verb{$psi_plugin_diff}}{Plug-in risk difference
+(\code{psi_plugin_shf - psi_plugin_nat}).}
+\item{\verb{$psi_eif_gap}}{EIF correction: \code{psi - psi_plugin_shf}. A
+large value means the pseudo-outcome recursion shifted the estimate
+substantially beyond the raw plug-in.}
+}
+
+\strong{Diagnostics} (\verb{$diagnostics}): model fit and calibration summaries.
+\describe{
+\item{\verb{$recursion_diag}}{\code{data.table}, one row per fold × time point.
+Tracks g/Q predictions (training side) under natural and shifted
+policy, pseudo-outcome statistics before and after the EIF update,
+EIF update magnitude (\code{delta_mean}, \code{delta_q95_abs}), correlation
+diagnostics, and validation-side mixture Q means (\code{Q_nat_vl_mean},
+\code{Q_shf_vl_mean}) for comparing training vs. validation trajectories.}
+\item{\verb{$branch_cal}}{Per-fold, per-time calibration table: empirical
+mean target vs. mean prediction for \code{g_remain}, \code{g_death}, and
+\code{Q_rem}. The \code{Q_rem} target is the pseudo-outcome mean — directly
+interpretable as a calibration check only under the natural-course
+policy.}
+\item{\verb{$sl_summary}}{\code{data.table} of SuperLearner learner weights,
+one row per learner per (fold, time, component). Columns: \code{fold},
+\code{t}, \code{component} (\code{g_remain}, \code{g_death}, \code{Q_rem}, \code{Q_exit}), plus
+one numeric column per learner. Consistently zero-weight learners
+can be dropped from the library.}
+}
+
+\strong{Weights} (\verb{$weights}): density ratio inputs used by the estimator.
+\describe{
+\item{\verb{$weights_dt}}{\code{data.table} copy of the density ratio object
+(trimmed to \code{tmax}, \code{Rt_cum} column removed).}
+\item{\verb{$trim}}{Trim quantile applied before forming cumulative
+density ratios.}
+}
+
+\strong{Settings} (\verb{$settings}): parameters used for the fit.
+\describe{
+\item{\verb{$start_t}}{First time point included in the estimation.}
+\item{\verb{$outcome_family}}{\code{"binomial"} or \code{"gaussian"}.}
+\item{\verb{$pool_g_death}}{Whether \code{g_death} was pooled across time.}
+\item{\verb{$variable_info}}{Named list of variable names and settings:
+\code{id}, \code{time}, \code{alive}, \code{in_state}, \code{cluster}, \code{baseline},
+\code{time_varying}, \code{treatment}, \code{outcome}, \code{tmax}, \code{k}.}
+}
+
+\strong{Call} (\verb{$call}): matched call expression, for reproducibility.
 }
 \description{
 Estimates the mean counterfactual outcome under a modified treatment policy

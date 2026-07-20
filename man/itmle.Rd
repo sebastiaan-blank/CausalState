@@ -190,34 +190,51 @@ the pooled model must then capture that trend through the time covariate.
 Default \code{FALSE}.}
 }
 \value{
-A named list with:
+A named list with the same structure as \code{\link[=sdr]{sdr()}}, except where
+noted. Top-level elements:
 \describe{
-\item{\code{psi}}{Point estimate of \code{E[Y(d)]} under the MTP (after targeting).}
+\item{\code{psi}}{EIF point estimate of \code{E[Y(d)]} under the MTP, after
+the iTMLE targeting step.}
 \item{\code{se}}{Standard error from the efficient influence curve.}
-\item{\code{ci}}{95\% Wald confidence interval.}
+\item{\code{ci}}{95\% Wald confidence interval: \verb{psi ± 1.96 * se}.}
+\item{\code{Y_obs}}{Observed mean outcome \code{mean(Y)}. Quick sanity check
+against \code{psi} under the natural-course policy.}
 \item{\code{ic_df}}{\code{data.table} with columns \code{id} and \code{ic} (per-subject
 influence curve values). Used by \code{\link[=contrast]{contrast()}}.}
-\item{\code{sl_summary}}{\code{data.table} of SuperLearner learner weights.
-One row per learner per (fold, time-point, model component).
-Columns include \code{fold}, \code{t}, \code{component} (\code{g_remain}, \code{g_death},
-\code{Q_rem}, \code{Q_exit}) and one numeric column per learner.}
-\item{\code{fold_diag}}{\code{data.table} of per-fold, per-time-point diagnostics.
-Same structure as in \code{\link[=sdr]{sdr()}}: g/Q model predictions, pseudo-outcome
-statistics, and EIF update magnitude.}
-\item{\code{target_diag}}{\code{data.table} with one row per targeting iteration,
-tracking EIF magnitude across iterations to diagnose convergence.}
-\item{\code{fluct_diag}}{\code{data.table} of SuperLearner learner weights from
-the fluctuation (targeting) model, per fold and time-point. Shows
-which targeting wrappers (from \link{sl_itmle}) were selected.}
-\item{\code{diagnostics$branch_cal}}{Per-fold, per-time branch calibration
-table: empirical mean targets vs. predictions for \code{g_remain},
-\code{g_death}, and \code{Q_remain}.  \strong{Note:} the \code{Q_remain} calibration
-target equals \code{mean(Y)} only under the natural-course policy; under
-a shifted policy the pseudo-outcome reflects the counterfactual
-distribution and is not directly comparable to observed outcomes.
-The \code{Q_rem} column is therefore only interpretable as a calibration
-diagnostic when running under the natural-course policy.}
 }
+
+\strong{Predictions} (\verb{$predictions}): cross-fitted Q matrices, one column
+per time point, one row per subject.
+\describe{
+\item{\verb{$natural}}{\code{Q(t)} under the natural-course policy.}
+\item{\verb{$shifted}}{\code{Q(t)} under the MTP, after the targeting step.}
+}
+
+\strong{Diagnostics} (\verb{$diagnostics}): model fit, calibration, and targeting
+summaries. iTMLE-specific additions are noted.
+\describe{
+\item{\verb{$recursion_diag}}{\code{data.table}, one row per fold × time point.
+Tracks g/Q predictions under natural and shifted policy; also
+includes pre- and post-targeting Q means on the validation set
+(\code{Q_nat_vl_pre_mean}, \code{Q_shf_vl_pre_mean}, \code{Q_nat_vl_post_mean},
+\code{Q_shf_vl_post_mean}) and targeting update magnitudes.}
+\item{\verb{$branch_cal}}{Per-fold, per-time calibration table for
+\code{g_remain}, \code{g_death}, and \code{Q_rem}. Same structure as \code{\link[=sdr]{sdr()}}.}
+\item{\verb{$target_cal}}{\emph{(iTMLE only)} \code{data.table} with one row per
+targeting iteration (fold × time × iteration), tracking EIF
+magnitude as it decreases toward convergence.}
+\item{\verb{$target_sl}}{\emph{(iTMLE only)} \code{data.table} of SuperLearner
+weights from the fluctuation (targeting) model, per fold and time
+point. Shows which wrappers from \link{sl_itmle} were selected.}
+\item{\verb{$sl_summary}}{\code{data.table} of SuperLearner learner weights
+for the Q/g models. Same structure as \code{\link[=sdr]{sdr()}}.}
+\item{\verb{$se_info}}{\emph{(iTMLE only)} List with SE computation details:
+\code{se}, \code{n}, \code{n_eff}, and cluster-adjustment bookkeeping.}
+}
+
+\strong{Weights} (\verb{$weights}), \strong{Settings} (\verb{$settings}), and \strong{Call}
+(\verb{$call}) have the same structure as \code{\link[=sdr]{sdr()}}. \verb{$settings$start_t}
+records the first time point used.
 }
 \description{
 Estimates the mean counterfactual outcome under a modified treatment policy

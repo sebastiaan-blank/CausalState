@@ -113,44 +113,76 @@
 #'   the pooled model must then capture that trend through the time covariate.
 #'   Default `FALSE`.
 #'
-#' @return A named list with:
+#' @return A named list. Top-level elements:
 #'   \describe{
-#'     \item{`psi`}{Point estimate of `E[Y(d)]` under the MTP.}
-#'     \item{`psi_nat`}{Plug-in estimate under the natural course.}
-#'     \item{`psi_shf`}{Plug-in estimate under the MTP (equals `psi`).}
-#'     \item{`rd`}{Risk difference `psi_shf - psi_nat`.}
+#'     \item{`psi`}{EIF-corrected point estimate of `E[Y(d)]` under the MTP.}
 #'     \item{`se`}{Standard error from the efficient influence curve.}
-#'     \item{`ci`}{95% Wald confidence interval.}
+#'     \item{`ci`}{95% Wald confidence interval: `psi ± 1.96 * se`.}
+#'     \item{`Y_obs`}{Observed mean outcome `mean(Y)` across all subjects.
+#'       Quick sanity check: under the natural-course policy `psi` should
+#'       be close to `Y_obs`; a large gap suggests a data or model issue.}
 #'     \item{`ic_df`}{`data.table` with columns `id` and `ic` (per-subject
 #'       influence curve values). Used by [contrast()].}
-#'     \item{`sl_summary`}{`data.table` of SuperLearner learner weights.
-#'       One row per learner per (fold, time-point, model component).
-#'       Columns include `fold`, `t`, `component` (`g_remain`, `g_death`,
-#'       `Q_rem`, `Q_exit`) and one numeric column per learner in the
-#'       library.  Useful for checking which learners dominate and whether
-#'       any learner receives consistently zero weight.}
-#'     \item{`fold_diag`}{`data.table` of per-fold, per-time-point
-#'       diagnostics (one row per fold × time).  Contains mean and SD of
-#'       g-model predictions under natural and shifted
-#'       (`p_rem_nat/shf_mean`, `p_dex_nat/shf_mean`), Q-model predictions
-#'       (`q_rem_nat/shf_mean`, `q_exit_nat/shf_mean`), pseudo-outcome
-#'       statistics before and after the EIF update (`pseudo_pre/post_mean/sd`),
-#'       EIF update magnitude (`delta_mean`, `delta_q95_abs` — large values
-#'       suggest the EIF correction is substantial), and correlation
-#'       diagnostics for the update step (`corr_mean`).}
-#'     \item{`diagnostics$branch_cal`}{Per-fold, per-time branch
-#'       calibration table: empirical mean of training/validation targets
-#'       vs. mean predictions for `g_remain`, `g_death`, and `Q_remain`.
-#'       A quick calibration check for the three fitted models at each
-#'       time point.  **Note:** the `Q_remain` calibration target is the
-#'       empirical mean of the pseudo-outcome used to fit `Q_rem` at that
-#'       step.  This target equals the observed `mean(Y)` only under the
-#'       natural course; under a shifted policy the pseudo-outcome reflects
-#'       the counterfactual distribution and the target is no longer
-#'       comparable to observed outcomes.  The `Q_rem` column of
-#'       `branch_cal` is therefore only interpretable as a calibration
-#'       diagnostic when running under the natural-course policy.}
 #'   }
+#'
+#'   **Predictions** (`$predictions`): cross-fitted Q matrices, one column
+#'   per time point, one row per subject.
+#'   \describe{
+#'     \item{`$natural`}{`Q(t)` under the natural-course policy.}
+#'     \item{`$shifted`}{`Q(t)` under the MTP.}
+#'   }
+#'
+#'   **Decomposition** (`$decomposition`): plug-in components explaining
+#'   the EIF correction relative to the raw plug-in.
+#'   \describe{
+#'     \item{`$psi_plugin_nat`}{Plug-in estimate under the natural course.}
+#'     \item{`$psi_plugin_shf`}{Plug-in estimate under the MTP.}
+#'     \item{`$psi_plugin_diff`}{Plug-in risk difference
+#'       (`psi_plugin_shf - psi_plugin_nat`).}
+#'     \item{`$psi_eif_gap`}{EIF correction: `psi - psi_plugin_shf`. A
+#'       large value means the pseudo-outcome recursion shifted the estimate
+#'       substantially beyond the raw plug-in.}
+#'   }
+#'
+#'   **Diagnostics** (`$diagnostics`): model fit and calibration summaries.
+#'   \describe{
+#'     \item{`$recursion_diag`}{`data.table`, one row per fold × time point.
+#'       Tracks g/Q predictions (training side) under natural and shifted
+#'       policy, pseudo-outcome statistics before and after the EIF update,
+#'       EIF update magnitude (`delta_mean`, `delta_q95_abs`), correlation
+#'       diagnostics, and validation-side mixture Q means (`Q_nat_vl_mean`,
+#'       `Q_shf_vl_mean`) for comparing training vs. validation trajectories.}
+#'     \item{`$branch_cal`}{Per-fold, per-time calibration table: empirical
+#'       mean target vs. mean prediction for `g_remain`, `g_death`, and
+#'       `Q_rem`. The `Q_rem` target is the pseudo-outcome mean — directly
+#'       interpretable as a calibration check only under the natural-course
+#'       policy.}
+#'     \item{`$sl_summary`}{`data.table` of SuperLearner learner weights,
+#'       one row per learner per (fold, time, component). Columns: `fold`,
+#'       `t`, `component` (`g_remain`, `g_death`, `Q_rem`, `Q_exit`), plus
+#'       one numeric column per learner. Consistently zero-weight learners
+#'       can be dropped from the library.}
+#'   }
+#'
+#'   **Weights** (`$weights`): density ratio inputs used by the estimator.
+#'   \describe{
+#'     \item{`$weights_dt`}{`data.table` copy of the density ratio object
+#'       (trimmed to `tmax`, `Rt_cum` column removed).}
+#'     \item{`$trim`}{Trim quantile applied before forming cumulative
+#'       density ratios.}
+#'   }
+#'
+#'   **Settings** (`$settings`): parameters used for the fit.
+#'   \describe{
+#'     \item{`$start_t`}{First time point included in the estimation.}
+#'     \item{`$outcome_family`}{`"binomial"` or `"gaussian"`.}
+#'     \item{`$pool_g_death`}{Whether `g_death` was pooled across time.}
+#'     \item{`$variable_info`}{Named list of variable names and settings:
+#'       `id`, `time`, `alive`, `in_state`, `cluster`, `baseline`,
+#'       `time_varying`, `treatment`, `outcome`, `tmax`, `k`.}
+#'   }
+#'
+#'   **Call** (`$call`): matched call expression, for reproducibility.
 #'
 #' @section Natural-course caution:
 #'   Under the natural-course policy the cumulative density ratios equal one
@@ -767,8 +799,11 @@ sdr <- function(
       meta <- sl_meta(sl_qrem,  f_idx, tt, "Q_rem",        length(rem_idx),  n_val_tt)
       if (!is.null(meta)) sl_chunks_here[[length(sl_chunks_here) + 1L]] <- meta
       
+      Q_nat_vl <- numeric(0)
+      Q_shf_vl <- numeric(0)
+
       if (any(at_risk_vl)) {
-        
+
         rows_vl <- row_index[id_vl_ar, tt]
         
         X_nat_vl_base <- make_design(D, rows_vl, cols_base)
@@ -1158,7 +1193,10 @@ sdr <- function(
         corr_mean = mean_corr_eif,
         corr_sd   = sd_corr_eif,
         corr_q95_abs = q_or_na(abs(corr_vec), 0.95),
-        corr_max_abs = max_or_na(abs(corr_vec))
+        corr_max_abs = max_or_na(abs(corr_vec)),
+
+        Q_nat_vl_mean = mean_or_na(Q_nat_vl),
+        Q_shf_vl_mean = mean_or_na(Q_shf_vl)
       )
       
       fold_diag_here[[length(fold_diag_here) + 1L]] <- diag_row
@@ -1239,43 +1277,8 @@ sdr <- function(
     NULL
   }
   
-  t_vec      <- seq_len(tmax)
-  n_at_risk  <- integer(tmax)
-  mean_Q_nat <- numeric(tmax)
-  mean_Q_int <- numeric(tmax)
-  delta      <- numeric(tmax)
-  mean_Y_obs <- numeric(tmax)
-  
-  for (tt in t_vec) {
-    at_risk <- !is.na(row_index[, tt])
-    n_risk  <- sum(at_risk)
-    
-    if (!n_risk) {
-      n_at_risk[tt]  <- 0L
-      mean_Q_nat[tt] <- NA_real_
-      mean_Q_int[tt] <- NA_real_
-      delta[tt]      <- NA_real_
-      mean_Y_obs[tt] <- NA_real_
-    } else {
-      n_at_risk[tt]  <- n_risk
-      mean_Q_nat[tt] <- mean(pred_nat_all[at_risk, tt], na.rm = TRUE)
-      mean_Q_int[tt] <- mean(pred_shf_all[at_risk, tt], na.rm = TRUE)
-      delta[tt]      <- mean_Q_int[tt] - mean_Q_nat[tt]
-      mean_Y_obs[tt] <- mean(Y_init[at_risk], na.rm = TRUE)
-    }
-  }
-  
-  diag_table <- data.frame(
-    t          = t_vec,
-    n_at_risk  = n_at_risk,
-    mean_Q_nat = mean_Q_nat,
-    mean_Q_int = mean_Q_int,
-    delta      = delta,
-    mean_Y_obs = mean_Y_obs
-  )
-  
-  diag_table <- diag_table[diag_table$n_at_risk > 0L, , drop = FALSE]
-  
+  Y_obs_scaled <- mean(Y_init, na.rm = TRUE)
+
   stopifnot(all(!is.na(row_index[, 1L])))
   start_t_global <- 1L
   
@@ -1333,28 +1336,25 @@ sdr <- function(
     psi_plugin_diff <- psi_plugin_shf - psi_plugin_nat
     psi_eif_gap     <- scale_info$y_rng * psi_eif_gap_scaled
     
-    ic <- scale_info$y_rng * ic_scaled
-    se <- scale_info$y_rng * se_scaled
-    
-    if (!is.null(diag_table) && nrow(diag_table)) {
-      diag_table$mean_Q_nat <- scale_info$from_unit(diag_table$mean_Q_nat)
-      diag_table$mean_Q_int <- scale_info$from_unit(diag_table$mean_Q_int)
-      diag_table$delta      <- scale_info$y_rng * diag_table$delta
-      diag_table$mean_Y_obs <- scale_info$from_unit(diag_table$mean_Y_obs)
-    }
+    ic    <- scale_info$y_rng * ic_scaled
+    se    <- scale_info$y_rng * se_scaled
+    ci    <- psi + c(-1, 1) * 1.96 * se
+    Y_obs <- scale_info$from_unit(Y_obs_scaled)
   } else {
     psi         <- psi_scaled
     psi_natural <- psi_natural_scaled
     psi_shifted <- psi_shifted_scaled
     psi_diff    <- psi_diff_scaled
-    
+
     psi_plugin_nat  <- psi_plugin_nat_scaled
     psi_plugin_shf  <- psi_plugin_shf_scaled
     psi_plugin_diff <- psi_plugin_diff_scaled
     psi_eif_gap     <- psi_eif_gap_scaled
-    
-    ic <- ic_scaled
-    se <- se_scaled
+
+    ic    <- ic_scaled
+    se    <- se_scaled
+    ci    <- psi + c(-1, 1) * 1.96 * se
+    Y_obs <- Y_obs_scaled
   }
   
   sl_summary <- NULL
@@ -1364,23 +1364,23 @@ sdr <- function(
   }
   
   out <- list(
-    psi = psi,
-    se = se,
+    psi   = psi,
+    se    = se,
+    ci    = ci,
+    Y_obs = Y_obs,
     ic_df = data.table::data.table(id = ids, ic = ic),
-    start_t = start_t_global,
 
     predictions = list(
       natural = pred_nat_all,
       shifted = pred_shf_all
     ),
-    
+
     diagnostics = list(
-      diag_table      = diag_table,      # cross-fitted trajectory
-      recursion_diag  = fold_diag,       # fold/time SDR mechanics
-      branch_cal      = branch_diag,     # branch calibration
-      sl_summary = sl_summary
+      recursion_diag = fold_diag,
+      branch_cal     = branch_diag,
+      sl_summary     = sl_summary
     ),
-    
+
     decomposition = list(
       psi_eif         = psi,
       psi_plugin_nat  = psi_plugin_nat,
@@ -1388,7 +1388,7 @@ sdr <- function(
       psi_plugin_diff = psi_plugin_diff,
       psi_eif_gap     = psi_eif_gap
     ),
-    
+
     weights = list(
       weights_dt = {
         x <- data.table::copy(data.table::as.data.table(weights_dt))
@@ -1397,8 +1397,9 @@ sdr <- function(
       },
       trim = trim
     ),
-    
+
     settings = list(
+      start_t        = start_t_global,
       pool_g_death   = pool_g_death,
       trim           = trim,
       outcome_family = outcome_family,
