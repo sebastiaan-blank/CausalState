@@ -3,7 +3,7 @@
 # CausalState
 
 <!-- badges: start -->
-[![R-CMD-check](https://github.com/YOUR-GITHUB-HANDLE/CausalState/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/YOUR-GITHUB-HANDLE/CausalState/actions/workflows/R-CMD-check.yaml)
+[![R-CMD-check](https://github.com/sebastiaan-blank/CausalState/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/sebastiaan-blank/CausalState/actions/workflows/R-CMD-check.yaml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 <!-- badges: end -->

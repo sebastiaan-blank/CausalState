@@ -36,7 +36,6 @@ Suggests:
     testthat (>= 3.0.0),
     knitr,
     rmarkdown,
-    pkgdown,
     ggplot2,
     scales,
     stringr,
@@ -44,7 +43,6 @@ Suggests:
     dbarts,
     mgcv,
     earth,
-    ranger,
     nnls
 Config/testthat/edition: 3
 VignetteBuilder: knitr
