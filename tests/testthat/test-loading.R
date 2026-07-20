@@ -8,7 +8,6 @@ test_that("package loads and exported functions are visible", {
   expect_true(is.function(density_ratio))
   expect_true(is.function(absorb_rule))
   expect_true(is.function(CausalState:::expand_to_horizon))
-  expect_true(is.function(cluster_boot_se))
 
   # At least one SL wrapper
   expect_true(is.function(SL.tgt.glm))

@@ -255,10 +255,16 @@ density ratios.}
 }
 \description{
 Estimates the mean counterfactual outcome under a modified treatment policy
-(MTP) using the sequentially doubly robust estimator of Díaz et al. (2021),
-which generalises the SDR construction of Luedtke et al. (2017) to the
-density-ratio / MTP setting. Requires pre-computed density ratio weights
-from \code{\link[=density_ratio]{density_ratio()}}.
+(MTP) using the LMTP-SDR estimator of Díaz et al. (2021), which extends the
+SDR construction of Luedtke et al. (2017) to general MTPs via density-ratio
+weighting.  Starting from terminal pseudo-outcomes and working backward in
+time, the estimator propagates an EIF-corrected pseudo-outcome through a
+sequence of Q-regressions; the final estimate is the mean of the
+pseudo-outcomes at the first time point.  The estimator is sequentially
+doubly robust (2^\eqn{K}-robust): consistent whenever, at each time point
+t, either the treatment model \eqn{g_t} or the outcome model \eqn{Q_t} is
+consistently estimated.  Requires pre-computed density ratio weights from
+\code{\link[=density_ratio]{density_ratio()}}.
 }
 \section{Parallelism}{
 

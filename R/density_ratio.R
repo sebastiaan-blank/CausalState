@@ -132,9 +132,18 @@ dr_from_prob <- function(p_mat, beta, bounds, denom_cap) {
 #'   MTP cannot be pre-computed as static columns.
 #' @param id Character. Subject identifier column name. Default `"id"`.
 #' @param time Character. Time column name. Default `"trial_time"`.
-#' @param bounds Numeric. Probability floor applied in the traditional pathway
-#'   (`dr_sl = FALSE`) before converting to density ratios. Default `1e-5`.
-#'   In the WB pathway (`dr_sl = TRUE`) a fixed floor of `1e-5` is used.
+#' @param bounds Numeric. Probability floor for clipping predicted probabilities
+#'   before conversion to density ratios (standard pathway only). Default `1e-5`.
+#' @param dr_sl Logical. Selects the metalearner used to combine base learners.
+#'   `FALSE` (default): standard SuperLearner with NNLS metalearner — each base
+#'   learner outputs a propensity score (probability scale) and the metalearner
+#'   combines them with non-negative least squares; the combined probability is
+#'   then converted to a density ratio via `p / (1 - p)`.  `TRUE`: the
+#'   Wu-Benkeser metalearner ([method.WB_dr]) — combines base learners directly
+#'   in density-ratio space by minimising a log density-ratio loss, which can
+#'   give better-calibrated density ratios when the propensity score is far from
+#'   0.5.  When `dr_sl = TRUE` the SuperLearner fit returns density ratios
+#'   directly rather than probabilities.
 #' @param drop_small_cluster_splits Logical. Drop time points where a fold
 #'   has too few clusters to fit a model. Default `TRUE`.
 #' @param parallel_t Logical. Parallelise across time points. Default `FALSE`.

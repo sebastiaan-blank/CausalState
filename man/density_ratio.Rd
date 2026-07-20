@@ -74,9 +74,19 @@ MTP cannot be pre-computed as static columns.}
 
 \item{time}{Character. Time column name. Default \code{"trial_time"}.}
 
-\item{bounds}{Numeric. Probability floor applied in the traditional pathway
-(\code{dr_sl = FALSE}) before converting to density ratios. Default \code{1e-5}.
-In the WB pathway (\code{dr_sl = TRUE}) a fixed floor of \code{1e-5} is used.}
+\item{bounds}{Numeric. Probability floor for clipping predicted probabilities
+before conversion to density ratios (standard pathway only). Default \code{1e-5}.}
+
+\item{dr_sl}{Logical. Selects the metalearner used to combine base learners.
+\code{FALSE} (default): standard SuperLearner with NNLS metalearner — each base
+learner outputs a propensity score (probability scale) and the metalearner
+combines them with non-negative least squares; the combined probability is
+then converted to a density ratio via \code{p / (1 - p)}.  \code{TRUE}: the
+Wu-Benkeser metalearner (\link{method.WB_dr}) — combines base learners directly
+in density-ratio space by minimising a log density-ratio loss, which can
+give better-calibrated density ratios when the propensity score is far from
+0.5.  When \code{dr_sl = TRUE} the SuperLearner fit returns density ratios
+directly rather than probabilities.}
 
 \item{drop_small_cluster_splits}{Logical. Drop time points where a fold
 has too few clusters to fit a model. Default \code{TRUE}.}

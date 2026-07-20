@@ -646,22 +646,28 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #'
 #' Estimates the mean counterfactual outcome under a modified treatment policy
 #' (MTP) using the infinite-dimensional targeted minimum loss-based estimator
-#' (iTMLE) of Luedtke et al. (2017), Section 5 (Algorithm 4), using the
-#' cross-validated variant recommended in Appendix 12 of the same paper
-#' (the basic ERM variant in Algorithm 4 is prone to overfitting; the
-#' cross-validated version is what the authors recommend for practice).  The companion
-#' [sdr()] function implements the LMTP-SDR estimator of Díaz et al. (2021),
-#' which applies the Luedtke et al. SDR construction to the density-ratio / MTP
-#' setting.  The two estimators share the same backward Q-regression; they
-#' differ only in the update step: iTMLE applies an infinite-dimensional TMLE
-#' fluctuation rather than the EIF-based pseudo-outcome update used by [sdr()].
-#' Both are sequentially doubly robust (2^\eqn{K}-robust, Luedtke et al.
-#' Definition 2): consistent whenever, at each time point t, either the
-#' treatment model \eqn{g_t} or the outcome model \eqn{Q_t} is consistently
-#' estimated.  The targeting step uses a SuperLearner ensemble with custom
-#' learner wrappers (see [sl_itmle]) that handle the logit-offset structure
-#' required for cross-validated TMLE.  Requires pre-computed density ratio
-#' weights from [density_ratio()].
+#' (iTMLE).  The estimator fits a backward Q-regression to approximate the
+#' counterfactual outcome trajectory, then applies an infinite-dimensional
+#' fluctuation — a targeting step that solves the efficient influence equation
+#' without restricting the fluctuation to a finite-dimensional parametric
+#' submodel.  The algorithm follows Luedtke et al. (2017, Section 5 and Appendix 12):
+#' Section 5 introduces the infinite-dimensional fluctuation, Appendix 12
+#' the cross-validated variant used here to prevent overfitting of Q estimates.  Density-ratio weights from [density_ratio()] adapt the
+#' estimator to general MTPs following the framework of Díaz et al. (2021).
+#' The estimator is sequentially doubly robust (2^\eqn{K}-robust): consistent
+#' whenever, at each time point t, either the treatment model \eqn{g_t} or the
+#' outcome model \eqn{Q_t} is consistently estimated.  The targeting step uses
+#' a SuperLearner ensemble with custom wrappers (see [sl_itmle]) that carry the
+#' logit offset required for cross-validated TMLE as a data column.
+#'
+#' Two properties of iTMLE worth noting relative to [sdr()]: (1) under the
+#' natural-course policy iTMLE does not collapse algebraically to `mean(Y)`,
+#' so a natural-course run provides a genuine calibration check on the Q
+#' models after the fluctuation update; (2) the mean efficient influence curve
+#' is not zero by construction (targeting converges to near-zero but not
+#' exactly zero), so the SE uses the uncentered second-moment estimator
+#' \eqn{\sqrt{\text{mean}(IC^2)/n}} rather than \eqn{sd(IC)/\sqrt{n}} — see
+#' the `se` entry in `Value` for details.
 #'
 #' @inheritParams sdr
 #' @param sl_tmle SuperLearner library for the iTMLE targeting step. Should
