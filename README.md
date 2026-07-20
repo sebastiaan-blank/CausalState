@@ -5,7 +5,6 @@
 
 <!-- badges: start -->
 
-[![R-CMD-check](https://github.com/sebastiaan-blank/CausalState/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/sebastiaan-blank/CausalState/actions/workflows/R-CMD-check.yaml)
 [![License: AGPL
 v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Lifecycle:
