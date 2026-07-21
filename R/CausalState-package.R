@@ -41,63 +41,75 @@
 #' and reused across both estimators and across multiple time horizons.
 #'
 #' @section State transition model and probabilistic mixing:
-#' At each time point t, a subject in state (in_state = 1, alive = 1) faces
-#' three mutually exclusive outcomes: remain in state, exit alive (discharge),
-#' or die.  The backward Q-recursion assembles the expected outcome as a
-#' probability-weighted mixture over these three branches:
+#' At each time point t, a subject in state (`in_state = 1`, `alive = 1`)
+#' faces three mutually exclusive outcomes: remain in state, exit alive
+#' (discharge), or die.  Four regression components handle this, corresponding
+#' directly to the `sl_` arguments of [sdr()], [itmle()], and [qreg()]:
 #'
-#' ```
-#' Q_t = p_rem * Q_rem + (1 - p_rem) * [p_dex * Q_death + (1 - p_dex) * Q_dc]
-#' ```
-#'
-#' Two regression components estimate the transition probabilities.
-#' `g_remain` (fitted via `sl_remain`) estimates P(in_state = 1 at t+1 |
-#' in_state = 1 at t, history) and is trained on all subjects currently in
-#' state.  `g_death_exit` (fitted via `sl_death`) estimates P(death | exited,
-#' history) and is trained only on the exit subset -- those subjects who leave
-#' the state at each time point.
-#'
-#' The outcome components `Q_death` and `Q_dc` are typically overridden to
-#' fixed absorbing-state constants via [absorb_rule()] (e.g. Y = 0 for death)
-#' and require no separate regression.  `Q_rem` uses `sl_recursive` at
-#' intermediate time points and `sl_y` at the terminal time point.
-#'
-#' **Event counts and the death regression.**  Because `g_death_exit` trains
-#' on the exit subset only, its effective sample size is often much smaller
-#' than the full cohort -- and within that subset deaths may be rare.
-#'
-#' The code applies a uniform feasibility check before every SuperLearner fit
-#' (`can_fit_bin`): a model is attempted only when the training set contains
-#' at least 30 observations AND at least 5 events of each class (deaths and
-#' discharges within the exit subset, or remainers and exiters for
-#' `g_remain`).  When either threshold is not met the estimator falls back to
-#' the empirical proportion as a time-constant prediction rather than fitting
-#' a SuperLearner.  The fallback is noted in `diagnostics$branch_cal`
-#' (the `p_*_const` columns are non-NA when the constant was used).
-#'
-#' Practical guidance:
-#' \itemize{
-#'   \item The hard floor is 5 events of each class within the fitting
-#'     sample (roughly the training fold of the exit subset).  Below this the
-#'     estimator substitutes a constant; above it a SuperLearner is fitted but
-#'     with very few events the ensemble will typically collapse to
-#'     \code{SL.mean} or a near-intercept logistic fit.
-#'   \item Set \code{pool_g_death = TRUE} to pool `g_death_exit` across all
-#'     time points (adding time as a covariate), so the 5-event floor applies
-#'     to the full follow-up rather than each time point individually.  Use
-#'     when per-time counts are sparse but the death hazard is roughly stable
-#'     over time.
-#'   \item Inspect `diagnostics$branch_cal`: the `g_death` rows show
-#'     per-fold, per-time calibration and event counts.  `n_tr_exit` is the
-#'     exit-subset size; the death event count is `n_tr_exit * mean_target`
-#'     for that row.
-#'   \item When [absorb_rule()] fixes `Q_death` to a constant (the common
-#'     case), a misspecified `g_death_exit` has limited impact: the death
-#'     branch enters the mixture as P(death | exit) * constant, and any
-#'     misspecification shifts the discharge branch by the complementary
-#'     probability, which the DR correction via density ratios partially
-#'     compensates.
+#' \describe{
+#'   \item{`g_remain` (`sl_remain`)}{Probability of remaining in state at
+#'     the next time point, given current history.  Trained on all subjects
+#'     currently in state.}
+#'   \item{`g_death_exit` (`sl_death`)}{Probability of dying, conditional on
+#'     having left the state (i.e. among exiters only).  Trained on the exit
+#'     subset -- those subjects who leave the state at each time point.}
+#'   \item{`Q_rem` (`sl_recursive` at intermediate time points; `sl_y` at
+#'     the terminal time point)}{Expected outcome conditional on remaining in
+#'     state.  This is the component propagated backward through the
+#'     Q-recursion.}
+#'   \item{`Q_exit` (`sl_y`)}{Expected outcome conditional on exiting.  In
+#'     most applications this is not estimated but instead fixed to a constant
+#'     for each exit type (death, discharge) via [absorb_rule()].}
 #' }
+#'
+#' **Probabilistic mixture.**  The backward Q-recursion assembles the expected
+#' outcome at time t as a probability-weighted mixture over the three
+#' transition branches:
+#'
+#' ```
+#' Q(t) = g_remain * Q_rem
+#'       + (1 - g_remain) * [ g_death_exit * Q_death
+#'                           + (1 - g_death_exit) * Q_discharge ]
+#' ```
+#'
+#' where `g_remain` and `g_death_exit` are the model predictions at the
+#' subject's current history, and `Q_death` / `Q_discharge` are the outcome
+#' values assigned to each exit branch (constants when [absorb_rule()] is
+#' used, or `sl_y` predictions otherwise).
+#'
+#' **Event counts and the death regression.**  Because `g_death_exit` is
+#' trained on the exit subset only, its effective sample size is often much
+#' smaller than the full cohort -- and within that subset, deaths may be rare.
+#'
+#' Before every SuperLearner fit, the code checks whether the training data
+#' are sufficient to fit a model (internal function `can_fit_bin`): fitting
+#' proceeds only when the training set has at least 30 observations and at
+#' least 5 events of each class (deaths and discharges within the exit subset
+#' for `g_death_exit`; remainers and exiters for `g_remain`).  When either
+#' threshold is not met, the estimator substitutes the empirical proportion as
+#' a time-constant prediction instead of fitting a SuperLearner.  The fallback
+#' is recorded in `diagnostics$branch_cal` (the `p_*_const` columns are
+#' non-`NA` when a constant was used).
+#'
+#' Even above the floor, with few events the SuperLearner ensemble will
+#' typically collapse to `SL.mean` or a near-intercept logistic fit.
+#' Setting `pool_g_death = TRUE` fits a single `g_death_exit` model across
+#' all time points (with time included as a covariate), so the 30/5 thresholds
+#' apply to the full follow-up pooled rather than each time point
+#' individually.  This is the recommended remedy when per-time death counts
+#' are sparse but the death hazard is roughly stable over time.
+#'
+#' To inspect event counts: `diagnostics$branch_cal` contains one row per
+#' fold and time point; `n_tr_exit` is the exit-subset size, and the number
+#' of deaths is approximately `n_tr_exit * mean_target` for the `g_death`
+#' rows.
+#'
+#' When [absorb_rule()] fixes `Q_death` to a constant -- the common case --
+#' the impact of a poorly fitted `g_death_exit` is limited: misspecification
+#' shifts probability mass between the death and discharge branches of the
+#' mixture, but the sequentially doubly robust correction via density-ratio
+#' weighting partially compensates provided the treatment model is
+#' well-specified.
 #'
 #' @section State machinery:
 #' [absorb_rule()] defines outcome overrides at absorbing states (e.g. forcing
