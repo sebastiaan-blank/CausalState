@@ -63,27 +63,40 @@
 #' intermediate time points and `sl_y` at the terminal time point.
 #'
 #' **Event counts and the death regression.**  Because `g_death_exit` trains
-#' on the exit subset, its effective sample size can be much smaller than the
-#' full cohort -- and within that subset, deaths may be rare.  When per-time
-#' death counts are low the SuperLearner fit can degenerate (near-empty
-#' training sets, all-zero predictions, solver failures).
+#' on the exit subset only, its effective sample size is often much smaller
+#' than the full cohort -- and within that subset deaths may be rare.
+#'
+#' The code applies a uniform feasibility check before every SuperLearner fit
+#' (`can_fit_bin`): a model is attempted only when the training set contains
+#' at least 30 observations AND at least 5 events of each class (deaths and
+#' discharges within the exit subset, or remainers and exiters for
+#' `g_remain`).  When either threshold is not met the estimator falls back to
+#' the empirical proportion as a time-constant prediction rather than fitting
+#' a SuperLearner.  The fallback is noted in `diagnostics$branch_cal`
+#' (the `p_*_const` columns are non-NA when the constant was used).
 #'
 #' Practical guidance:
 #' \itemize{
-#'   \item Inspect `diagnostics$branch_cal` from any estimator: the `g_death`
-#'     rows show per-fold, per-time calibration and effective training sizes.
-#'   \item As a rough floor, fewer than approximately 20 death events at a
-#'     given time point makes per-time fitting unreliable; below 10, estimates
-#'     at that step should be treated with caution.
-#'   \item Set `pool_g_death = TRUE` to fit a single model across all time
-#'     points (with time as a covariate), borrowing strength across follow-up.
-#'     Use when per-time counts are sparse but the death hazard does not change
-#'     markedly over time.
+#'   \item The hard floor is 5 events of each class within the fitting
+#'     sample (roughly the training fold of the exit subset).  Below this the
+#'     estimator substitutes a constant; above it a SuperLearner is fitted but
+#'     with very few events the ensemble will typically collapse to
+#'     \code{SL.mean} or a near-intercept logistic fit.
+#'   \item Set \code{pool_g_death = TRUE} to pool `g_death_exit` across all
+#'     time points (adding time as a covariate), so the 5-event floor applies
+#'     to the full follow-up rather than each time point individually.  Use
+#'     when per-time counts are sparse but the death hazard is roughly stable
+#'     over time.
+#'   \item Inspect `diagnostics$branch_cal`: the `g_death` rows show
+#'     per-fold, per-time calibration and event counts.  `n_tr_exit` is the
+#'     exit-subset size; the death event count is `n_tr_exit * mean_target`
+#'     for that row.
 #'   \item When [absorb_rule()] fixes `Q_death` to a constant (the common
 #'     case), a misspecified `g_death_exit` has limited impact: the death
-#'     branch enters as P(death | exit) * constant, and any misspecification
-#'     shifts the discharge branch by the complementary probability, which the
-#'     DR correction via density ratios partially compensates.
+#'     branch enters the mixture as P(death | exit) * constant, and any
+#'     misspecification shifts the discharge branch by the complementary
+#'     probability, which the DR correction via density ratios partially
+#'     compensates.
 #' }
 #'
 #' @section State machinery:
