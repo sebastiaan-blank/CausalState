@@ -141,10 +141,30 @@ column.
 \references{
 Diaz I, Williams N, Hoffman KL, Schenck EJ (2021). Nonparametric Causal
 Effects Based on Longitudinal Modified Treatment Policies. \emph{JASA}
-118(542):846-857.
+118(542):846-857. doi:10.1080/01621459.2021.1955691.
 
 Luedtke AR, Sofrygin O, van der Laan MJ, Carone M (2017). Sequential
 Double Robustness in Right-Censored Longitudinal Models. arXiv:1705.02459.
+
+Rotnitzky A, Robins J, Babino L (2017). On the multiply robust estimation
+of the mean of the g-functional. arXiv:1705.08582.
+
+Diaz I, Hoffman KL, Hejazi NS (2023). Causal survival analysis under
+competing risks using longitudinal modified treatment policies. \emph{Lifetime
+Data Analysis}. doi:10.1007/s10985-023-09606-7.
+
+Williams NT, Diaz I (2023). lmtp: An R package for estimating the causal
+effects of modified treatment policies. \emph{Observational Studies}.
+
+Bang H, Robins JM (2005). Doubly robust estimation in missing data and
+causal inference models. \emph{Biometrics} 61(4):962-973.
+
+Haneuse S, Rotnitzky A (2013). Estimation of the effect of interventions
+that modify the received treatment. \emph{Statistics in Medicine}
+32(30):5260-5277.
+
+Diaz Munoz I, van der Laan MJ (2012). Population intervention causal
+effects based on stochastic interventions. \emph{Biometrics} 68(2):541-549.
 }
 \author{
 \strong{Maintainer}: Sebastiaan Blank \email{sebastiaan.bank@mail.com} (\href{https://orcid.org/0000-0001-9115-2138}{ORCID}) [copyright holder]

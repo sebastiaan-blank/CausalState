@@ -206,13 +206,40 @@ alter the transition timing itself.
 
 ## References
 
+**Core estimators implemented here:**
+
 Diaz I, Williams N, Hoffman KL, Schenck EJ (2021). Nonparametric Causal
 Effects Based on Longitudinal Modified Treatment Policies. *JASA*
-118(542):846-857.
+118(542):846-857. doi:10.1080/01621459.2021.1955691.
 
 Luedtke AR, Sofrygin O, van der Laan MJ, Carone M (2017). Sequential
 Double Robustness in Right-Censored Longitudinal Models.
 arXiv:1705.02459.
+
+Rotnitzky A, Robins J, Babino L (2017). On the multiply robust estimation
+of the mean of the g-functional. arXiv:1705.08582.
+
+**State transitions and competing risks:**
+
+Diaz I, Hoffman KL, Hejazi NS (2023). Causal survival analysis under
+competing risks using longitudinal modified treatment policies. *Lifetime
+Data Analysis*. doi:10.1007/s10985-023-09606-7.
+
+**Doubly robust estimation:**
+
+Bang H, Robins JM (2005). Doubly robust estimation in missing data and
+causal inference models. *Biometrics* 61(4):962-973.
+
+**Foundational MTP methods:**
+
+Haneuse S, Rotnitzky A (2013). Estimation of the effect of interventions
+that modify the received treatment. *Statistics in Medicine*
+32(30):5260-5277.
+
+Diaz Munoz I, van der Laan MJ (2012). Population intervention causal
+effects based on stochastic interventions. *Biometrics* 68(2):541-549.
+
+**R implementation:**
 
 Williams NT, Diaz I (2023). lmtp: An R package for estimating the causal
 effects of modified treatment policies. *Observational Studies*.
