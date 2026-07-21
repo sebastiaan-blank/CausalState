@@ -40,6 +40,52 @@
 #' loss rather than the default NNLS.  Density ratios can be computed once
 #' and reused across both estimators and across multiple time horizons.
 #'
+#' @section State transition model and probabilistic mixing:
+#' At each time point t, a subject in state (in_state = 1, alive = 1) faces
+#' three mutually exclusive outcomes: remain in state, exit alive (discharge),
+#' or die.  The backward Q-recursion assembles the expected outcome as a
+#' probability-weighted mixture over these three branches:
+#'
+#' ```
+#' Q_t = p_rem * Q_rem + (1 - p_rem) * [p_dex * Q_death + (1 - p_dex) * Q_dc]
+#' ```
+#'
+#' Two regression components estimate the transition probabilities.
+#' `g_remain` (fitted via `sl_remain`) estimates P(in_state = 1 at t+1 |
+#' in_state = 1 at t, history) and is trained on all subjects currently in
+#' state.  `g_death_exit` (fitted via `sl_death`) estimates P(death | exited,
+#' history) and is trained only on the exit subset -- those subjects who leave
+#' the state at each time point.
+#'
+#' The outcome components `Q_death` and `Q_dc` are typically overridden to
+#' fixed absorbing-state constants via [absorb_rule()] (e.g. Y = 0 for death)
+#' and require no separate regression.  `Q_rem` uses `sl_recursive` at
+#' intermediate time points and `sl_y` at the terminal time point.
+#'
+#' **Event counts and the death regression.**  Because `g_death_exit` trains
+#' on the exit subset, its effective sample size can be much smaller than the
+#' full cohort -- and within that subset, deaths may be rare.  When per-time
+#' death counts are low the SuperLearner fit can degenerate (near-empty
+#' training sets, all-zero predictions, solver failures).
+#'
+#' Practical guidance:
+#' \itemize{
+#'   \item Inspect `diagnostics$branch_cal` from any estimator: the `g_death`
+#'     rows show per-fold, per-time calibration and effective training sizes.
+#'   \item As a rough floor, fewer than approximately 20 death events at a
+#'     given time point makes per-time fitting unreliable; below 10, estimates
+#'     at that step should be treated with caution.
+#'   \item Set `pool_g_death = TRUE` to fit a single model across all time
+#'     points (with time as a covariate), borrowing strength across follow-up.
+#'     Use when per-time counts are sparse but the death hazard does not change
+#'     markedly over time.
+#'   \item When [absorb_rule()] fixes `Q_death` to a constant (the common
+#'     case), a misspecified `g_death_exit` has limited impact: the death
+#'     branch enters as P(death | exit) * constant, and any misspecification
+#'     shifts the discharge branch by the complementary probability, which the
+#'     DR correction via density ratios partially compensates.
+#' }
+#'
 #' @section State machinery:
 #' [absorb_rule()] defines outcome overrides at absorbing states (e.g. forcing
 #' Y = 0 for subjects who die before the end of follow-up).
