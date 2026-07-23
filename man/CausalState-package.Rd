@@ -149,9 +149,8 @@ Double Robustness in Right-Censored Longitudinal Models. arXiv:1705.02459.
 Rotnitzky A, Robins J, Babino L (2017). On the multiply robust estimation
 of the mean of the g-functional. arXiv:1705.08582.
 
-Diaz I, Hoffman KL, Hejazi NS (2023). Causal survival analysis under
-competing risks using longitudinal modified treatment policies. \emph{Lifetime
-Data Analysis}. doi:10.1007/s10985-023-09606-7.
+Wu C, Benkeser D (2024). Nonparametric Efficient Estimation of Marginal
+Structural Models using Targeted Machine Learning. arXiv:2408.10847.
 
 Williams NT, Diaz I (2023). lmtp: An R package for estimating the causal
 effects of modified treatment policies. \emph{Observational Studies}.

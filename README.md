@@ -37,9 +37,10 @@ The estimators apply when:
 - Interest is in the **mean counterfactual outcome** under the MTP,
   estimated from observational or trial data.
 
-The package is designed for **medium-horizon** episodes of 5–10 time
-points. Beyond roughly ten points, cumulative density-ratio products
-tend to collapse positivity regardless of estimator choice.
+The practical limit on follow-up length is the number of patients still
+in the active state at each time point: as patients exit, the risk set
+shrinks and model fits become unstable. Cumulative density-ratio products
+also compound across time, so both considerations favour shorter episodes.
 
 ## Estimators
 
@@ -152,10 +153,9 @@ ctr$RD; ctr$ci_RD
 
 ## Key design choices
 
-**Asymmetric g/Q regularisation.** Treatment models (g) are tuned
-sharper for accurate density-ratio discrimination; outcome models (Q)
-are more heavily regularised to suppress recursion noise. This asymmetry
-is the primary tuning lever.
+**Separate learner stacks per regression.** Each regression component
+(g, Q at each time point, the terminal outcome) accepts its own
+SuperLearner library, allowing independent tuning across the pipeline.
 
 **Uniform clipping.** Every SL prediction across the entire pipeline (g
 and Q models at every time point) is clipped to \[bounds, 1-bounds\]
@@ -164,10 +164,10 @@ the Wu-Benkeser direct density-ratio metalearner, which clips in
 density-ratio space via `dr_floor` – see `vignette("wb-metalearner")`.
 
 **Weight reuse.** `density_ratio()` is designed to be run once and
-shared across `sdr()`, `itmle()`, and competing-event variants. Trimming
-is applied globally at consumption time, so all estimators that share a
-weight object operate on identically trimmed weights and produce
-directly comparable estimates.
+shared across `sdr()`, `itmle()`, and `qreg()`. Trimming is applied
+globally at consumption time, so all estimators that share a weight
+object operate on identically trimmed weights and produce directly
+comparable estimates.
 
 **Parallelism via `mclapply`.** Process-level parallelism is available
 at the fold level (`parallel = TRUE`) and within-fold regression level
@@ -186,8 +186,7 @@ remotes::install_github("sebastiaan-blank/CausalState")
 
 See `vignette("getting-started")` for a complete worked example with a
 simulated ICU dataset, including data structure, policy definition,
-SuperLearner library choices, diagnostics, and a competing-event
-analysis.
+SuperLearner library choices, and diagnostics.
 
 ## Relationship to `lmtp`
 
@@ -195,8 +194,8 @@ CausalState is built on the same LMTP framework as the
 [`lmtp`](https://github.com/nt-williams/lmtp) package and implements the
 same SDR and TMLE estimators. It is a complementary tool rather than a
 replacement: CausalState adds explicit modelling of absorbing-state
-transitions and the competing-event machinery required when the MTP can
-alter the transition timing itself.
+transitions, allowing the MTP to shift the transition dynamics themselves
+rather than only the terminal outcome.
 
 ## Citation
 
@@ -205,8 +204,6 @@ alter the transition timing itself.
     https://github.com/sebastiaan-blank/CausalState
 
 ## References
-
-**Core estimators implemented here:**
 
 Diaz I, Williams N, Hoffman KL, Schenck EJ (2021). Nonparametric Causal
 Effects Based on Longitudinal Modified Treatment Policies. *JASA*
@@ -219,18 +216,14 @@ arXiv:1705.02459.
 Rotnitzky A, Robins J, Babino L (2017). On the multiply robust estimation
 of the mean of the g-functional. arXiv:1705.08582.
 
-**State transitions and competing risks:**
+Wu C, Benkeser D (2024). Nonparametric Efficient Estimation of Marginal
+Structural Models using Targeted Machine Learning. arXiv:2408.10847.
 
-Diaz I, Hoffman KL, Hejazi NS (2023). Causal survival analysis under
-competing risks using longitudinal modified treatment policies. *Lifetime
-Data Analysis*. doi:10.1007/s10985-023-09606-7.
-
-**Doubly robust estimation:**
+Williams NT, Diaz I (2023). lmtp: An R package for estimating the causal
+effects of modified treatment policies. *Observational Studies*.
 
 Bang H, Robins JM (2005). Doubly robust estimation in missing data and
 causal inference models. *Biometrics* 61(4):962-973.
-
-**Foundational MTP methods:**
 
 Haneuse S, Rotnitzky A (2013). Estimation of the effect of interventions
 that modify the received treatment. *Statistics in Medicine*
@@ -238,11 +231,6 @@ that modify the received treatment. *Statistics in Medicine*
 
 Diaz Munoz I, van der Laan MJ (2012). Population intervention causal
 effects based on stochastic interventions. *Biometrics* 68(2):541-549.
-
-**R implementation:**
-
-Williams NT, Diaz I (2023). lmtp: An R package for estimating the causal
-effects of modified treatment policies. *Observational Studies*.
 
 ## License
 

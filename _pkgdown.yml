@@ -11,12 +11,6 @@ reference:
   - itmle
   - qreg
 
-- title: "Competing-event variants"
-  desc: "Survival / mortality estimators that reuse density-ratio weights computed for the main estimators."
-  contents:
-  - sdr_competing
-  - itmle_competing
-
 - title: "Density-ratio estimation"
   desc: "Treatment and censoring models; must be run before the outcome estimators."
   contents:
@@ -27,7 +21,6 @@ reference:
   desc: "Building blocks for advanced users."
   contents:
   - absorb_rule
-  - cluster_boot_se
 
 - title: "iTMLE targeting wrappers"
   desc: >

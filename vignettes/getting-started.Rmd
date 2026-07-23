@@ -192,16 +192,15 @@ $r_t = 1$ outside the intervention window. The downstream estimators
   correctly accounts for transitions that occur after the policy has ended.
 
 **Trimming.** Trim is applied **globally** across the entire `weights_dt`
-object at the point it is consumed by `sdr()`, `itmle()`, or
-`sdr_competing()` / `itmle_competing()`. The trim quantile is computed over
-all time points present in the weight object, not just those within the
-intervention window or the current `tmax`. This means:
+object at the point it is consumed by `sdr()` or `itmle()`. The trim quantile
+is computed over all time points present in the weight object, not just those
+within the intervention window or the current `tmax`. This means:
 
 - The trim threshold is identical regardless of whether you call the
   estimator with `tmax = 3` or `tmax = 10`, as long as they share the same
   weight object — estimates across horizons are directly comparable.
-- The same `trim` value must be passed consistently to all estimators
-  (main and competing-event) that share a weight object.
+- The same `trim` value must be passed consistently to all estimators that
+  share a weight object.
 
 ### Using `dr_sl = TRUE` (Wu-Benkeser metalearner)
 
@@ -360,54 +359,6 @@ cat(sprintf(
 
 ---
 
-## Step 6 — Competing-event (in-hospital mortality) variant
-
-`sdr_competing()` and `itmle_competing()` estimate in-state survival (e.g.
-in-hospital mortality) under the same MTP. They are included specifically to
-allow reuse of **exactly the same weight object** — with the same trim — as
-the main outcome estimators. This matters when the MTP has a limited
-intervention duration: both the outcome and the competing-event analysis must
-operate on identically trimmed weights for the two results to be
-directly comparable.
-
-The estimators are based on the competing-event / survival LMTP framework of
-Díaz, Hoffman & Hejazi (2023). The only reason a separate implementation
-exists within this package (rather than using `lmtp` directly) is to share
-the pre-computed, trimmed density-ratio weights from `density_ratio()`.
-
-One practical detail: the competing-event estimators may require additional
-time points beyond the main `tmax` to cover the full at-risk period.
-Unit weights ($r_t = 1$) for these extra time points are appended to the
-weight object **after** the global trim has been applied, so trimming remains
-consistent with the main analysis.
-
-```{r competing}
-res_mort <- sdr_competing(
-  DT              = df,
-  weights_dt      = wr$weights_dt,
-  policy_spec_fun = policy_up,
-  id              = "id",
-  time            = "time",
-  alive           = "alive",
-  in_state        = "in_state",
-  baseline        = c("age", "sex"),
-  tv_names        = c("L1", "L2"),
-  a_names         = "A",
-  k               = 1L,
-  tmax            = 5L,
-  seed            = 1L,
-  sl_q            = sl_lib,
-  inner_v         = 5L,
-  trim            = 0.99,   # must match trim used in sdr() / itmle()
-  parallel        = FALSE
-)
-
-cat(sprintf("SDR competing  psi = %.3f  SE = %.3f\n",
-            res_mort$psi, res_mort$se))
-```
-
----
-
 ## Diagnostics
 
 All estimators return diagnostic objects alongside the point estimate.
@@ -514,10 +465,6 @@ the Mean of the G-Functional. arXiv:1705.08582.
 Díaz I, Williams N, Hoffman KL, Schenck EJ (2021). Nonparametric Causal
 Effects Based on Longitudinal Modified Treatment Policies. *JASA*
 118(542):846–857.
-
-Díaz I, Hoffman KL, Hejazi NS (2023). Causal Survival Analysis under
-Competing Risks using Longitudinal Modified Treatment Policies. *Lifetime
-Data Analysis*. doi:10.1007/s10985-023-09606-7.
 
 Williams NT, Díaz I (2023). lmtp: An R package for estimating the causal
 effects of modified treatment policies. *Observational Studies*.

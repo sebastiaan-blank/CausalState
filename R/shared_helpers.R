@@ -314,7 +314,7 @@ cluster_se <- function(ic_by_id, id, cluster_col) {
   if (G <= 1L) return(stats::sd(ic0, na.rm = TRUE) / sqrt(N))
 
   S <- Sdt$S
-  sqrt((G / (G - 1)) * sum((S - mean(S))^2) / (N^2))
+  sqrt((G / (G - 1)) * sum(S^2) / (N^2))
 }
 
 get_folds_from_weights <- function(weights_dt, id, ids,
@@ -716,40 +716,6 @@ patch_shifted_design <- function(X_nat, D_shifted_tt, rows, a_names, tt, k, t_mi
   X_shf
 }
 
-#' Cluster bootstrap standard error from influence curve values
-#'
-#' Estimates a standard error by resampling clusters (with replacement) from
-#' the influence curve contributions. This is a post-estimation utility -- it
-#' operates on the IC values already stored in the estimator output, not on
-#' the full dataset.
-#'
-#' @param ic Numeric vector of per-subject influence curve values.
-#' @param cl Vector (same length as `ic`) of cluster identifiers. Subjects
-#'   with `NA` cluster are dropped.
-#' @param B Integer number of bootstrap replications. Default `2000L`.
-#'
-#' @return A single numeric value: the bootstrap standard error of the
-#'   cluster-mean influence curve.
-#'
-#' @noRd
-cluster_boot_se <- function(ic, cl, B = 2000L) {
-  ok <- is.finite(ic) & !is.na(cl)
-  ic <- ic[ok]; cl <- cl[ok]
-
-  dt <- data.table::data.table(cl = cl, ic = ic)
-  S  <- dt[, .(S = sum(ic), n = .N), by = cl]
-  G  <- nrow(S)
-  if (G < 2L) stop("Need >=2 clusters")
-
-  n_tot <- sum(S$n)
-
-  boot <- replicate(B, {
-    idx <- sample.int(G, size = G, replace = TRUE)
-    sum(S$S[idx]) / n_tot
-  })
-
-  stats::sd(boot)
-}
 
 extract_weights_dt <- function(weight_object) {
   if (is.data.frame(weight_object)) {
@@ -1070,6 +1036,8 @@ contrast <- function(fit1, fit0 = NULL, df = NULL, id_col = NULL, cluster = NULL
   if (is.null(cluster)) cluster <- if (!is.null(vi$cluster))  vi$cluster else NULL
 
   ic1 <- data.table::as.data.table(fit1$ic_df)[, .(id, ic1 = ic)]
+  if (anyDuplicated(ic1$id))
+    stop("contrast: fit1$ic_df has duplicate subject IDs.", call. = FALSE)
 
   obs_ref <- is.null(fit0)
   if (obs_ref) {
@@ -1086,12 +1054,23 @@ contrast <- function(fit1, fit0 = NULL, df = NULL, id_col = NULL, cluster = NULL
       by = id_col
     ]
     data.table::setnames(dt_y, id_col, "id")
+    if (anyDuplicated(dt_y$id))
+      stop("contrast: df has duplicate subject IDs after extracting y_col.", call. = FALSE)
     psi0 <- mean(dt_y$y)
     ic0  <- dt_y[, .(id, ic0 = y - psi0)]
   } else {
     psi0 <- fit0$psi
     ic0  <- data.table::as.data.table(fit0$ic_df)[, .(id, ic0 = ic)]
+    if (anyDuplicated(ic0$id))
+      stop("contrast: fit0$ic_df has duplicate subject IDs.", call. = FALSE)
   }
+
+  only1 <- sum(!ic1$id %in% ic0$id)
+  only0 <- sum(!ic0$id %in% ic1$id)
+  if (only1 > 0L || only0 > 0L)
+    stop(sprintf(
+      "contrast: ID mismatch — %d subject(s) in fit1 only, %d in reference only. Both objects must cover exactly the same subjects.",
+      only1, only0), call. = FALSE)
 
   merged <- merge(ic1, ic0, by = "id", all = FALSE)
   n <- nrow(merged)
@@ -1119,15 +1098,18 @@ contrast <- function(fit1, fit0 = NULL, df = NULL, id_col = NULL, cluster = NULL
       if (n_ok < 2L) return(NA_real_)
       return(stats::sd(ic_vec[ok]) / sqrt(n_ok))
     }
+    ic_c  <- ic_vec[ok] - mean(ic_vec[ok])
     cl_ok <- cl[ok]
-    dt    <- data.table::data.table(cl = cl_ok, ic = ic_vec[ok])
+    dt    <- data.table::data.table(cl = cl_ok, ic = ic_c)
     S     <- dt[, .(S = sum(ic)), by = cl]
     G     <- nrow(S)
     n_ok  <- sum(ok)
     if (G < 2L) return(stats::sd(ic_vec[ok]) / sqrt(n_ok))
-    Sbar  <- mean(S$S)
-    sqrt((G / (G - 1L)) * sum((S$S - Sbar)^2) / n_ok^2)
+    sqrt((G / (G - 1L)) * sum(S$S^2) / n_ok^2)
   }
+
+  se1   <- .se(merged$ic1)
+  se0   <- .se(merged$ic0)
 
   ic_rd <- merged$ic1 - merged$ic0
   rd    <- psi1 - psi0
@@ -1148,13 +1130,12 @@ contrast <- function(fit1, fit0 = NULL, df = NULL, id_col = NULL, cluster = NULL
   }
 
   ref_lbl <- if (obs_ref) "Observed" else "Control"
-  se0     <- if (obs_ref) .se(merged$ic0) else fit0$se
 
   if (gaussian) {
     tbl <- data.frame(
       Estimate   = c(psi1, psi0, rd),
-      `CI Lower` = c(psi1 - 1.96 * fit1$se, psi0 - 1.96 * se0, rd - 1.96 * se_rd),
-      `CI Upper` = c(psi1 + 1.96 * fit1$se, psi0 + 1.96 * se0, rd + 1.96 * se_rd),
+      `CI Lower` = c(psi1 - 1.96 * se1, psi0 - 1.96 * se0, rd - 1.96 * se_rd),
+      `CI Upper` = c(psi1 + 1.96 * se1, psi0 + 1.96 * se0, rd + 1.96 * se_rd),
       check.names = FALSE,
       row.names   = c("Intervention", ref_lbl, "Mean Difference")
     )
@@ -1162,14 +1143,14 @@ contrast <- function(fit1, fit0 = NULL, df = NULL, id_col = NULL, cluster = NULL
     tbl <- data.frame(
       Estimate   = c(psi1, psi0, rd, rr, or),
       `CI Lower` = c(
-        psi1 - 1.96 * fit1$se,
+        psi1 - 1.96 * se1,
         psi0 - 1.96 * se0,
         rd   - 1.96 * se_rd,
         exp(log(rr) - 1.96 * se_log_rr),
         exp(log(or) - 1.96 * se_log_or)
       ),
       `CI Upper` = c(
-        psi1 + 1.96 * fit1$se,
+        psi1 + 1.96 * se1,
         psi0 + 1.96 * se0,
         rd   + 1.96 * se_rd,
         exp(log(rr) + 1.96 * se_log_rr),
@@ -1184,6 +1165,8 @@ contrast <- function(fit1, fit0 = NULL, df = NULL, id_col = NULL, cluster = NULL
     psi1      = psi1,
     psi0      = psi0,
     obs_ref   = obs_ref,
+    se1       = se1,
+    se0       = se0,
     RD        = rd,
     se_RD     = se_rd,
     ci_RD     = c(rd - 1.96 * se_rd, rd + 1.96 * se_rd),

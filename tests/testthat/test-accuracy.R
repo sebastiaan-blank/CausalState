@@ -96,14 +96,10 @@ df_mc <- sim_dgp(n = 500000L, tmax = 5L, seed = 77L,
 last_rows_mc <- df_mc[!duplicated(df_mc$id, fromLast = TRUE), ]
 truth_main   <- mean(last_rows_mc$Y)
 
-# E[mort(d)]: any death during admission (mirrors sdr_competing/itmle_competing)
-death_by_id  <- tapply(df_mc$alive, df_mc$id, function(x) any(x == 0L))
-truth_mort   <- mean(death_by_id)
+rm(df_mc, last_rows_mc)
 
-rm(df_mc, last_rows_mc, death_by_id)
-
-message(sprintf("[accuracy] MC truth (delta=%.2f, n=500k): E[Y(d)]=%.4f  E[mort(d)]=%.4f",
-                DELTA, truth_main, truth_mort))
+message(sprintf("[accuracy] MC truth (delta=%.2f, n=500k): E[Y(d)]=%.4f",
+                DELTA, truth_main))
 
 # ── Shared fixtures ───────────────────────────────────────────────────────────
 
@@ -205,61 +201,6 @@ test_that("itmle estimate is within 3 SE of MC truth", {
   )
 
   check_accuracy(res, truth_main, "itmle")
-})
-
-# ── sdr_competing ─────────────────────────────────────────────────────────────
-
-test_that("sdr_competing estimate is within 3 SE of MC mortality truth", {
-  res <- CausalState:::sdr_competing(
-    DT              = df_est,
-    weights_dt      = wr$weights_dt,
-    policy_spec_fun = policy_fn,
-    id              = "id",
-    time            = "time",
-    alive           = "alive",
-    in_state        = "in_state",
-    baseline        = c("age", "sex"),
-    tv_names        = c("L1", "L2"),
-    a_names         = "A",
-    k               = 1L,
-    tmax            = 5L,
-    seed            = 1L,
-    sl_q            = sl_fast,
-    inner_v         = 2L,
-    trim            = 0.99,
-    parallel        = FALSE
-  )
-
-  check_accuracy(res, truth_mort, "sdr_competing")
-})
-
-# ── itmle_competing ───────────────────────────────────────────────────────────
-
-test_that("itmle_competing estimate is within 3 SE of MC mortality truth", {
-  res <- CausalState:::itmle_competing(
-    DT               = df_est,
-    weights_dt       = wr$weights_dt,
-    policy_spec_fun  = policy_fn,
-    id               = "id",
-    time             = "time",
-    alive            = "alive",
-    in_state         = "in_state",
-    baseline         = c("age", "sex"),
-    tv_names         = c("L1", "L2"),
-    a_names          = "A",
-    k                = 1L,
-    tmax             = 5L,
-    seed             = 1L,
-    sl_q             = sl_fast,
-    sl_tmle          = sl_tgt_glm,
-    inner_v          = 2L,
-    v_target_itmle   = 2L,
-    v_sl_inner_itmle = 2L,
-    trim             = 0.99,
-    parallel         = FALSE
-  )
-
-  check_accuracy(res, truth_mort, "itmle_competing")
 })
 
 # ── qreg ──────────────────────────────────────────────────────────────────────

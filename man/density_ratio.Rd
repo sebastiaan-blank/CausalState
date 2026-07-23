@@ -284,6 +284,9 @@ Diaz I, Williams N, Hoffman KL, Schenck EJ (2021). Nonparametric Causal
 Effects Based on Longitudinal Modified Treatment Policies. \emph{JASA}
 118(542):846-857.
 
+Wu C, Benkeser D (2024). Nonparametric Efficient Estimation of Marginal
+Structural Models using Targeted Machine Learning. arXiv:2408.10847.
+
 Williams NT, Diaz I (2023). lmtp: An R package for estimating the causal
 effects of modified treatment policies. \emph{Observational Studies}.
 }

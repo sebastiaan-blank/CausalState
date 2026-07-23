@@ -196,6 +196,9 @@ dr_from_prob <- function(p_mat, beta, bounds, denom_cap) {
 #' Effects Based on Longitudinal Modified Treatment Policies. *JASA*
 #' 118(542):846-857.
 #'
+#' Wu C, Benkeser D (2024). Nonparametric Efficient Estimation of Marginal
+#' Structural Models using Targeted Machine Learning. arXiv:2408.10847.
+#'
 #' Williams NT, Diaz I (2023). lmtp: An R package for estimating the causal
 #' effects of modified treatment policies. *Observational Studies*.
 #'
