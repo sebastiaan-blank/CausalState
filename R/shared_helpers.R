@@ -931,40 +931,57 @@ expand_to_horizon <- function(DT, id, time, alive, in_state, tmax) {
 
 
 # ------------------------------------------------------------------
-# contrast -- risk difference and risk ratio from two fitted estimators
+# contrast -- risk difference, risk ratio, and odds ratio from two fitted estimators
 # ------------------------------------------------------------------
 
-#' Compute risk difference and risk ratio from two fitted estimators
+#' Compute contrasts between two fitted estimators
 #'
-#' Takes an intervention-arm and a control-arm fit (from [sdr()] or [itmle()])
-#' and returns the risk difference (RD) and risk ratio (RR) with standard
-#' errors derived from the per-subject influence curves.
+#' Takes an intervention-arm fit and a reference (from [sdr()] or [itmle()], or the
+#' crude observed mean) and returns the risk difference (RD), risk ratio (RR), and
+#' odds ratio (OR) with standard errors derived from the per-subject influence curves.
 #'
-#' Standard errors use the delta method:
+#' All standard errors use the delta method on the efficient influence curves:
 #' \itemize{
-#'   \item RD: \eqn{IC_{RD,i} = IC_{1,i} - IC_{0,i}}
-#'   \item RR: log-scale IC \eqn{IC_{\log RR,i} = IC_{1,i}/\psi_1 - IC_{0,i}/\psi_0};
-#'     the 95% CI is exponentiated from the log scale for positive coverage.
+#'   \item RD: \eqn{IC_{RD,i} = IC_{1,i} - IC_{0,i}}; Wald CI on the natural scale.
+#'   \item RR: \eqn{IC_{\log RR,i} = IC_{1,i}/\psi_1 - IC_{0,i}/\psi_0};
+#'     SE and 95\% CI computed on the log scale, then exponentiated.
+#'   \item OR: \eqn{IC_{\log OR,i} = IC_{1,i}/(\psi_1(1-\psi_1)) - IC_{0,i}/(\psi_0(1-\psi_0))};
+#'     SE and 95\% CI computed on the log scale, then exponentiated.
 #' }
+#' RR and OR are omitted for Gaussian outcomes.
+#'
+#' When \code{fit0 = NULL} and \code{y_col} is supplied, the reference is the
+#' crude observed mean of \code{y_col} (last non-missing value per subject).
+#' The influence curve for the observed mean is \eqn{IC_{0,i} = Y_i - \bar{Y}}.
+#' This gives a simple descriptive contrast against the raw data rather than a
+#' causal comparison between two counterfactual estimates.
 #'
 #' @param fit1 Fitted object (intervention arm): output of [sdr()] or [itmle()].
 #'   Must contain \code{$psi} and \code{$ic_df} with columns \code{id} and \code{ic}.
-#' @param fit0 Fitted object (control arm), same type as \code{fit1}.
-#' @param df Optional long-format data frame. Required when \code{cluster}
-#'   is a column name.
-#' @param id_col Name of the subject-id column in \code{df}. Default
-#'   \code{"id"}. Only used when \code{cluster} is provided.
+#' @param fit0 Fitted object (reference arm), same type as \code{fit1}, or
+#'   \code{NULL} to use the crude observed mean as the reference (requires
+#'   \code{df} and \code{y_col}).
+#' @param df Optional long-format data frame. Required when \code{cluster} is
+#'   specified, or when \code{fit0 = NULL}.
+#' @param id_col Name of the subject-id column in \code{df}. Defaults to the
+#'   value stored in \code{fit1$settings}.
 #' @param cluster \code{NULL} (default, IID standard errors), or a single
-#'   character string naming a column in \code{df} that gives the cluster
-#'   label for each subject.
+#'   character string naming a column in \code{df} for cluster-robust SEs.
+#' @param y_col Name of the outcome column in \code{df}. Required when
+#'   \code{fit0 = NULL}; ignored otherwise.
 #'
-#' @return A list with:
+#' @return A list of class \code{"CausalState_contrast"} with:
 #'   \describe{
-#'     \item{\code{psi1}, \code{psi0}}{Point estimates for each arm.}
-#'     \item{\code{RD}, \code{se_RD}, \code{ci_RD}}{Risk difference and 95% Wald CI.}
+#'     \item{\code{psi1}, \code{psi0}}{Point estimates.}
+#'     \item{\code{obs_ref}}{Logical; \code{TRUE} when the reference is the
+#'       observed mean rather than a second estimator fit.}
+#'     \item{\code{RD}, \code{se_RD}, \code{ci_RD}}{Risk difference and 95\% Wald CI.}
 #'     \item{\code{RR}, \code{se_log_RR}, \code{ci_RR}}{Risk ratio, SE on log scale,
-#'       and 95% CI (log-scale, then exponentiated).}
+#'       95\% CI (exponentiated from log scale). \code{NULL} for Gaussian outcomes.}
+#'     \item{\code{OR}, \code{se_log_OR}, \code{ci_OR}}{Odds ratio, SE on log scale,
+#'       95\% CI (exponentiated). \code{NULL} for Gaussian outcomes.}
 #'     \item{\code{n}}{Number of matched subjects.}
+#'     \item{\code{table}}{Summary data frame printed by default.}
 #'   }
 #'
 #' @seealso [sdr()], [itmle()]
@@ -973,7 +990,6 @@ expand_to_horizon <- function(DT, id, time, alive, in_state, tmax) {
 #' \donttest{
 #' library(SuperLearner)
 #'
-#' # ICU-like DGP: patients die, discharge, or remain in state each time point
 #' sim_ex <- function(n = 800L, tmax = 5L) {
 #'   set.seed(42L)
 #'   rows <- vector("list", n)
@@ -1007,10 +1023,7 @@ expand_to_horizon <- function(DT, id, time, alive, in_state, tmax) {
 #' df <- sim_ex()
 #' sl_lib <- c("SL.mean", "SL.glm")
 #'
-#' # Natural-course policy (no shift)
 #' policy_nat <- function(D_block, t, a_names) D_block[, ..a_names, drop = FALSE]
-#'
-#' # Shifted policy (delta = 0.3)
 #' policy_sft <- function(D_block, t, a_names) {
 #'   out <- D_block[, ..a_names, drop = FALSE]
 #'   out[[a_names[1]]] <- pmin(D_block[[a_names[1]]] + 0.3, 1)
@@ -1038,32 +1051,52 @@ expand_to_horizon <- function(DT, id, time, alive, in_state, tmax) {
 #' res_sft <- do.call(sdr, c(sdr_args,
 #'   list(weight_object = wr_sft, policy_spec_fun = policy_sft)))
 #'
+#' # Two-estimator contrast (causal RD/RR/OR)
 #' ctr <- contrast(res_sft, res_nat)
-#' ctr$RD
-#' ctr$ci_RD
-#' ctr$RR
+#' ctr$RD; ctr$ci_RD; ctr$RR; ctr$OR
+#'
+#' # Observed-mean reference (descriptive)
+#' ctr_obs <- contrast(res_sft, df = df, y_col = "Y")
+#' ctr_obs$table
 #' }
 #'
 #' @export
-contrast <- function(fit1, fit0, df = NULL, id_col = NULL, cluster = NULL) {
+contrast <- function(fit1, fit0 = NULL, df = NULL, id_col = NULL, cluster = NULL,
+                     y_col = NULL) {
   psi1 <- fit1$psi
-  psi0 <- fit0$psi
 
-  # Auto-read id and cluster from fit1 settings if not overridden
   vi <- fit1$settings$variable_info
   if (is.null(id_col))  id_col  <- if (!is.null(vi$id))      vi$id      else "id"
   if (is.null(cluster)) cluster <- if (!is.null(vi$cluster))  vi$cluster else NULL
 
-
-
   ic1 <- data.table::as.data.table(fit1$ic_df)[, .(id, ic1 = ic)]
-  ic0 <- data.table::as.data.table(fit0$ic_df)[, .(id, ic0 = ic)]
-  merged <- merge(ic1, ic0, by = "id", all = FALSE)
 
+  obs_ref <- is.null(fit0)
+  if (obs_ref) {
+    if (is.null(df) || is.null(y_col))
+      stop("contrast: provide fit0, or df + y_col for an observed-mean reference.",
+           call. = FALSE)
+    if (!id_col %in% names(df))
+      stop(sprintf("contrast: id_col '%s' not found in df.", id_col), call. = FALSE)
+    if (!y_col %in% names(df))
+      stop(sprintf("contrast: y_col '%s' not found in df.", y_col), call. = FALSE)
+    dt_y <- data.table::as.data.table(df)[
+      !is.na(get(y_col)),
+      .(y = as.numeric(get(y_col))[.N]),
+      by = id_col
+    ]
+    data.table::setnames(dt_y, id_col, "id")
+    psi0 <- mean(dt_y$y)
+    ic0  <- dt_y[, .(id, ic0 = y - psi0)]
+  } else {
+    psi0 <- fit0$psi
+    ic0  <- data.table::as.data.table(fit0$ic_df)[, .(id, ic0 = ic)]
+  }
+
+  merged <- merge(ic1, ic0, by = "id", all = FALSE)
   n <- nrow(merged)
   if (n == 0L) stop("contrast: no overlapping subject IDs between fit1 and fit0.", call. = FALSE)
 
-  # Build cluster vector aligned to merged rows
   cl <- NULL
   if (!is.null(cluster)) {
     if (is.null(df))
@@ -1074,10 +1107,9 @@ contrast <- function(fit1, fit0, df = NULL, id_col = NULL, cluster = NULL) {
       stop(sprintf("contrast: id_col '%s' not found in df.", id_col), call. = FALSE)
     if (!cluster %in% names(df))
       stop(sprintf("contrast: cluster column '%s' not found in df.", cluster), call. = FALSE)
-
-    cl_tbl  <- unique(df[, c(id_col, cluster), drop = FALSE])
-    cl_map  <- setNames(cl_tbl[[cluster]], as.character(cl_tbl[[id_col]]))
-    cl      <- cl_map[as.character(merged$id)]
+    cl_tbl <- unique(df[, c(id_col, cluster), drop = FALSE])
+    cl_map <- setNames(cl_tbl[[cluster]], as.character(cl_tbl[[id_col]]))
+    cl     <- cl_map[as.character(merged$id)]
   }
 
   .se <- function(ic_vec) {
@@ -1097,56 +1129,70 @@ contrast <- function(fit1, fit0, df = NULL, id_col = NULL, cluster = NULL) {
     sqrt((G / (G - 1L)) * sum((S$S - Sbar)^2) / n_ok^2)
   }
 
-  # Risk difference
   ic_rd <- merged$ic1 - merged$ic0
   rd    <- psi1 - psi0
   se_rd <- .se(ic_rd)
 
-  # Risk ratio -- SE and CI on log scale
-  ic_log_rr <- merged$ic1 / psi1 - merged$ic0 / psi0
-  rr         <- psi1 / psi0
-  se_log_rr  <- .se(ic_log_rr)
-
   gaussian <- identical(fit1$settings$outcome_family, "gaussian") ||
-              identical(fit0$settings$outcome_family, "gaussian")
+    (!obs_ref && identical(fit0$settings$outcome_family, "gaussian"))
+
+  rr <- se_log_rr <- or <- se_log_or <- NULL
+  if (!gaussian) {
+    ic_log_rr <- merged$ic1 / psi1 - merged$ic0 / psi0
+    rr         <- psi1 / psi0
+    se_log_rr  <- .se(ic_log_rr)
+
+    ic_log_or <- merged$ic1 / (psi1 * (1 - psi1)) - merged$ic0 / (psi0 * (1 - psi0))
+    or         <- (psi1 / (1 - psi1)) / (psi0 / (1 - psi0))
+    se_log_or  <- .se(ic_log_or)
+  }
+
+  ref_lbl <- if (obs_ref) "Observed" else "Control"
+  se0     <- if (obs_ref) .se(merged$ic0) else fit0$se
 
   if (gaussian) {
     tbl <- data.frame(
       Estimate   = c(psi1, psi0, rd),
-      `CI Lower` = c(psi1 - 1.96 * fit1$se, psi0 - 1.96 * fit0$se, rd - 1.96 * se_rd),
-      `CI Upper` = c(psi1 + 1.96 * fit1$se, psi0 + 1.96 * fit0$se, rd + 1.96 * se_rd),
+      `CI Lower` = c(psi1 - 1.96 * fit1$se, psi0 - 1.96 * se0, rd - 1.96 * se_rd),
+      `CI Upper` = c(psi1 + 1.96 * fit1$se, psi0 + 1.96 * se0, rd + 1.96 * se_rd),
       check.names = FALSE,
-      row.names   = c("Intervention", "Control", "Mean Difference")
+      row.names   = c("Intervention", ref_lbl, "Mean Difference")
     )
   } else {
     tbl <- data.frame(
-      Estimate   = c(psi1, psi0, rd, rr),
+      Estimate   = c(psi1, psi0, rd, rr, or),
       `CI Lower` = c(
         psi1 - 1.96 * fit1$se,
-        psi0 - 1.96 * fit0$se,
+        psi0 - 1.96 * se0,
         rd   - 1.96 * se_rd,
-        exp(log(rr) - 1.96 * se_log_rr)
+        exp(log(rr) - 1.96 * se_log_rr),
+        exp(log(or) - 1.96 * se_log_or)
       ),
       `CI Upper` = c(
         psi1 + 1.96 * fit1$se,
-        psi0 + 1.96 * fit0$se,
+        psi0 + 1.96 * se0,
         rd   + 1.96 * se_rd,
-        exp(log(rr) + 1.96 * se_log_rr)
+        exp(log(rr) + 1.96 * se_log_rr),
+        exp(log(or) + 1.96 * se_log_or)
       ),
       check.names = FALSE,
-      row.names   = c("Intervention", "Control", "Risk Difference", "Risk Ratio")
+      row.names   = c("Intervention", ref_lbl, "Risk Difference", "Risk Ratio", "Odds Ratio")
     )
   }
 
   out <- list(
     psi1      = psi1,
     psi0      = psi0,
+    obs_ref   = obs_ref,
     RD        = rd,
     se_RD     = se_rd,
     ci_RD     = c(rd - 1.96 * se_rd, rd + 1.96 * se_rd),
-    RR        = if (gaussian) NULL else rr,
-    se_log_RR = if (gaussian) NULL else se_log_rr,
-    ci_RR     = if (gaussian) NULL else exp(log(rr) + c(-1.96, 1.96) * se_log_rr),
+    RR        = rr,
+    se_log_RR = se_log_rr,
+    ci_RR     = if (is.null(rr)) NULL else exp(log(rr) + c(-1.96, 1.96) * se_log_rr),
+    OR        = or,
+    se_log_OR = se_log_or,
+    ci_OR     = if (is.null(or)) NULL else exp(log(or) + c(-1.96, 1.96) * se_log_or),
     n         = n,
     gaussian  = gaussian,
     table     = tbl
