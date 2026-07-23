@@ -600,20 +600,6 @@ sl_meta <- function(sl_res, fold, t, component, n_train, n_val) {
 }
 
 
-eif <- function(density_ratios, shifted, natural, time, time_horizon) {
-  if (missing(time_horizon)) time_horizon <- ncol(density_ratios)
-  if (missing(time)) time <- 1L
-
-  res <- shifted[, (time + 1):(time_horizon + 1), drop = FALSE] -
-    natural[,  time:time_horizon,              drop = FALSE]
-
-  zz <- density_ratios[, time:time_horizon, drop = FALSE]
-  w  <- t(apply(zz, 1L, cumprod))
-  if (ncol(w) > ncol(zz)) w <- t(w)
-
-  rowSums(w * res, na.rm = TRUE) + shifted[, time]
-}
-
 
 apply_absorb_branch <- function(q_vec, D_block, t, branch, scale_info, absorb_rules) {
   if (!length(absorb_rules)) return(as.numeric(q_vec))
