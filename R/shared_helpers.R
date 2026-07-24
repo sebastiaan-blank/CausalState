@@ -766,9 +766,15 @@ overwrite_policy_history_for_Q <- function(
   spec  <- policy_spec_fun(block, t, a_names)
   if (is.null(spec) || !length(spec)) return(DT)
   
+  ensure_double <- function(DT, a, vals) {
+    if (is.integer(DT[[a]]) && is.double(vals))
+      data.table::set(DT, j = a, value = as.double(DT[[a]]))
+  }
+
   if (is.data.frame(spec)) {
     for (a in intersect(a_names, names(spec))) {
       vals <- suppressWarnings(as.numeric(spec[[a]]))
+      ensure_double(DT, a, vals)
       DT[rows_tt, (a) := vals]
     }
   } else {
@@ -776,6 +782,7 @@ overwrite_policy_history_for_Q <- function(
       s <- spec[[a]]
       if (is.atomic(s) && is.numeric(s)) {
         vals <- if (length(s) == 1L) rep(as.numeric(s), nrow(block)) else as.numeric(s)
+        ensure_double(DT, a, vals)
         DT[rows_tt, (a) := vals]
       } else if (is.list(s)) {
         m <- if (!is.null(s$idx) && length(s$idx) == nrow(block)) as.logical(s$idx) else rep(TRUE, nrow(block))
@@ -783,6 +790,7 @@ overwrite_policy_history_for_Q <- function(
         if (!any(m)) next
         val_any <- if (!is.null(s$value)) s$value else if (!is.null(s$mean)) s$mean else s$setto
         vals <- if (length(val_any) == 1L) rep(as.numeric(val_any), nrow(block)) else as.numeric(val_any)
+        ensure_double(DT, a, vals)
         idx  <- rows_tt[which(m)]
         DT[idx, (a) := vals[m]]
       }
