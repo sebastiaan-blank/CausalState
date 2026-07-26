@@ -389,7 +389,7 @@ density_ratio <- function(
 
   fit_one_t <- function(t) {
 
-    sl_rows  <- vector("list", 0L)
+    sl_rows   <- vector("list", 0L)
     diag_rows <- vector("list", 0L)
 
     stk <- build_stack(
