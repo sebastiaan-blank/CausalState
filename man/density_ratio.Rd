@@ -153,6 +153,15 @@ or GPU-based learners (e.g. xgboost with CUDA, OpenMP-based methods) may
 crash in the child processes and should be avoided or limited to one thread.
 }
 
+\section{Sample size requirements}{
+
+This package targets large longitudinal datasets -- thousands of subjects
+-- typical of ICU, ward, or emergency department cohorts.  Stable density
+ratio estimation requires adequate treatment-variation at every time point
+in each cross-fitting fold.  All built-in examples use a minimum of
+2,000 subjects.
+}
+
 \examples{
 \donttest{
 library(SuperLearner)

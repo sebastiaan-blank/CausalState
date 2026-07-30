@@ -727,6 +727,16 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #' Effects Based on Longitudinal Modified Treatment Policies. *JASA*
 #' 118(542):846-857.
 #'
+#' @section Sample size requirements:
+#'   This package targets large longitudinal datasets -- thousands of subjects
+#'   -- typical of ICU, ward, or emergency department cohorts.  The
+#'   doubly-robust estimators require adequate observations within each branch
+#'   (alive, in-state, exited) at every time point for the SuperLearner
+#'   component models to be stable.  `pool_g_death` and `pool_q_exit` borrow
+#'   strength across time steps when exit events are sparse, but there must
+#'   still be sufficient events across the pooled structure.  All built-in
+#'   examples use a minimum of 2,000 subjects.
+#'
 #' @seealso [density_ratio()], [sdr()], [contrast()], [absorb_rule()], [sl_itmle]
 #'
 #' @examples
@@ -814,7 +824,7 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #' \donttest{
 #' library(SuperLearner)
 #'
-#' sim_multi <- function(n = 800L, tmax = 5L) {
+#' sim_multi <- function(n = 2000L, tmax = 5L) {
 #'   set.seed(42L)
 #'   rows <- vector("list", n)
 #'   for (i in seq_len(n)) {

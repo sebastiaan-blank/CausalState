@@ -1,7 +1,7 @@
 #' Sequential Doubly Robust (SDR) estimator for longitudinal MTPs
 #'
 #' Estimates the mean counterfactual outcome under a modified treatment policy
-#' (MTP) using the LMTP-SDR estimator of Díaz et al. (2021), which extends the
+#' (MTP) using the LMTP-SDR estimator of Diaz et al. (2021), which extends the
 #' SDR construction of Luedtke et al. (2017) to general MTPs via density-ratio
 #' weighting.  Starting from terminal pseudo-outcomes and working backward in
 #' time, the estimator propagates an EIF-corrected pseudo-outcome through a
@@ -57,7 +57,7 @@
 #' @param y_bounds Optional numeric vector of length 2, `c(min, max)`.
 #'   For `outcome_family = "gaussian"`, all outcome values are internally
 #'   scaled to `[0, 1]` before model fitting and back-transformed to the
-#'   original scale for the final estimate — this keeps Q-model predictions
+#'   original scale for the final estimate -- this keeps Q-model predictions
 #'   bounded and stabilises the recursive regression.  By default (`NULL`)
 #'   the bounds are taken from the observed range of `y` in `df`
 #'   (`min(y)`, `max(y)`).  Supply explicit bounds to widen or narrow this
@@ -93,7 +93,7 @@
 #' @param sl_workers Integer. Workers for parallel learner evaluation within
 #'   each SuperLearner call via [SuperLearner::mcSuperLearner()] (fork-based;
 #'   Linux/Mac only). Ignored when `parallel = FALSE`. Default `NULL`
-#'   (sequential). **Note:** incompatible with `dbarts`/`SL.dbarts` learners —
+#'   (sequential). **Note:** incompatible with `dbarts`/`SL.dbarts` learners --
 #'   dbarts' C-level RNG state does not survive forking. Remove dbarts from
 #'   `sl_remain`/`sl_death`/`sl_y`/`sl_recursive` when `sl_workers` is set.
 #'
@@ -113,7 +113,7 @@
 #' @param pool_g_death Logical. If `TRUE`, fit a single pooled
 #'   `g_death_exit` model across all time points (with time as a covariate)
 #'   rather than a separate model per time point. Useful when deaths are sparse
-#'   at individual time steps — pooling borrows strength across time and avoids
+#'   at individual time steps -- pooling borrows strength across time and avoids
 #'   near-empty training sets in late time points where mortality is rare.
 #'   Use with caution if the death hazard changes substantially over time, as
 #'   the pooled model must then capture that trend through the time covariate.
@@ -124,8 +124,8 @@
 #'   when exit events (deaths + discharges) are sparse at individual time steps.
 #'   When both `pool_g_death` and `pool_q_exit` are `TRUE` and `parallel = TRUE`
 #'   with `reg_workers > 1`, the two pre-loop fits run simultaneously.
-#'   Predictions are made in two passes — once with `exit_status = 1`
-#'   (death branch) and once with `exit_status = 0` (discharge branch) — on
+#'   Predictions are made in two passes -- once with `exit_status = 1`
+#'   (death branch) and once with `exit_status = 0` (discharge branch) -- on
 #'   all at-risk subjects, not just those who exited. Default `FALSE`.
 #'
 #' @return A named list. Top-level elements:
@@ -137,7 +137,7 @@
 #'       estimator and assumes `E[IC] = 0`, which holds exactly under the natural
 #'       course and approximately under an MTP when the Q and g models are
 #'       well-specified.}
-#'     \item{`ci`}{95% Wald confidence interval: `psi ± 1.96 * se`.}
+#'     \item{`ci`}{95% Wald confidence interval: `psi +/- 1.96 * se`.}
 #'     \item{`Y_obs`}{Observed mean outcome `mean(Y)` across all subjects.
 #'       Quick sanity check: under the natural-course policy `psi` should
 #'       be close to `Y_obs`; a large gap suggests a data or model issue.}
@@ -166,7 +166,7 @@
 #'
 #'   **Diagnostics** (`$diagnostics`): model fit and calibration summaries.
 #'   \describe{
-#'     \item{`$recursion_diag`}{`data.table`, one row per fold × time point.
+#'     \item{`$recursion_diag`}{`data.table`, one row per fold x time point.
 #'       Tracks g/Q predictions (training side) under natural and shifted
 #'       policy, pseudo-outcome statistics before and after the EIF update,
 #'       EIF update magnitude (`delta_mean`, `delta_q95_abs`), correlation
@@ -174,7 +174,7 @@
 #'       `Q_shf_vl_mean`) for comparing training vs. validation trajectories.}
 #'     \item{`$branch_cal`}{Per-fold, per-time calibration table: empirical
 #'       mean target vs. mean prediction for `g_remain`, `g_death`, and
-#'       `Q_rem`. The `Q_rem` target is the pseudo-outcome mean — directly
+#'       `Q_rem`. The `Q_rem` target is the pseudo-outcome mean -- directly
 #'       interpretable as a calibration check only under the natural-course
 #'       policy.}
 #'     \item{`$sl_summary`}{`data.table` of SuperLearner learner weights,
@@ -215,12 +215,22 @@
 #'   way).
 #'
 #' @references
-#' Díaz I, Williams N, Hoffman KL, Schenck EJ (2021). Nonparametric Causal
+#' Diaz I, Williams N, Hoffman KL, Schenck EJ (2021). Nonparametric Causal
 #' Effects Based on Longitudinal Modified Treatment Policies. *JASA*
-#' 118(542):846–857.
+#' 118(542):846--857.
 #'
 #' Luedtke AR, Sofrygin O, van der Laan MJ, Carone M (2017). Sequential
 #' Double Robustness in Right-Censored Longitudinal Models. arXiv:1705.02459.
+#'
+#' @section Sample size requirements:
+#'   This package targets large longitudinal datasets -- thousands of subjects
+#'   -- typical of ICU, ward, or emergency department cohorts.  The
+#'   doubly-robust estimators require adequate observations within each branch
+#'   (alive, in-state, exited) at every time point for the SuperLearner
+#'   component models to be stable.  `pool_g_death` and `pool_q_exit` borrow
+#'   strength across time steps when exit events are sparse, but there must
+#'   still be sufficient events across the pooled structure.  All built-in
+#'   examples use a minimum of 2,000 subjects.
 #'
 #' @seealso [density_ratio()], [itmle()], [contrast()], [absorb_rule()]
 #'

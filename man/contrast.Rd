@@ -39,11 +39,11 @@ A list of class \code{"CausalState_contrast"} with:
 \item{\code{psi1}, \code{psi0}}{Point estimates.}
 \item{\code{obs_ref}}{Logical; \code{TRUE} when the reference is the
 observed mean rather than a second estimator fit.}
-\item{\code{RD}, \code{se_RD}, \code{ci_RD}}{Risk difference and 95\\% Wald CI.}
+\item{\code{RD}, \code{se_RD}, \code{ci_RD}}{Risk difference and 95 pct Wald CI.}
 \item{\code{RR}, \code{se_log_RR}, \code{ci_RR}}{Risk ratio, SE on log scale,
-95\\% CI (exponentiated from log scale). \code{NULL} for Gaussian outcomes.}
+and 95 pct CI (exponentiated). \code{NULL} for Gaussian outcomes.}
 \item{\code{OR}, \code{se_log_OR}, \code{ci_OR}}{Odds ratio, SE on log scale,
-95\\% CI (exponentiated). \code{NULL} for Gaussian outcomes.}
+and 95 pct CI (exponentiated). \code{NULL} for Gaussian outcomes.}
 \item{\code{n}}{Number of matched subjects.}
 \item{\code{table}}{Summary data frame printed by default.}
 }
@@ -74,7 +74,7 @@ causal comparison between two counterfactual estimates.
 \donttest{
 library(SuperLearner)
 
-sim_ex <- function(n = 800L, tmax = 5L) {
+sim_ex <- function(n = 2000L, tmax = 5L) {
   set.seed(42L)
   rows <- vector("list", n)
   for (i in seq_len(n)) {

@@ -109,7 +109,7 @@ Required.}
 \item{y_bounds}{Optional numeric vector of length 2, \code{c(min, max)}.
 For \code{outcome_family = "gaussian"}, all outcome values are internally
 scaled to \verb{[0, 1]} before model fitting and back-transformed to the
-original scale for the final estimate — this keeps Q-model predictions
+original scale for the final estimate -- this keeps Q-model predictions
 bounded and stabilises the recursive regression.  By default (\code{NULL})
 the bounds are taken from the observed range of \code{y} in \code{df}
 (\code{min(y)}, \code{max(y)}).  Supply explicit bounds to widen or narrow this
@@ -155,7 +155,7 @@ regression parallelism.}
 \item{sl_workers}{Integer. Workers for parallel learner evaluation within
 each SuperLearner call via \code{\link[SuperLearner:mcSuperLearner]{SuperLearner::mcSuperLearner()}} (fork-based;
 Linux/Mac only). Ignored when \code{parallel = FALSE}. Default \code{NULL}
-(sequential). \strong{Note:} incompatible with \code{dbarts}/\code{SL.dbarts} learners —
+(sequential). \strong{Note:} incompatible with \code{dbarts}/\code{SL.dbarts} learners --
 dbarts' C-level RNG state does not survive forking. Remove dbarts from
 \code{sl_remain}/\code{sl_death}/\code{sl_y}/\code{sl_recursive} when \code{sl_workers} is set.}
 
@@ -171,7 +171,7 @@ the fold structure for SE computation. Default \code{FALSE}.}
 \item{pool_g_death}{Logical. If \code{TRUE}, fit a single pooled
 \code{g_death_exit} model across all time points (with time as a covariate)
 rather than a separate model per time point. Useful when deaths are sparse
-at individual time steps — pooling borrows strength across time and avoids
+at individual time steps -- pooling borrows strength across time and avoids
 near-empty training sets in late time points where mortality is rare.
 Use with caution if the death hazard changes substantially over time, as
 the pooled model must then capture that trend through the time covariate.
@@ -183,8 +183,8 @@ than a separate model per time point. Complements \code{pool_g_death}: useful
 when exit events (deaths + discharges) are sparse at individual time steps.
 When both \code{pool_g_death} and \code{pool_q_exit} are \code{TRUE} and \code{parallel = TRUE}
 with \code{reg_workers > 1}, the two pre-loop fits run simultaneously.
-Predictions are made in two passes — once with \code{exit_status = 1}
-(death branch) and once with \code{exit_status = 0} (discharge branch) — on
+Predictions are made in two passes -- once with \code{exit_status = 1}
+(death branch) and once with \code{exit_status = 0} (discharge branch) -- on
 all at-risk subjects, not just those who exited. Default \code{FALSE}.}
 }
 \value{
@@ -197,7 +197,7 @@ a cluster variable is supplied). This is the standard centered variance
 estimator and assumes \code{E[IC] = 0}, which holds exactly under the natural
 course and approximately under an MTP when the Q and g models are
 well-specified.}
-\item{\code{ci}}{95\% Wald confidence interval: \verb{psi ± 1.96 * se}.}
+\item{\code{ci}}{95\% Wald confidence interval: \verb{psi +/- 1.96 * se}.}
 \item{\code{Y_obs}}{Observed mean outcome \code{mean(Y)} across all subjects.
 Quick sanity check: under the natural-course policy \code{psi} should
 be close to \code{Y_obs}; a large gap suggests a data or model issue.}
@@ -226,7 +226,7 @@ substantially beyond the raw plug-in.}
 
 \strong{Diagnostics} (\verb{$diagnostics}): model fit and calibration summaries.
 \describe{
-\item{\verb{$recursion_diag}}{\code{data.table}, one row per fold × time point.
+\item{\verb{$recursion_diag}}{\code{data.table}, one row per fold x time point.
 Tracks g/Q predictions (training side) under natural and shifted
 policy, pseudo-outcome statistics before and after the EIF update,
 EIF update magnitude (\code{delta_mean}, \code{delta_q95_abs}), correlation
@@ -234,7 +234,7 @@ diagnostics, and validation-side mixture Q means (\code{Q_nat_vl_mean},
 \code{Q_shf_vl_mean}) for comparing training vs. validation trajectories.}
 \item{\verb{$branch_cal}}{Per-fold, per-time calibration table: empirical
 mean target vs. mean prediction for \code{g_remain}, \code{g_death}, and
-\code{Q_rem}. The \code{Q_rem} target is the pseudo-outcome mean — directly
+\code{Q_rem}. The \code{Q_rem} target is the pseudo-outcome mean -- directly
 interpretable as a calibration check only under the natural-course
 policy.}
 \item{\verb{$sl_summary}}{\code{data.table} of SuperLearner learner weights,
@@ -267,7 +267,7 @@ density ratios.}
 }
 \description{
 Estimates the mean counterfactual outcome under a modified treatment policy
-(MTP) using the LMTP-SDR estimator of Díaz et al. (2021), which extends the
+(MTP) using the LMTP-SDR estimator of Diaz et al. (2021), which extends the
 SDR construction of Luedtke et al. (2017) to general MTPs via density-ratio
 weighting.  Starting from terminal pseudo-outcomes and working backward in
 time, the estimator propagates an EIF-corrected pseudo-outcome through a
@@ -296,6 +296,18 @@ cannot detect model misspecification.  To assess model calibration use
 \code{diagnostics$branch_cal}, \code{fold_diag}, and \code{sl_summary}, or run
 \code{\link[=itmle]{itmle()}} under the natural course (iTMLE does not collapse in the same
 way).
+}
+
+\section{Sample size requirements}{
+
+This package targets large longitudinal datasets -- thousands of subjects
+-- typical of ICU, ward, or emergency department cohorts.  The
+doubly-robust estimators require adequate observations within each branch
+(alive, in-state, exited) at every time point for the SuperLearner
+component models to be stable.  \code{pool_g_death} and \code{pool_q_exit} borrow
+strength across time steps when exit events are sparse, but there must
+still be sufficient events across the pooled structure.  All built-in
+examples use a minimum of 2,000 subjects.
 }
 
 \examples{
@@ -466,9 +478,9 @@ res2$se
 
 }
 \references{
-Díaz I, Williams N, Hoffman KL, Schenck EJ (2021). Nonparametric Causal
+Diaz I, Williams N, Hoffman KL, Schenck EJ (2021). Nonparametric Causal
 Effects Based on Longitudinal Modified Treatment Policies. \emph{JASA}
-118(542):846–857.
+118(542):846--857.
 
 Luedtke AR, Sofrygin O, van der Laan MJ, Carone M (2017). Sequential
 Double Robustness in Right-Censored Longitudinal Models. arXiv:1705.02459.

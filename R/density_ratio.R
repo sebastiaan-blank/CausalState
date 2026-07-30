@@ -202,6 +202,13 @@ dr_from_prob <- function(p_mat, beta, bounds, denom_cap) {
 #' Williams NT, Diaz I (2023). lmtp: An R package for estimating the causal
 #' effects of modified treatment policies. *Observational Studies*.
 #'
+#' @section Sample size requirements:
+#'   This package targets large longitudinal datasets -- thousands of subjects
+#'   -- typical of ICU, ward, or emergency department cohorts.  Stable density
+#'   ratio estimation requires adequate treatment-variation at every time point
+#'   in each cross-fitting fold.  All built-in examples use a minimum of
+#'   2,000 subjects.
+#'
 #' @seealso [sdr()], [itmle()]
 #'
 #' @examples

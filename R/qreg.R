@@ -64,6 +64,15 @@ make_subject_folds_qreg <- function(ids, v, cluster_by_id, seed) {
 #'       summary statistics (Q prediction ranges, pseudo-outcome statistics).}
 #'   }
 #'
+#' @section Sample size requirements:
+#'   This package targets large longitudinal datasets -- thousands of subjects
+#'   -- typical of ICU, ward, or emergency department cohorts.  The Q-models
+#'   require adequate observations within each branch (alive, in-state, exited)
+#'   at every time point to be stable.  `pool_g_death` and `pool_q_exit` borrow
+#'   strength across time steps when exit events are sparse, but there must
+#'   still be sufficient events across the pooled structure.  All built-in
+#'   examples use a minimum of 2,000 subjects.
+#'
 #' @seealso [sdr()], [itmle()], [density_ratio()]
 #'
 #' @examples

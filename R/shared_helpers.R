@@ -910,10 +910,12 @@ expand_to_horizon <- function(DT, id, time, alive, in_state, tmax) {
 
 #' Compute contrasts between two fitted estimators
 #'
+#' @description
 #' Takes an intervention-arm fit and a reference (from [sdr()] or [itmle()], or the
 #' crude observed mean) and returns the risk difference (RD), risk ratio (RR), and
 #' odds ratio (OR) with standard errors derived from the per-subject influence curves.
 #'
+#' @details
 #' All standard errors use the delta method on the efficient influence curves:
 #' \itemize{
 #'   \item RD: \eqn{IC_{RD,i} = IC_{1,i} - IC_{0,i}}; Wald CI on the natural scale.
@@ -949,11 +951,11 @@ expand_to_horizon <- function(DT, id, time, alive, in_state, tmax) {
 #'     \item{\code{psi1}, \code{psi0}}{Point estimates.}
 #'     \item{\code{obs_ref}}{Logical; \code{TRUE} when the reference is the
 #'       observed mean rather than a second estimator fit.}
-#'     \item{\code{RD}, \code{se_RD}, \code{ci_RD}}{Risk difference and 95\% Wald CI.}
+#'     \item{\code{RD}, \code{se_RD}, \code{ci_RD}}{Risk difference and 95 pct Wald CI.}
 #'     \item{\code{RR}, \code{se_log_RR}, \code{ci_RR}}{Risk ratio, SE on log scale,
-#'       95\% CI (exponentiated from log scale). \code{NULL} for Gaussian outcomes.}
+#'       and 95 pct CI (exponentiated). \code{NULL} for Gaussian outcomes.}
 #'     \item{\code{OR}, \code{se_log_OR}, \code{ci_OR}}{Odds ratio, SE on log scale,
-#'       95\% CI (exponentiated). \code{NULL} for Gaussian outcomes.}
+#'       and 95 pct CI (exponentiated). \code{NULL} for Gaussian outcomes.}
 #'     \item{\code{n}}{Number of matched subjects.}
 #'     \item{\code{table}}{Summary data frame printed by default.}
 #'   }
@@ -964,7 +966,7 @@ expand_to_horizon <- function(DT, id, time, alive, in_state, tmax) {
 #' \donttest{
 #' library(SuperLearner)
 #'
-#' sim_ex <- function(n = 800L, tmax = 5L) {
+#' sim_ex <- function(n = 2000L, tmax = 5L) {
 #'   set.seed(42L)
 #'   rows <- vector("list", n)
 #'   for (i in seq_len(n)) {
@@ -1077,7 +1079,7 @@ contrast <- function(fit1, fit0 = NULL, df = NULL, id_col = NULL, cluster = NULL
   only0 <- sum(!ic0$id %in% ic1$id)
   if (only1 > 0L || only0 > 0L)
     stop(sprintf(
-      "contrast: ID mismatch — %d subject(s) in fit1 only, %d in reference only. Both objects must cover exactly the same subjects.",
+      "contrast: ID mismatch -- %d subject(s) in fit1 only, %d in reference only. Both objects must cover exactly the same subjects.",
       only1, only0), call. = FALSE)
 
   merged <- merge(ic1, ic0, by = "id", all = FALSE)
