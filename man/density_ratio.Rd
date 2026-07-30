@@ -154,7 +154,7 @@ crash in the child processes and should be avoided or limited to one thread.
 }
 
 \examples{
-\dontrun{
+\donttest{
 library(SuperLearner)
 
 # ICU-like DGP: patients die, discharge, or remain in state each time point
@@ -216,7 +216,7 @@ head(wr$weights_dt)
 }
 
 # Multi-treatment: joint density ratio for two binary treatments (A1, A2)
-\dontrun{
+\donttest{
 library(SuperLearner)
 
 sim_multi <- function(n = 2000L, tmax = 5L) {

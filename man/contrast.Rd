@@ -2,55 +2,79 @@
 % Please edit documentation in R/shared_helpers.R
 \name{contrast}
 \alias{contrast}
-\title{Compute risk difference and risk ratio from two fitted estimators}
+\title{Compute contrasts between two fitted estimators}
 \usage{
-contrast(fit1, fit0, df = NULL, id_col = NULL, cluster = NULL)
+contrast(
+  fit1,
+  fit0 = NULL,
+  df = NULL,
+  id_col = NULL,
+  cluster = NULL,
+  y_col = NULL
+)
 }
 \arguments{
 \item{fit1}{Fitted object (intervention arm): output of \code{\link[=sdr]{sdr()}} or \code{\link[=itmle]{itmle()}}.
 Must contain \code{$psi} and \code{$ic_df} with columns \code{id} and \code{ic}.}
 
-\item{fit0}{Fitted object (control arm), same type as \code{fit1}.}
+\item{fit0}{Fitted object (reference arm), same type as \code{fit1}, or
+\code{NULL} to use the crude observed mean as the reference (requires
+\code{df} and \code{y_col}).}
 
-\item{df}{Optional long-format data frame. Required when \code{cluster}
-is a column name.}
+\item{df}{Optional long-format data frame. Required when \code{cluster} is
+specified, or when \code{fit0 = NULL}.}
 
-\item{id_col}{Name of the subject-id column in \code{df}. Default
-\code{"id"}. Only used when \code{cluster} is provided.}
+\item{id_col}{Name of the subject-id column in \code{df}. Defaults to the
+value stored in \code{fit1$settings}.}
 
 \item{cluster}{\code{NULL} (default, IID standard errors), or a single
-character string naming a column in \code{df} that gives the cluster
-label for each subject.}
+character string naming a column in \code{df} for cluster-robust SEs.}
+
+\item{y_col}{Name of the outcome column in \code{df}. Required when
+\code{fit0 = NULL}; ignored otherwise.}
 }
 \value{
-A list with:
+A list of class \code{"CausalState_contrast"} with:
 \describe{
-\item{\code{psi1}, \code{psi0}}{Point estimates for each arm.}
-\item{\code{RD}, \code{se_RD}, \code{ci_RD}}{Risk difference and 95\% Wald CI.}
+\item{\code{psi1}, \code{psi0}}{Point estimates.}
+\item{\code{obs_ref}}{Logical; \code{TRUE} when the reference is the
+observed mean rather than a second estimator fit.}
+\item{\code{RD}, \code{se_RD}, \code{ci_RD}}{Risk difference and 95\\% Wald CI.}
 \item{\code{RR}, \code{se_log_RR}, \code{ci_RR}}{Risk ratio, SE on log scale,
-and 95\% CI (log-scale, then exponentiated).}
+95\\% CI (exponentiated from log scale). \code{NULL} for Gaussian outcomes.}
+\item{\code{OR}, \code{se_log_OR}, \code{ci_OR}}{Odds ratio, SE on log scale,
+95\\% CI (exponentiated). \code{NULL} for Gaussian outcomes.}
 \item{\code{n}}{Number of matched subjects.}
+\item{\code{table}}{Summary data frame printed by default.}
 }
 }
 \description{
-Takes an intervention-arm and a control-arm fit (from \code{\link[=sdr]{sdr()}} or \code{\link[=itmle]{itmle()}})
-and returns the risk difference (RD) and risk ratio (RR) with standard
-errors derived from the per-subject influence curves.
+Takes an intervention-arm fit and a reference (from \code{\link[=sdr]{sdr()}} or \code{\link[=itmle]{itmle()}}, or the
+crude observed mean) and returns the risk difference (RD), risk ratio (RR), and
+odds ratio (OR) with standard errors derived from the per-subject influence curves.
 }
 \details{
-Standard errors use the delta method:
+All standard errors use the delta method on the efficient influence curves:
 \itemize{
-\item RD: \eqn{IC_{RD,i} = IC_{1,i} - IC_{0,i}}
-\item RR: log-scale IC \eqn{IC_{\log RR,i} = IC_{1,i}/\psi_1 - IC_{0,i}/\psi_0};
-the 95\% CI is exponentiated from the log scale for positive coverage.
+\item RD: \eqn{IC_{RD,i} = IC_{1,i} - IC_{0,i}}; Wald CI on the natural scale.
+\item RR: \eqn{IC_{\log RR,i} = IC_{1,i}/\psi_1 - IC_{0,i}/\psi_0};
+SE and 95\\% CI computed on the log scale, then exponentiated.
+\item OR: \eqn{IC_{\log OR,i} = IC_{1,i}/(\psi_1(1-\psi_1)) - IC_{0,i}/(\psi_0(1-\psi_0))};
+SE and 95\\% CI computed on the log scale, then exponentiated.
 }
+RR and OR are omitted for Gaussian outcomes.
+
+When \code{fit0 = NULL} and \code{y_col} is supplied, the reference is the
+crude observed mean of \code{y_col} (last non-missing value per subject).
+The influence curve for the observed mean is \eqn{IC_{0,i} = Y_i - \bar{Y}}.
+This gives a simple descriptive contrast against the raw data rather than a
+causal comparison between two counterfactual estimates.
 }
 \examples{
-\dontrun{
+\donttest{
 library(SuperLearner)
 
-# ICU-like DGP: patients die, discharge, or remain in state each time point
-sim_ex <- function(n = 2000L, tmax = 5L) {
+sim_ex <- function(n = 800L, tmax = 5L) {
   set.seed(42L)
   rows <- vector("list", n)
   for (i in seq_len(n)) {
@@ -83,10 +107,7 @@ sim_ex <- function(n = 2000L, tmax = 5L) {
 df <- sim_ex()
 sl_lib <- c("SL.mean", "SL.glm")
 
-# Natural-course policy (no shift)
 policy_nat <- function(D_block, t, a_names) D_block[, ..a_names, drop = FALSE]
-
-# Shifted policy (delta = 0.3)
 policy_sft <- function(D_block, t, a_names) {
   out <- D_block[, ..a_names, drop = FALSE]
   out[[a_names[1]]] <- pmin(D_block[[a_names[1]]] + 0.3, 1)
@@ -114,10 +135,13 @@ res_nat <- do.call(sdr, c(sdr_args,
 res_sft <- do.call(sdr, c(sdr_args,
   list(weight_object = wr_sft, policy_spec_fun = policy_sft)))
 
+# Two-estimator contrast (causal RD/RR/OR)
 ctr <- contrast(res_sft, res_nat)
-ctr$RD
-ctr$ci_RD
-ctr$RR
+ctr$RD; ctr$ci_RD; ctr$RR; ctr$OR
+
+# Observed-mean reference (descriptive)
+ctr_obs <- contrast(res_sft, df = df, y_col = "Y")
+ctr_obs$table
 }
 
 }

@@ -2,12 +2,11 @@ Package: CausalState
 Type: Package
 Title: Sequential Doubly Robust and Infinite-Dimensional TMLE Estimators for State-Aware Longitudinal Modified Treatment Policies
 Version: 0.9.0
-Authors@R: 
-    person(given = "Sebastiaan",
-           family = "Blank",
-           role = c("aut", "cre", "cph"),
-           email = "sebastiaan.bank@mail.com",
-           comment = c(ORCID = "0000-0001-9115-2138"))
+Authors@R: person(given = "Sebastiaan",
+    family = "Blank",
+    role = c("aut", "cre", "cph"),
+    email = "sebastiaan.bank@mail.com",
+    comment = c(ORCID = "0000-0001-9115-2138"))
 Description: Implements Sequential Doubly Robust (SDR) and infinite-dimensional
     Targeted Maximum Likelihood (iTMLE) estimators for longitudinal modified treatment
     policies in settings with absorbing state transitions, such as ICU, ward,

@@ -35,6 +35,7 @@ qreg(
   inner_v = 5L,
   cluster = NULL,
   pool_g_death = FALSE,
+  pool_q_exit = FALSE,
   weight_object = NULL,
   v = 5L,
   trim = 0.99
@@ -92,7 +93,7 @@ Required.}
 \item{y_bounds}{Optional numeric vector of length 2, \code{c(min, max)}.
 For \code{outcome_family = "gaussian"}, all outcome values are internally
 scaled to \verb{[0, 1]} before model fitting and back-transformed to the
-original scale for the final estimate -- this keeps Q-model predictions
+original scale for the final estimate — this keeps Q-model predictions
 bounded and stabilises the recursive regression.  By default (\code{NULL})
 the bounds are taken from the observed range of \code{y} in \code{df}
 (\code{min(y)}, \code{max(y)}).  Supply explicit bounds to widen or narrow this
@@ -130,7 +131,7 @@ regression parallelism.}
 \item{sl_workers}{Integer. Workers for parallel learner evaluation within
 each SuperLearner call via \code{\link[SuperLearner:mcSuperLearner]{SuperLearner::mcSuperLearner()}} (fork-based;
 Linux/Mac only). Ignored when \code{parallel = FALSE}. Default \code{NULL}
-(sequential). \strong{Note:} incompatible with \code{dbarts}/\code{SL.dbarts} learners --
+(sequential). \strong{Note:} incompatible with \code{dbarts}/\code{SL.dbarts} learners —
 dbarts' C-level RNG state does not survive forking. Remove dbarts from
 \code{sl_remain}/\code{sl_death}/\code{sl_y}/\code{sl_recursive} when \code{sl_workers} is set.}
 
@@ -143,11 +144,21 @@ standard errors (e.g. hospital). If \code{NULL}, subject id is used.}
 \item{pool_g_death}{Logical. If \code{TRUE}, fit a single pooled
 \code{g_death_exit} model across all time points (with time as a covariate)
 rather than a separate model per time point. Useful when deaths are sparse
-at individual time steps -- pooling borrows strength across time and avoids
+at individual time steps — pooling borrows strength across time and avoids
 near-empty training sets in late time points where mortality is rare.
 Use with caution if the death hazard changes substantially over time, as
 the pooled model must then capture that trend through the time covariate.
 Default \code{FALSE}.}
+
+\item{pool_q_exit}{Logical. If \code{TRUE}, fit a single pooled \code{Q_exit} model
+across all time points (with time and \code{exit_status} as covariates) rather
+than a separate model per time point. Complements \code{pool_g_death}: useful
+when exit events (deaths + discharges) are sparse at individual time steps.
+When both \code{pool_g_death} and \code{pool_q_exit} are \code{TRUE} and \code{parallel = TRUE}
+with \code{reg_workers > 1}, the two pre-loop fits run simultaneously.
+Predictions are made in two passes — once with \code{exit_status = 1}
+(death branch) and once with \code{exit_status = 0} (discharge branch) — on
+all at-risk subjects, not just those who exited. Default \code{FALSE}.}
 
 \item{weight_object}{Optional. Output from \code{\link[=density_ratio]{density_ratio()}}.  If supplied,
 an EIF-based SE is computed in addition to the naive SE.  The fold
@@ -206,7 +217,7 @@ the fitted Q as fixed and should be read only as a rough guide to Monte
 Carlo variability of the plug-in.
 }
 \examples{
-\dontrun{
+\donttest{
 library(SuperLearner)
 
 # ICU-like DGP: patients die, discharge, or remain in state each time point
@@ -276,7 +287,7 @@ mean(df$Y)
 }
 
 # Multi-treatment: plug-in estimate under a joint policy over two treatments
-\dontrun{
+\donttest{
 library(SuperLearner)
 
 sim_multi <- function(n = 2000L, tmax = 5L) {

@@ -60,28 +60,29 @@ faces three mutually exclusive outcomes: remain in state, exit alive
 directly to the \code{sl_} arguments of \code{\link[=sdr]{sdr()}}, \code{\link[=itmle]{itmle()}}, and \code{\link[=qreg]{qreg()}}:
 
 \describe{
-  \item{\code{g_remain} (\code{sl_remain})}{Probability of remaining in state at
-    the next time point, given current history.  Trained on all subjects
-    currently in state.}
-  \item{\code{g_death_exit} (\code{sl_death})}{Probability of dying, conditional on
-    having left the state (i.e. among exiters only).  Trained on the exit
-    subset -- those subjects who leave the state at each time point.}
-  \item{\code{Q_rem} (\code{sl_recursive} at intermediate time points; \code{sl_y} at
-    the terminal time point)}{Expected outcome conditional on remaining in
-    state.  This is the component propagated backward through the
-    Q-recursion.}
-  \item{\code{Q_exit} (\code{sl_y})}{Expected outcome conditional on exiting.  In
-    most applications this is not estimated but instead fixed to a constant
-    for each exit type (death, discharge) via \code{\link[=absorb_rule]{absorb_rule()}}.}
+\item{\code{g_remain} (\code{sl_remain})}{Probability of remaining in state at
+the next time point, given current history.  Trained on all subjects
+currently in state.}
+\item{\code{g_death_exit} (\code{sl_death})}{Probability of dying, conditional on
+having left the state (i.e. among exiters only).  Trained on the exit
+subset -- those subjects who leave the state at each time point.}
+\item{\code{Q_rem} (\code{sl_recursive} at intermediate time points; \code{sl_y} at
+the terminal time point)}{Expected outcome conditional on remaining in
+state.  This is the component propagated backward through the
+Q-recursion.}
+\item{\code{Q_exit} (\code{sl_y})}{Expected outcome conditional on exiting.  In
+most applications this is not estimated but instead fixed to a constant
+for each exit type (death, discharge) via \code{\link[=absorb_rule]{absorb_rule()}}.}
 }
 
 \strong{Probabilistic mixture.}  The backward Q-recursion assembles the expected
 outcome at time t as a probability-weighted mixture over the three
 transition branches:
 
-\preformatted{Q(t) = g_remain * Q_rem
+\if{html}{\out{<div class="sourceCode">}}\preformatted{Q(t) = g_remain * Q_rem
       + (1 - g_remain) * [ g_death_exit * Q_death
-                          + (1 - g_death_exit) * Q_discharge ]}
+                          + (1 - g_death_exit) * Q_discharge ]
+}\if{html}{\out{</div>}}
 
 where \code{g_remain} and \code{g_death_exit} are the model predictions at the
 subject's current history, and \code{Q_death} / \code{Q_discharge} are the outcome
@@ -99,7 +100,7 @@ least 5 events of each class (deaths and discharges within the exit subset
 for \code{g_death_exit}; remainers and exiters for \code{g_remain}).  When either
 threshold is not met, the estimator substitutes the empirical proportion as
 a time-constant prediction instead of fitting a SuperLearner.  The fallback
-is recorded in \code{diagnostics$branch_cal} (the \code{p_*_const} columns are
+is recorded in \code{diagnostics$branch_cal} (the \verb{p_*_const} columns are
 non-\code{NA} when a constant was used).
 
 Even above the floor, with few events the SuperLearner ensemble will

@@ -118,6 +118,15 @@
 #'   Use with caution if the death hazard changes substantially over time, as
 #'   the pooled model must then capture that trend through the time covariate.
 #'   Default `FALSE`.
+#' @param pool_q_exit Logical. If `TRUE`, fit a single pooled `Q_exit` model
+#'   across all time points (with time and `exit_status` as covariates) rather
+#'   than a separate model per time point. Complements `pool_g_death`: useful
+#'   when exit events (deaths + discharges) are sparse at individual time steps.
+#'   When both `pool_g_death` and `pool_q_exit` are `TRUE` and `parallel = TRUE`
+#'   with `reg_workers > 1`, the two pre-loop fits run simultaneously.
+#'   Predictions are made in two passes — once with `exit_status = 1`
+#'   (death branch) and once with `exit_status = 0` (discharge branch) — on
+#'   all at-risk subjects, not just those who exited. Default `FALSE`.
 #'
 #' @return A named list. Top-level elements:
 #'   \describe{
@@ -188,6 +197,7 @@
 #'     \item{`$start_t`}{First time point included in the estimation.}
 #'     \item{`$outcome_family`}{`"binomial"` or `"gaussian"`.}
 #'     \item{`$pool_g_death`}{Whether `g_death` was pooled across time.}
+#'     \item{`$pool_q_exit`}{Whether `Q_exit` was pooled across time.}
 #'     \item{`$variable_info`}{Named list of variable names and settings:
 #'       `id`, `time`, `alive`, `in_state`, `cluster`, `baseline`,
 #'       `time_varying`, `treatment`, `outcome`, `tmax`, `k`.}
