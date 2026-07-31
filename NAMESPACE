@@ -31,6 +31,8 @@ export(qreg)
 
 export(density_ratio)
 export(contrast)
+export(weight_diagnostics)
+export(branch_cal_summary)
 export(method.WB_dr)
 export(absorb_rule)
 
@@ -63,6 +65,10 @@ export(SL.tmle_xgb_d6)
 # --- S3 method registration -----------------------------------------------
 
 S3method(print, CausalState_contrast)
+S3method(print, sdr_fit)
+S3method(print, itmle_fit)
+S3method(print, qreg_fit)
+S3method(print, branch_cal_summary)
 
 S3method(predict, SL.tgt.empty)
 S3method(predict, SL.tgt.intercept)

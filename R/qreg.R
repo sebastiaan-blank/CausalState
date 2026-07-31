@@ -933,7 +933,7 @@ qreg <- function(
     se          <- se_scaled
   }
 
-  list(
+  out <- list(
     estimate    = psi,
     se          = se,
     se_naive    = se_naive,
@@ -941,6 +941,7 @@ qreg <- function(
     ci          = c(psi - 1.96 * se, psi + 1.96 * se),
     psi_natural = psi_natural,
     psi_shifted = psi_shifted,
+    n           = length(ids),
     sl_summary  = if (length(sl_chunks))
       data.table::rbindlist(sl_chunks, use.names = TRUE, fill = TRUE) else NULL,
     fold_diag   = fold_diag,
@@ -949,6 +950,7 @@ qreg <- function(
       diag_table = diag_table
     ),
     settings = list(
+      outcome_family = outcome_family,
       variable_info = list(
         id           = id,
         time         = time,
@@ -964,4 +966,6 @@ qreg <- function(
       )
     )
   )
+  class(out) <- c("qreg_fit", "list")
+  out
 }
