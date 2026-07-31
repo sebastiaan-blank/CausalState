@@ -1,5 +1,10 @@
 library(SuperLearner)
 
+# Accuracy tests require n = 2000 to be meaningful; too slow for CRAN.
+# Run locally by setting NOT_CRAN=true, e.g.:
+#   Sys.setenv(NOT_CRAN = "true"); testthat::test_file("tests/testthat/test-accuracy.R")
+skip_on_cran()
+
 # End-to-end accuracy tests against known Monte Carlo truths.
 #
 # Three clinically motivated DGPs:

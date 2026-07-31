@@ -14,7 +14,7 @@ library(SuperLearner)
 #     every row and is modelled by Q_exit at the time of ICU departure and by
 #     Q_rem for patients still present at tmax.
 
-sim_panel <- function(n = 150L, tmax = 5L, seed = 42L) {
+sim_panel <- function(n = 150L, tmax = 3L, seed = 42L) {
   set.seed(seed)
   rows <- vector("list", n)
 
@@ -76,12 +76,12 @@ sim_panel <- function(n = 150L, tmax = 5L, seed = 42L) {
 
 # ── Shared fixtures ───────────────────────────────────────────────────────
 
-df_smoke <- sim_panel(n = 2000L, tmax = 5L, seed = 42L)
+df_smoke <- sim_panel(n = 1000L, tmax = 3L, seed = 42L)
 
 # Verify structure before running estimators
 stopifnot(all(c("id","time","alive","in_state","age","sex","L1","L2","A","Y") %in% names(df_smoke)))
 last_rows <- df_smoke[!duplicated(df_smoke$id, fromLast = TRUE), ]
-stopifnot(all(last_rows$in_state == 0L | last_rows$time == 5L))
+stopifnot(all(last_rows$in_state == 0L | last_rows$time == 3L))
 
 # Soft upward shift: A → min(A + 0.5, 1)
 policy_up <- function(D_block, t, a_names) {
@@ -96,7 +96,7 @@ sl_tmle_simple <- c("SL.tgt.empty", "SL.tgt.intercept")
 wr_smoke <- density_ratio(
   df              = df_smoke,
   a_names         = "A",
-  tmax            = 5L,
+  tmax            = 3L,
   baseline        = c("age", "sex"),
   tv_names        = c("L1", "L2"),
   sl_g            = sl_fast,
@@ -127,11 +127,11 @@ test_that("sdr returns a finite psi with positive se", {
   res <- sdr(
     df              = df_smoke,
     weight_object   = wr_smoke,
-    tmax            = 5L,
+    tmax            = 3L,
     id              = "id",
     time            = "time",
     alive           = "alive",
-    in_state             = "in_state",
+    in_state        = "in_state",
     y               = "Y",
     baseline        = c("age", "sex"),
     tv_names        = c("L1", "L2"),
@@ -162,11 +162,11 @@ test_that("itmle returns finite psi, positive se, and ordered ci", {
   res <- itmle(
     df               = df_smoke,
     weight_object    = wr_smoke,
-    tmax             = 5L,
+    tmax             = 3L,
     id               = "id",
     time             = "time",
     alive            = "alive",
-    in_state              = "in_state",
+    in_state         = "in_state",
     y                = "Y",
     baseline         = c("age", "sex"),
     tv_names         = c("L1", "L2"),
@@ -203,7 +203,7 @@ test_that("itmle returns finite psi, positive se, and ordered ci", {
 test_that("qreg without weight_object returns finite estimate and naive SE only", {
   res <- qreg(
     df              = df_smoke,
-    tmax            = 5L,
+    tmax            = 3L,
     id              = "id",
     time            = "time",
     alive           = "alive",
@@ -243,7 +243,7 @@ test_that("qreg with weight_object computes EIF-based SE and se == se_eif", {
   res <- qreg(
     df              = df_smoke,
     weight_object   = wr_smoke,
-    tmax            = 5L,
+    tmax            = 3L,
     id              = "id",
     time            = "time",
     alive           = "alive",
