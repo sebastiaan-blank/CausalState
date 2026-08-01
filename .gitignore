@@ -59,6 +59,7 @@ po/*~
 # Local config / scratch
 scratch/
 notes_local/
+cran-comments.md
 
 # Claude Code project memory
 .claude/

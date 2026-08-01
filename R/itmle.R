@@ -1669,7 +1669,7 @@ itmle <- function(
       
       branch_diag_here[[length(branch_diag_here) + 1L]] <- branch_diag_row
 
-      pseudo_pre_ar_tr <- shf_train[at_risk_tr, tt + 1L]
+      Y_target_ar  <- shf_train[at_risk_tr, tt + 1L]
 
       targ <- itmle_inner_target(
         Q_mix_nat_tr      = Q_nat_ar,
@@ -1744,7 +1744,12 @@ itmle <- function(
       }
 
       Y_train <- shf_train[, tt]
-      
+
+      resid_vec     <- Y_target_ar - Q_shf_ar
+      sd_resid      <- sd_or_na(resid_vec)
+      q95_abs_resid <- if (any(is.finite(resid_vec))) stats::quantile(abs(resid_vec), 0.95, na.rm = TRUE, names = FALSE) else NA_real_
+      max_abs_resid <- if (any(is.finite(resid_vec))) max(abs(resid_vec), na.rm = TRUE) else NA_real_
+
       exit_branch_nat_tr <- p_dex_nat * q_death_nat +
         (1 - p_dex_nat) * q_dc_nat
       
@@ -1761,12 +1766,6 @@ itmle <- function(
         n_train_death  = sum(D_tr == 1L),
         n_train_dc     = sum(C_tr == 1L),
         n_train_remain = sum(R_tr == 1L),
-        
-        has_rem   = !is.null(sl_rem),
-        has_dex   = !is.null(sl_dex) ||
-          (isTRUE(pool_g_death) && !is.null(fit_dex_pooled)),
-        has_qexit = !is.null(sl_qexit),
-        has_qrem  = !is.null(sl_qrem),
         
         used_const_rem = if (!is.null(sl_rem)) isTRUE(sl_rem$used_const) else NA,
         used_const_dex = if (!is.null(sl_dex)) {
@@ -1801,13 +1800,12 @@ itmle <- function(
         
         rem_contrib_nat_mean = mean_or_na(p_rem_nat * q_rem_nat),
         rem_contrib_shf_mean = mean_or_na(p_rem_shf * q_rem_shf),
-        
-        exit_contrib_nat_mean = mean_or_na((1 - p_rem_nat) * exit_branch_nat_tr),
-        exit_contrib_shf_mean = mean_or_na((1 - p_rem_shf) * exit_branch_shf_tr),
-        
-        target_pre_mean = mean_or_na(pseudo_pre_ar_tr),
-        target_pre_sd   = sd_or_na(pseudo_pre_ar_tr),
-        
+
+        Y_target_mean = mean_or_na(Y_target_ar),
+        Y_target_sd   = sd_or_na(Y_target_ar),
+        Y_target_min  = min_or_na(Y_target_ar),
+        Y_target_max  = max_or_na(Y_target_ar),
+
         Q_nat_pre_mean = mean_or_na(Q_nat_ar),
         Q_nat_pre_sd   = sd_or_na(Q_nat_ar),
         Q_nat_pre_min  = min_or_na(Q_nat_ar),
@@ -1818,12 +1816,10 @@ itmle <- function(
         Q_shf_pre_min  = min_or_na(Q_shf_ar),
         Q_shf_pre_max  = max_or_na(Q_shf_ar),
         
-        Q_pre_diff_mean    = mean_or_na(Q_shf_ar - Q_nat_ar),
-        Q_pre_diff_sd      = sd_or_na(Q_shf_ar - Q_nat_ar),
-        Q_pre_diff_min     = min_or_na(Q_shf_ar - Q_nat_ar),
-        Q_pre_diff_max     = max_or_na(Q_shf_ar - Q_nat_ar),
-        Q_pre_diff_q95_abs = q_or_na(abs(Q_shf_ar - Q_nat_ar), 0.95),
-        
+        resid_sd      = sd_resid,
+        resid_q95_abs = q95_abs_resid,
+        resid_max_abs = max_abs_resid,
+
         Q_nat_post_mean = mean_or_na(Q_nat_post),
         Q_nat_post_sd   = sd_or_na(Q_nat_post),
         Q_nat_post_min  = min_or_na(Q_nat_post),
@@ -1834,18 +1830,10 @@ itmle <- function(
         Q_shf_post_min  = min_or_na(Q_shf_post),
         Q_shf_post_max  = max_or_na(Q_shf_post),
         
-        Q_post_diff_mean    = mean_or_na(Q_shf_post - Q_nat_post),
-        Q_post_diff_sd      = sd_or_na(Q_shf_post - Q_nat_post),
-        Q_post_diff_min     = min_or_na(Q_shf_post - Q_nat_post),
-        Q_post_diff_max     = max_or_na(Q_shf_post - Q_nat_post),
-        Q_post_diff_q95_abs = q_or_na(abs(Q_shf_post - Q_nat_post), 0.95),
-        
-        delta_nat_target_mean = mean_or_na(Q_nat_post - Q_nat_ar),
         delta_nat_target_sd   = sd_or_na(Q_nat_post - Q_nat_ar),
         delta_nat_target_q95_abs = q_or_na(abs(Q_nat_post - Q_nat_ar), 0.95),
         delta_nat_target_max_abs = max_or_na(abs(Q_nat_post - Q_nat_ar)),
         
-        delta_shf_target_mean = mean_or_na(Q_shf_post - Q_shf_ar),
         delta_shf_target_sd   = sd_or_na(Q_shf_post - Q_shf_ar),
         delta_shf_target_q95_abs = q_or_na(abs(Q_shf_post - Q_shf_ar), 0.95),
         delta_shf_target_max_abs = max_or_na(abs(Q_shf_post - Q_shf_ar)),
@@ -1859,9 +1847,6 @@ itmle <- function(
         Q_shf_vl_pre_mean  = mean_or_na(Q_shf_vl),
         Q_nat_vl_post_mean = mean_or_na(targ_nat_vl),
         Q_shf_vl_post_mean = mean_or_na(targ_shf_vl),
-
-        delta_nat_vl_target_mean = mean_or_na(targ_nat_vl - Q_nat_vl),
-        delta_shf_vl_target_mean = mean_or_na(targ_shf_vl - Q_shf_vl),
 
         delta_nat_vl_target_q95_abs =
           q_or_na(abs(targ_nat_vl - Q_nat_vl), 0.95),

@@ -1140,10 +1140,8 @@ sdr <- function(
       
       branch_diag_here[[length(branch_diag_here) + 1L]] <- branch_diag_row
       
-      pseudo_pre_ar_tr <- Y_train[at_risk_tr]
-      mean_pseudo_pre_ar <- mean_or_na(pseudo_pre_ar_tr)
-      sd_pseudo_pre_ar   <- sd_or_na(pseudo_pre_ar_tr)
-      
+      Y_target_ar <- Y_train[at_risk_tr]
+
       dens_tr     <- density_ratios[tr_ids, , drop = FALSE]
       Y_train_new <- eif(
         density_ratios = dens_tr,
@@ -1152,21 +1150,20 @@ sdr <- function(
         time           = tt,
         time_horizon   = tmax
       )
-      
+
       pseudo_post_ar_tr   <- Y_train_new[at_risk_tr]
       mean_pseudo_post_ar <- mean_or_na(pseudo_post_ar_tr)
       sd_pseudo_post_ar   <- sd_or_na(pseudo_post_ar_tr)
-      
-      delta_vec         <- pseudo_post_ar_tr - pseudo_pre_ar_tr
-      mean_delta_eif    <- mean_or_na(delta_vec)
+
+      delta_vec         <- pseudo_post_ar_tr - Y_target_ar
       sd_delta_eif      <- sd_or_na(delta_vec)
       max_abs_delta_eif <- if (any(is.finite(delta_vec))) max(abs(delta_vec), na.rm = TRUE) else NA_real_
       q95_abs_delta_eif <- if (any(is.finite(delta_vec))) stats::quantile(abs(delta_vec), 0.95, na.rm = TRUE, names = FALSE) else NA_real_
-      
-      qshf_vec      <- shf_train[at_risk_tr, tt]
-      corr_vec      <- pseudo_post_ar_tr - qshf_vec
-      mean_corr_eif <- mean_or_na(corr_vec)
-      sd_corr_eif   <- sd_or_na(corr_vec)
+
+      resid_vec     <- Y_target_ar - Q_shf_ar
+      sd_resid      <- sd_or_na(resid_vec)
+      q95_abs_resid <- if (any(is.finite(resid_vec))) stats::quantile(abs(resid_vec), 0.95, na.rm = TRUE, names = FALSE) else NA_real_
+      max_abs_resid <- if (any(is.finite(resid_vec))) max(abs(resid_vec), na.rm = TRUE) else NA_real_
       
       Y_train <- Y_train_new
       
@@ -1187,12 +1184,6 @@ sdr <- function(
         n_train_death  = sum(D_tr == 1L),
         n_train_dc     = sum(C_tr == 1L),
         n_train_remain = sum(R_tr == 1L),
-        
-        has_rem   = !is.null(sl_rem),
-        has_dex   = !is.null(sl_dex) ||
-          (isTRUE(pool_g_death) && !is.null(fit_dex_pooled)),
-        has_qexit = !is.null(sl_qexit),
-        has_qrem  = !is.null(sl_qrem),
         
         used_const_rem = if (!is.null(sl_rem)) isTRUE(sl_rem$used_const) else NA,
         used_const_dex = if (!is.null(sl_dex)) {
@@ -1227,16 +1218,7 @@ sdr <- function(
         
         rem_contrib_nat_mean = mean_or_na(p_rem_nat * q_rem_nat),
         rem_contrib_shf_mean = mean_or_na(p_rem_shf * q_rem_shf),
-        
-        exit_contrib_nat_mean = mean_or_na((1 - p_rem_nat) * exit_branch_nat_tr),
-        exit_contrib_shf_mean = mean_or_na((1 - p_rem_shf) * exit_branch_shf_tr),
-        
-        Q_pre_diff_mean = mean_or_na(Q_shf_ar - Q_nat_ar),
-        Q_pre_diff_sd   = sd_or_na(Q_shf_ar - Q_nat_ar),
-        Q_pre_diff_min  = min_or_na(Q_shf_ar - Q_nat_ar),
-        Q_pre_diff_max  = max_or_na(Q_shf_ar - Q_nat_ar),
-        Q_pre_diff_q95_abs = q_or_na(abs(Q_shf_ar - Q_nat_ar), 0.95),
-        
+
         Q_nat_pre_mean = mean_or_na(Q_nat_ar),
         Q_nat_pre_sd   = sd_or_na(Q_nat_ar),
         Q_nat_pre_min  = min_or_na(Q_nat_ar),
@@ -1247,23 +1229,26 @@ sdr <- function(
         Q_shf_pre_min  = min_or_na(Q_shf_ar),
         Q_shf_pre_max  = max_or_na(Q_shf_ar),
         
+        Y_target_mean = mean_or_na(Y_target_ar),
+        Y_target_sd   = sd_or_na(Y_target_ar),
+        Y_target_min  = min_or_na(Y_target_ar),
+        Y_target_max  = max_or_na(Y_target_ar),
+
         pseudo_post_mean = mean_pseudo_post_ar,
         pseudo_post_sd   = sd_pseudo_post_ar,
         pseudo_post_min  = min_or_na(pseudo_post_ar_tr),
         pseudo_post_max  = max_or_na(pseudo_post_ar_tr),
-        
-        delta_mean = mean_delta_eif,
-        delta_sd   = sd_delta_eif,
+
+        delta_sd      = sd_delta_eif,
         delta_q95_abs = q95_abs_delta_eif,
         delta_max_abs = max_abs_delta_eif,
-        
+
         n_post_below_0 = sum(pseudo_post_ar_tr < 0, na.rm = TRUE),
         n_post_above_1 = sum(pseudo_post_ar_tr > 1, na.rm = TRUE),
-        
-        corr_mean = mean_corr_eif,
-        corr_sd   = sd_corr_eif,
-        corr_q95_abs = q_or_na(abs(corr_vec), 0.95),
-        corr_max_abs = max_or_na(abs(corr_vec)),
+
+        resid_sd      = sd_resid,
+        resid_q95_abs = q95_abs_resid,
+        resid_max_abs = max_abs_resid,
 
         Q_nat_vl_mean = mean_or_na(Q_nat_vl),
         Q_shf_vl_mean = mean_or_na(Q_shf_vl)
