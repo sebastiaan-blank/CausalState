@@ -436,7 +436,7 @@ weight_diagnostics <- function(weight_object, trim = 0.99) {
   rows <- lapply(seq_len(tmax), function(tt) {
     ar <- at_risk[, tt]
     rt <- dens[ar, tt]
-    cp <- cum_dens[ar, tt]
+    cp <- cum_dens[, tt]      # all N subjects with 1-fills, matching eif()
     data.table::data.table(
       t          = tt,
       n_risk     = sum(ar),

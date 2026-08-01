@@ -167,11 +167,11 @@ Diaz Munoz I, van der Laan MJ (2012). Population intervention causal
 effects based on stochastic interventions. \emph{Biometrics} 68(2):541-549.
 }
 \author{
-\strong{Maintainer}: Sebastiaan Blank \email{sebastiaan.bank@mail.com} (\href{https://orcid.org/0000-0001-9115-2138}{ORCID}) [copyright holder]
+\strong{Maintainer}: Sebastiaan Blank \email{sebastiaan.blank@mail.com} (\href{https://orcid.org/0000-0001-9115-2138}{ORCID}) [copyright holder]
 
 Authors:
 \itemize{
-  \item Sebastiaan Blank \email{sebastiaan.bank@mail.com} (\href{https://orcid.org/0000-0001-9115-2138}{ORCID}) [copyright holder]
+  \item Sebastiaan Blank \email{sebastiaan.blank@mail.com} (\href{https://orcid.org/0000-0001-9115-2138}{ORCID}) [copyright holder]
 }
 
 }
