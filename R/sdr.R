@@ -1247,11 +1247,6 @@ sdr <- function(
         Q_shf_pre_min  = min_or_na(Q_shf_ar),
         Q_shf_pre_max  = max_or_na(Q_shf_ar),
         
-        pseudo_pre_mean = mean_pseudo_pre_ar,
-        pseudo_pre_sd   = sd_pseudo_pre_ar,
-        pseudo_pre_min  = min_or_na(pseudo_pre_ar_tr),
-        pseudo_pre_max  = max_or_na(pseudo_pre_ar_tr),
-        
         pseudo_post_mean = mean_pseudo_post_ar,
         pseudo_post_sd   = sd_pseudo_post_ar,
         pseudo_post_min  = min_or_na(pseudo_post_ar_tr),
