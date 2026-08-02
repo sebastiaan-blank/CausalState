@@ -244,12 +244,18 @@ qreg <- function(
     cluster         = NULL,
     pool_g_death    = FALSE,
     pool_q_exit     = FALSE,
+    pool_time       = c("spline", "linear", "factor"),
     weight_object   = NULL,
     v               = 5L,
     trim            = 0.99
 ) {
   stopifnot(requireNamespace("data.table", quietly = TRUE))
   stopifnot(requireNamespace("SuperLearner", quietly = TRUE))
+
+  pool_time <- match.arg(pool_time)
+  pool_time_basis <- if (isTRUE(pool_g_death) || isTRUE(pool_q_exit)) {
+    make_pool_time_basis(tmax, mode = pool_time)
+  } else NULL
 
   if (!isTRUE(parallel)) sl_workers <- NULL
 
@@ -381,6 +387,7 @@ qreg <- function(
       alive = alive, in_state = in_state,
       cluster_by_id = cluster_by_id,
       sl_death = sl_death, inner_v = inner_v, seed = seed, f_idx = f_idx,
+      pool_time_basis = pool_time_basis,
       sl_workers = sl_workers
     )
     .fit_pool_q <- function() fit_pooled_q_exit(
@@ -390,7 +397,9 @@ qreg <- function(
       alive = alive, in_state = in_state, Y_init = Y_init,
       cluster_by_id = cluster_by_id,
       sl_y = sl_y, inner_v = inner_v, seed = seed, f_idx = f_idx,
-      is_binom = is_binom, sl_workers = sl_workers
+      is_binom = is_binom,
+      pool_time_basis = pool_time_basis,
+      sl_workers = sl_workers
     )
 
     run_both_pooled <- isTRUE(pool_g_death) && isTRUE(pool_q_exit) &&
@@ -521,6 +530,7 @@ qreg <- function(
         fit_qexit_pooled = fit_qexit_pooled,
         cn_qexit_pool    = cn_qexit_pool,
         cols_pool_qexit  = cols_pool_qexit,
+        pool_time_basis  = pool_time_basis,
         D                = D,
         rows_tr          = rows_tr,
         D_shifted_tt     = D_shifted[[tt]],
@@ -632,12 +642,12 @@ qreg <- function(
 
         if (!is.null(fit_dex)) {
           if (isTRUE(pool_g_death)) {
-            X_nat_dex_vl      <- make_design(D, rows_vl, cols_pool)
-            X_nat_dex_vl$.__t <- tt
-            X_shf_dex_vl      <- patch_shifted_design(
+            X_nat_dex_vl <- make_design(D, rows_vl, cols_pool)
+            X_nat_dex_vl <- apply_pool_time_basis(X_nat_dex_vl, tt, pool_time_basis)
+            X_shf_dex_vl <- patch_shifted_design(
               X_nat = X_nat_dex_vl, D_shifted_tt = D_shifted[[tt]],
               rows = rows_vl, a_names = a_names, tt = tt, k = k, t_min = t_min)
-            X_shf_dex_vl$.__t <- tt
+            X_shf_dex_vl <- apply_pool_time_basis(X_shf_dex_vl, tt, pool_time_basis)
             X_nat_dex_vl <- align_cols(X_nat_dex_vl, cn_pool)
             X_shf_dex_vl <- align_cols(X_shf_dex_vl, cn_pool)
             p_dex_nat_vl <- scale_info$clip(sl_predict(fit_dex, X_nat_dex_vl))
@@ -657,10 +667,10 @@ qreg <- function(
             X_shf_qvl      <- patch_shifted_design(
               X_nat = X_nat_qvl, D_shifted_tt = D_shifted[[tt]],
               rows = rows_vl, a_names = a_names, tt = tt, k = k, t_min = t_min)
-            X_nat_d_vl <- X_nat_qvl; X_nat_d_vl$exit_status <- 1; X_nat_d_vl$.__t <- tt
-            X_nat_c_vl <- X_nat_qvl; X_nat_c_vl$exit_status <- 0; X_nat_c_vl$.__t <- tt
-            X_shf_d_vl <- X_shf_qvl; X_shf_d_vl$exit_status <- 1; X_shf_d_vl$.__t <- tt
-            X_shf_c_vl <- X_shf_qvl; X_shf_c_vl$exit_status <- 0; X_shf_c_vl$.__t <- tt
+            X_nat_d_vl <- apply_pool_time_basis(X_nat_qvl, tt, pool_time_basis); X_nat_d_vl$exit_status <- 1
+            X_nat_c_vl <- apply_pool_time_basis(X_nat_qvl, tt, pool_time_basis); X_nat_c_vl$exit_status <- 0
+            X_shf_d_vl <- apply_pool_time_basis(X_shf_qvl, tt, pool_time_basis); X_shf_d_vl$exit_status <- 1
+            X_shf_c_vl <- apply_pool_time_basis(X_shf_qvl, tt, pool_time_basis); X_shf_c_vl$exit_status <- 0
           } else {
             X_nat_d_vl <- X_nat_vl_base; X_nat_d_vl$exit_status <- 1
             X_nat_c_vl <- X_nat_vl_base; X_nat_c_vl$exit_status <- 0
@@ -951,6 +961,9 @@ qreg <- function(
     ),
     settings = list(
       outcome_family = outcome_family,
+      pool_g_death   = pool_g_death,
+      pool_q_exit    = pool_q_exit,
+      pool_time      = pool_time,
       variable_info = list(
         id           = id,
         time         = time,

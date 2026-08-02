@@ -16,10 +16,13 @@ fit_pooled_g_death_exit <- function(
     inner_v,
     seed,
     f_idx,
+    pool_time_basis = NULL,
     min_n = 30L,
     min_events = 5L,
     sl_workers = NULL
 ) {
+  if (is.null(pool_time_basis))
+    pool_time_basis <- make_pool_time_basis(tmax, mode = "linear")
   cols_pool <- make_cols(
     tt        = 1L,
     baseline  = baseline,
@@ -50,8 +53,8 @@ fit_pooled_g_death_exit <- function(
     exit_idx_p <- which(R_p == 0L)
     if (!length(exit_idx_p)) next
 
-    X_p      <- make_design(D, rows_tr_p[exit_idx_p], cols_pool)
-    X_p$.__t <- tt
+    X_p <- make_design(D, rows_tr_p[exit_idx_p], cols_pool)
+    X_p <- apply_pool_time_basis(X_p, tt, pool_time_basis)
 
     pool_X[[tt]]  <- X_p
     pool_Y[[tt]]  <- D_p[exit_idx_p]
@@ -146,10 +149,13 @@ fit_pooled_q_exit <- function(
     seed,
     f_idx,
     is_binom,
+    pool_time_basis = NULL,
     min_n = 30L,
     min_events = 5L,
     sl_workers = NULL
 ) {
+  if (is.null(pool_time_basis))
+    pool_time_basis <- make_pool_time_basis(tmax, mode = "linear")
   cols_pool <- make_cols(
     tt        = 1L,
     baseline  = baseline,
@@ -181,7 +187,7 @@ fit_pooled_q_exit <- function(
 
     X_p <- make_design(D, rows_tr_p[exit_idx_p], cols_pool)
     X_p$exit_status <- D_p[exit_idx_p]
-    X_p$.__t <- tt
+    X_p <- apply_pool_time_basis(X_p, tt, pool_time_basis)
 
     pool_X[[tt]]  <- X_p
     pool_Y[[tt]]  <- Y_init[id_tr_ar_p[exit_idx_p]]
@@ -271,6 +277,7 @@ fit_transition_regressions <- function(
   fit_qexit_pooled = NULL,
   cn_qexit_pool = NULL,
   cols_pool_qexit = NULL,
+  pool_time_basis = NULL,
   D = NULL,
   rows_tr = NULL,
   D_shifted_tt = NULL,
@@ -286,7 +293,7 @@ fit_transition_regressions <- function(
   sl_death,
   sl_y,
   sl_recursive,
-  sl_rec_simple = NULL,
+  sl_rec_early = NULL,
   rec_transition = NULL,
   inner_v,
   seed,
@@ -347,7 +354,7 @@ fit_transition_regressions <- function(
       }
 
       X_nat_dex_t <- make_design(D, rows_tr, cols_pool)
-      X_nat_dex_t$.__t <- tt
+      X_nat_dex_t <- apply_pool_time_basis(X_nat_dex_t, tt, pool_time_basis)
 
       X_shf_dex_t <- patch_shifted_design(
         X_nat = X_nat_dex_t,
@@ -358,7 +365,7 @@ fit_transition_regressions <- function(
         k = k,
         t_min = t_min
       )
-      X_shf_dex_t$.__t <- tt
+      X_shf_dex_t <- apply_pool_time_basis(X_shf_dex_t, tt, pool_time_basis)
 
       X_nat_dex_t <- align_cols(X_nat_dex_t, cn_pool)
       X_shf_dex_t <- align_cols(X_shf_dex_t, cn_pool)
@@ -438,10 +445,10 @@ fit_transition_regressions <- function(
         t_min        = t_min
       )
 
-      X_nat_d <- X_nat_pool; X_nat_d$exit_status <- 1; X_nat_d$.__t <- tt
-      X_nat_c <- X_nat_pool; X_nat_c$exit_status <- 0; X_nat_c$.__t <- tt
-      X_shf_d <- X_shf_pool; X_shf_d$exit_status <- 1; X_shf_d$.__t <- tt
-      X_shf_c <- X_shf_pool; X_shf_c$exit_status <- 0; X_shf_c$.__t <- tt
+      X_nat_d <- apply_pool_time_basis(X_nat_pool, tt, pool_time_basis); X_nat_d$exit_status <- 1
+      X_nat_c <- apply_pool_time_basis(X_nat_pool, tt, pool_time_basis); X_nat_c$exit_status <- 0
+      X_shf_d <- apply_pool_time_basis(X_shf_pool, tt, pool_time_basis); X_shf_d$exit_status <- 1
+      X_shf_c <- apply_pool_time_basis(X_shf_pool, tt, pool_time_basis); X_shf_c$exit_status <- 0
 
       X_nat_d <- align_cols(X_nat_d, cn_qexit_pool)
       X_nat_c <- align_cols(X_nat_c, cn_qexit_pool)
@@ -528,10 +535,8 @@ fit_transition_regressions <- function(
           Y = Y_rem,
           X = X_rem,
           family = if (is_binom && tt == tmax) stats::binomial() else stats::gaussian(),
-          sl_lib = if (tt == tmax) {
-            sl_y
-          } else if (!is.null(sl_rec_simple) && tt <= rec_transition) {
-            sl_rec_simple
+          sl_lib = if (!is.null(sl_rec_early) && tt <= rec_transition) {
+            sl_rec_early
           } else {
             sl_recursive
           },

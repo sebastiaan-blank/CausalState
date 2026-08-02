@@ -690,12 +690,18 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #'   summaries. iTMLE-specific additions are noted.
 #'   \describe{
 #'     \item{`$recursion_diag`}{`data.table`, one row per fold x time point.
-#'       Tracks g/Q predictions under natural and shifted policy; also
-#'       includes pre- and post-targeting Q means on the validation set
-#'       (`Q_nat_vl_pre_mean`, `Q_shf_vl_pre_mean`, `Q_nat_vl_post_mean`,
-#'       `Q_shf_vl_post_mean`) and targeting update magnitudes.}
+#'       Tracks g/Q predictions under natural and shifted policy, the
+#'       current regression target (`Y_target_*`, the outer-step targeted
+#'       Q at t+1), pre- and post-targeting Q on the training side
+#'       (`Q_{nat,shf}_pre_*`, `Q_{nat,shf}_post_*`), model-fit residuals
+#'       (`resid_sd`, `resid_q95_abs`, `resid_max_abs` -- `Y_target` minus
+#'       shifted-mixture Q), targeting update magnitudes
+#'       (`delta_{nat,shf}_target_{sd,q95_abs,max_abs}`), and pre-/post-
+#'       targeting Q means on the validation set (`Q_nat_vl_pre_mean`,
+#'       `Q_shf_vl_pre_mean`, `Q_nat_vl_post_mean`, `Q_shf_vl_post_mean`).}
 #'     \item{`$branch_cal`}{Per-fold, per-time calibration table for
-#'       `g_remain`, `g_death`, and `Q_rem`. Same structure as [sdr()].}
+#'       `g_remain`, `g_death`, `Q_rem`, and `Q_exit`. Same structure as
+#'       [sdr()].}
 #'     \item{`$target_cal`}{*(iTMLE only)* `data.table` with one row per
 #'       targeting iteration (fold x time x iteration), tracking EIF
 #'       magnitude as it decreases toward convergence.}
@@ -737,178 +743,111 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #'   still be sufficient events across the pooled structure.  All built-in
 #'   examples use a minimum of 2,000 subjects.
 #'
-#' @seealso [density_ratio()], [sdr()], [contrast()], [absorb_rule()], [sl_itmle]
+#' @section Diagnostics:
+#'   The returned fit carries several diagnostic tables under `$diagnostics`:
+#'   \itemize{
+#'     \item `branch_cal` -- per-fold, per-time calibration for the four
+#'       branches (`g_remain`, `g_death`, `q_rem`, `q_exit`); summarise with
+#'       [branch_cal_summary()] and use to tune the g/Q SuperLearner libraries.
+#'     \item `recursion_diag` -- per-fold, per-time EIF/targeting mechanics
+#'       (`Y_target_*`, `Q_*_pre/post_*`, `delta_*_target_*`, `resid_*`,
+#'       range-violation counts, validation-side Q means). Post-hoc sanity.
+#'     \item `target_cal` -- per outer/inner targeting iteration, tracks EIF
+#'       magnitude toward convergence.
+#'     \item `target_sl` -- per (fold, t) SuperLearner coefficients from the
+#'       fluctuation model; use to prune `sl_tmle` wrappers that never fire.
+#'   }
+#'   `sl_summary` (per-(fold, t, component) SuperLearner coefficients for the
+#'   g/Q models) and `ic_df` (per-subject influence-curve values consumed by
+#'   [contrast()]) are also attached. Weight diagnostics live on the
+#'   [density_ratio()] object itself -- see [weight_diagnostics()]. A worked
+#'   workflow is in `vignette("diagnostics")`.
+#'
+#' @seealso [density_ratio()], [sdr()], [contrast()], [absorb_rule()],
+#'   [sl_itmle], [weight_diagnostics()], [branch_cal_summary()]
 #'
 #' @examples
 #' \donttest{
 #' library(SuperLearner)
+#' sl_lib  <- c("SL.mean", "SL.glm")
+#' tgt_lib <- c("SL.tmle_empty", "SL.tmle_intercept", "SL.tmle_glm")
 #'
-#' # ICU-like DGP: patients die, discharge, or remain in state each time point
-#' sim_ex <- function(n = 2000L, tmax = 5L) {
-#'   set.seed(42L)
-#'   rows <- vector("list", n)
-#'   for (i in seq_len(n)) {
-#'     age <- round(rnorm(1, 65, 10)); L1 <- rnorm(1)
-#'     pat <- list()
-#'     for (t in seq_len(tmax)) {
-#'       A     <- rbinom(1, 1, plogis(0.3 * L1 - 0.4))
-#'       u     <- runif(1)
-#'       p_die <- plogis(-4.0 + 0.2 * L1 - 0.1 * age / 10)
-#'       p_dc  <- plogis(-2.5 + 0.5 * A)
-#'       if (u < p_die) {
-#'         alive <- 0L; in_state <- 0L
-#'       } else if (u < p_die + p_dc) {
-#'         alive <- 1L; in_state <- 0L
-#'       } else {
-#'         alive <- 1L; in_state <- 1L
-#'       }
-#'       Y <- rbinom(1, 1, plogis(-0.5 + 0.4 * A - 0.2 * L1))
-#'       pat[[length(pat) + 1L]] <- data.frame(
-#'         id = i, time = t, age = age, L1 = L1,
-#'         A = A, alive = alive, in_state = in_state, Y = Y
-#'       )
-#'       if (in_state == 0L) break
-#'       if (t < tmax) L1 <- L1 + rnorm(1, -0.1 * A, 0.3)
-#'     }
-#'     rows[[i]] <- do.call(rbind, pat)
-#'   }
-#'   do.call(rbind, rows)
-#' }
-#' df <- sim_ex()
-#'
-#' # Policy: increase treatment probability by 0.3
-#' policy_fn <- function(D_block, t, a_names) {
+#' # ---- Single binary treatment (sim_bin) ------------------------------
+#' df <- sim_bin(n = 500L, tmax = 3L, seed = 1L)
+#' policy_bin <- function(D_block, t, a_names) {
 #'   out <- D_block[, ..a_names, drop = FALSE]
-#'   out[[a_names[1]]] <- pmin(D_block[[a_names[1]]] + 0.3, 1)
+#'   out[[a_names[1]]] <- pmax(
+#'     D_block[[a_names[1]]], as.integer(D_block[["L1"]] > 1.0)
+#'   )
 #'   out
 #' }
-#'
-#' sl_lib <- c("SL.mean", "SL.glm")
-#'
 #' wr <- density_ratio(
-#'   df = df, a_names = "A", tmax = 5L, baseline = "age", tv_names = "L1",
+#'   df = df, a_names = "A", tmax = 3L,
+#'   baseline = c("age", "sex"), tv_names = c("L1", "L2"),
 #'   sl_g = sl_lib, k = 1L, inner_v = 3L, v = 3L, seed = 1L,
-#'   id = "id", time = "time", policy_spec_fun = policy_fn
+#'   id = "id", time = "time", policy_spec_fun = policy_bin
 #' )
-#'
 #' res <- itmle(
-#'   df               = df,
-#'   weight_object    = wr,
-#'   tmax             = 5L,
-#'   id               = "id",
-#'   time             = "time",
-#'   alive            = "alive",
-#'   in_state         = "in_state",
-#'   y                = "Y",
-#'   baseline         = "age",
-#'   tv_names         = "L1",
-#'   a_names          = "A",
-#'   sl_remain        = sl_lib,
-#'   sl_death         = sl_lib,
-#'   sl_recursive     = sl_lib,
-#'   sl_y             = sl_lib,
-#'   sl_tmle          = c("SL.tmle_empty", "SL.tmle_intercept", "SL.tmle_glm"),
-#'   k                = 1L,
-#'   inner_v          = 3L,
-#'   v_target_itmle   = 3L,
-#'   v_sl_inner_itmle = 3L,
-#'   parallel         = FALSE,
-#'   seed             = 1L,
-#'   policy_spec_fun  = policy_fn
+#'   df = df, weight_object = wr, tmax = 3L,
+#'   id = "id", time = "time", alive = "alive", in_state = "in_state", y = "Y",
+#'   baseline = c("age", "sex"), tv_names = c("L1", "L2"), a_names = "A",
+#'   sl_remain = sl_lib, sl_death = sl_lib,
+#'   sl_recursive = sl_lib, sl_y = sl_lib, sl_tmle = tgt_lib,
+#'   k = 1L, inner_v = 3L, v_target_itmle = 3L, v_sl_inner_itmle = 3L,
+#'   parallel = FALSE, seed = 1L, policy_spec_fun = policy_bin
 #' )
-#' res$psi
-#' res$se
-#' }
+#' res$psi; res$se
 #'
-#' # Multi-treatment: joint policy over two binary treatments (A1, A2)
-#' \donttest{
-#' library(SuperLearner)
-#'
-#' sim_multi <- function(n = 2000L, tmax = 5L) {
-#'   set.seed(42L)
-#'   rows <- vector("list", n)
-#'   for (i in seq_len(n)) {
-#'     age <- round(rnorm(1, 65, 10)); L1 <- rnorm(1)
-#'     pat <- list()
-#'     for (t in seq_len(tmax)) {
-#'       A1    <- rbinom(1, 1, plogis(0.3 * L1 - 0.4))
-#'       A2    <- rbinom(1, 1, plogis(0.2 * L1 + 0.3 * A1 - 0.3))
-#'       u     <- runif(1)
-#'       p_die <- plogis(-4.0 + 0.2 * L1 - 0.1 * age / 10)
-#'       p_dc  <- plogis(-2.5 + 0.4 * A1 + 0.3 * A2)
-#'       if (u < p_die) {
-#'         alive <- 0L; in_state <- 0L
-#'       } else if (u < p_die + p_dc) {
-#'         alive <- 1L; in_state <- 0L
-#'       } else {
-#'         alive <- 1L; in_state <- 1L
-#'       }
-#'       Y <- rbinom(1, 1, plogis(-0.5 + 0.3 * A1 + 0.3 * A2 - 0.2 * L1))
-#'       pat[[length(pat) + 1L]] <- data.frame(
-#'         id = i, time = t, age = age, L1 = L1,
-#'         A1 = A1, A2 = A2, alive = alive, in_state = in_state, Y = Y
-#'       )
-#'       if (in_state == 0L) break
-#'       if (t < tmax) L1 <- L1 + rnorm(1, -0.1 * A1, 0.3)
-#'     }
-#'     rows[[i]] <- do.call(rbind, pat)
-#'   }
-#'   do.call(rbind, rows)
-#' }
-#' df2 <- sim_multi()
-#'
-#' policy_fn2 <- function(D_block, t, a_names) {
+#' # ---- Single continuous treatment (sim_cont) -------------------------
+#' df_c <- sim_cont(n = 500L, tmax = 3L, seed = 1L)
+#' policy_cont <- function(D_block, t, a_names) {
 #'   out <- D_block[, ..a_names, drop = FALSE]
-#'   out[[a_names[1]]] <- pmin(D_block[[a_names[1]]] + 0.3, 1)
-#'   out[[a_names[2]]] <- pmin(D_block[[a_names[2]]] + 0.3, 1)
+#'   out[[a_names[1]]] <- pmin(D_block[[a_names[1]]] + 0.2, 2.0)
 #'   out
 #' }
-#'
-#' sl_lib <- c("SL.mean", "SL.glm")
-#'
-#' wr2 <- density_ratio(
-#'   df              = df2,
-#'   a_names         = c("A1", "A2"),
-#'   tmax            = 5L,
-#'   baseline        = "age",
-#'   tv_names        = "L1",
-#'   sl_g            = sl_lib,
-#'   k               = 1L,
-#'   inner_v         = 3L,
-#'   v               = 3L,
-#'   seed            = 1L,
-#'   id              = "id",
-#'   time            = "time",
-#'   policy_spec_fun = policy_fn2
+#' wr_c <- density_ratio(
+#'   df = df_c, a_names = "A", tmax = 3L,
+#'   baseline = "age", tv_names = "L1",
+#'   sl_g = sl_lib, k = 1L, inner_v = 3L, v = 3L, seed = 1L,
+#'   id = "id", time = "time", policy_spec_fun = policy_cont
 #' )
-#'
-#' res2 <- itmle(
-#'   df               = df2,
-#'   weight_object    = wr2,
-#'   tmax             = 5L,
-#'   id               = "id",
-#'   time             = "time",
-#'   alive            = "alive",
-#'   in_state         = "in_state",
-#'   y                = "Y",
-#'   baseline         = "age",
-#'   tv_names         = "L1",
-#'   a_names          = c("A1", "A2"),
-#'   sl_remain        = sl_lib,
-#'   sl_death         = sl_lib,
-#'   sl_recursive     = sl_lib,
-#'   sl_y             = sl_lib,
-#'   sl_tmle          = c("SL.tmle_empty", "SL.tmle_intercept", "SL.tmle_glm"),
-#'   k                = 1L,
-#'   inner_v          = 3L,
-#'   v_target_itmle   = 3L,
-#'   v_sl_inner_itmle = 3L,
-#'   parallel         = FALSE,
-#'   seed             = 1L,
-#'   policy_spec_fun  = policy_fn2
+#' res_c <- itmle(
+#'   df = df_c, weight_object = wr_c, tmax = 3L,
+#'   id = "id", time = "time", alive = "alive", in_state = "in_state", y = "Y",
+#'   baseline = "age", tv_names = "L1", a_names = "A",
+#'   sl_remain = sl_lib, sl_death = sl_lib,
+#'   sl_recursive = sl_lib, sl_y = sl_lib, sl_tmle = tgt_lib,
+#'   k = 1L, inner_v = 3L, v_target_itmle = 3L, v_sl_inner_itmle = 3L,
+#'   parallel = FALSE, seed = 1L, policy_spec_fun = policy_cont
 #' )
-#' res2$psi
-#' res2$se
+#' res_c$psi; res_c$se
+#'
+#' # ---- Multiple treatments -- binary + continuous (sim_multi) ---------
+#' df_m <- sim_multi(
+#'   n = 500L, tmax = 3L, seed = 1L, n_binary = 1L, n_continuous = 1L
+#' )
+#' policy_multi <- function(D_block, t, a_names) {
+#'   out <- D_block[, ..a_names, drop = FALSE]
+#'   out[["A_b1"]] <- pmax(D_block[["A_b1"]], as.integer(D_block[["L1"]] > 1.0))
+#'   out[["A_c1"]] <- pmin(D_block[["A_c1"]] + 0.2, 2.0)
+#'   out
+#' }
+#' wr_m <- density_ratio(
+#'   df = df_m, a_names = c("A_b1", "A_c1"), tmax = 3L,
+#'   baseline = c("age", "sex"), tv_names = "L1",
+#'   sl_g = sl_lib, k = 1L, inner_v = 3L, v = 3L, seed = 1L,
+#'   id = "id", time = "time", policy_spec_fun = policy_multi
+#' )
+#' res_m <- itmle(
+#'   df = df_m, weight_object = wr_m, tmax = 3L,
+#'   id = "id", time = "time", alive = "alive", in_state = "in_state", y = "Y",
+#'   baseline = c("age", "sex"), tv_names = "L1", a_names = c("A_b1", "A_c1"),
+#'   sl_remain = sl_lib, sl_death = sl_lib,
+#'   sl_recursive = sl_lib, sl_y = sl_lib, sl_tmle = tgt_lib,
+#'   k = 1L, inner_v = 3L, v_target_itmle = 3L, v_sl_inner_itmle = 3L,
+#'   parallel = FALSE, seed = 1L, policy_spec_fun = policy_multi
+#' )
+#' res_m$psi; res_m$se
 #' }
 #'
 #' @export
@@ -923,7 +862,7 @@ itmle <- function(
     sl_remain = NULL,
     sl_death  = NULL,
     sl_recursive = NULL,
-    sl_rec_simple = NULL,
+    sl_rec_early = NULL,
     rec_transition = NULL,
     sl_y = NULL,
     outcome_family = c("binomial", "gaussian"),
@@ -945,11 +884,17 @@ itmle <- function(
     cluster = NULL,
     cluster_se_only = FALSE,
     pool_g_death = FALSE,
-    pool_q_exit  = FALSE
+    pool_q_exit  = FALSE,
+    pool_time    = c("spline", "linear", "factor")
 ) {
   stopifnot(requireNamespace("data.table", quietly = TRUE))
   stopifnot(requireNamespace("SuperLearner", quietly = TRUE))
   if (is.null(sl_tmle)) sl_tmle <- get("sl_tmle", envir = asNamespace("CausalState"))
+
+  pool_time <- match.arg(pool_time)
+  pool_time_basis <- if (isTRUE(pool_g_death) || isTRUE(pool_q_exit)) {
+    make_pool_time_basis(tmax, mode = pool_time)
+  } else NULL
 
   if (!isTRUE(parallel)) sl_workers <- NULL
 
@@ -980,8 +925,8 @@ itmle <- function(
   if (is.null(sl_death))  stop("`sl_death` must be provided (SL library for g_death_exit).", call. = FALSE)
   if (is.null(sl_y)) stop("`sl_y` must be provided (SL library for Q_exit).", call. = FALSE)
   if (is.null(sl_recursive))  stop("`sl_recursive` must be provided (SL library for Q_rem).", call. = FALSE)
-  if (!is.null(sl_rec_simple) && is.null(rec_transition)) {
-    stop("`sl_rec_simple` requires `rec_transition` to be specified.", call. = FALSE)
+  if (!is.null(sl_rec_early) && is.null(rec_transition)) {
+    stop("`sl_rec_early` requires `rec_transition` to be specified.", call. = FALSE)
   }
 
   outcome_family <- match.arg(outcome_family, c("binomial", "gaussian"))
@@ -1134,6 +1079,7 @@ itmle <- function(
       alive = alive, in_state = in_state,
       cluster_by_id = cluster_by_id,
       sl_death = sl_death, inner_v = inner_v, seed = seed, f_idx = f_idx,
+      pool_time_basis = pool_time_basis,
       sl_workers = sl_workers
     )
     .fit_pool_q <- function() fit_pooled_q_exit(
@@ -1143,7 +1089,9 @@ itmle <- function(
       alive = alive, in_state = in_state, Y_init = Y_init,
       cluster_by_id = cluster_by_id,
       sl_y = sl_y, inner_v = inner_v, seed = seed, f_idx = f_idx,
-      is_binom = is_binom, sl_workers = sl_workers
+      is_binom = is_binom,
+      pool_time_basis = pool_time_basis,
+      sl_workers = sl_workers
     )
 
     run_both_pooled <- isTRUE(pool_g_death) && isTRUE(pool_q_exit) &&
@@ -1285,6 +1233,7 @@ itmle <- function(
         fit_qexit_pooled = fit_qexit_pooled,
         cn_qexit_pool    = cn_qexit_pool,
         cols_pool_qexit  = cols_pool_qexit,
+        pool_time_basis  = pool_time_basis,
         D                = D,
         rows_tr          = rows_tr,
         D_shifted_tt     = D_shifted[[tt]],
@@ -1299,7 +1248,7 @@ itmle <- function(
         sl_death         = sl_death,
         sl_y             = sl_y,
         sl_recursive     = sl_recursive,
-        sl_rec_simple    = sl_rec_simple,
+        sl_rec_early    = sl_rec_early,
         rec_transition   = rec_transition,
         inner_v          = inner_v,
         seed             = seed,
@@ -1429,8 +1378,8 @@ itmle <- function(
         
         if (!is.null(fit_dex)) {
           if (isTRUE(pool_g_death)) {
-            X_nat_dex_vl      <- make_design(D, rows_vl, cols_pool)
-            X_nat_dex_vl$.__t <- tt
+            X_nat_dex_vl <- make_design(D, rows_vl, cols_pool)
+            X_nat_dex_vl <- apply_pool_time_basis(X_nat_dex_vl, tt, pool_time_basis)
             X_shf_dex_vl <- patch_shifted_design(
               X_nat        = X_nat_dex_vl,
               D_shifted_tt = D_shifted[[tt]],
@@ -1440,8 +1389,8 @@ itmle <- function(
               k            = k,
               t_min        = t_min
             )
-            
-            X_shf_dex_vl$.__t <- tt
+
+            X_shf_dex_vl <- apply_pool_time_basis(X_shf_dex_vl, tt, pool_time_basis)
             X_nat_dex_vl <- align_cols(X_nat_dex_vl, cn_pool)
             X_shf_dex_vl <- align_cols(X_shf_dex_vl, cn_pool)
             p_dex_nat_vl <- scale_info$clip(sl_predict(fit_dex, X_nat_dex_vl))
@@ -1461,10 +1410,10 @@ itmle <- function(
             X_shf_qvl  <- patch_shifted_design(
               X_nat = X_nat_qvl, D_shifted_tt = D_shifted[[tt]],
               rows = rows_vl, a_names = a_names, tt = tt, k = k, t_min = t_min)
-            X_nat_d_vl <- X_nat_qvl; X_nat_d_vl$exit_status <- 1; X_nat_d_vl$.__t <- tt
-            X_nat_c_vl <- X_nat_qvl; X_nat_c_vl$exit_status <- 0; X_nat_c_vl$.__t <- tt
-            X_shf_d_vl <- X_shf_qvl; X_shf_d_vl$exit_status <- 1; X_shf_d_vl$.__t <- tt
-            X_shf_c_vl <- X_shf_qvl; X_shf_c_vl$exit_status <- 0; X_shf_c_vl$.__t <- tt
+            X_nat_d_vl <- apply_pool_time_basis(X_nat_qvl, tt, pool_time_basis); X_nat_d_vl$exit_status <- 1
+            X_nat_c_vl <- apply_pool_time_basis(X_nat_qvl, tt, pool_time_basis); X_nat_c_vl$exit_status <- 0
+            X_shf_d_vl <- apply_pool_time_basis(X_shf_qvl, tt, pool_time_basis); X_shf_d_vl$exit_status <- 1
+            X_shf_c_vl <- apply_pool_time_basis(X_shf_qvl, tt, pool_time_basis); X_shf_c_vl$exit_status <- 0
           } else {
             X_nat_d_vl <- X_nat_vl_base; X_nat_d_vl$exit_status <- 1
             X_nat_c_vl <- X_nat_vl_base; X_nat_c_vl$exit_status <- 0
@@ -1797,9 +1746,6 @@ itmle <- function(
         q_exit_nat_sd   = sd_or_na(exit_branch_nat_tr),
         q_exit_shf_mean = mean_or_na(exit_branch_shf_tr),
         q_exit_shf_sd   = sd_or_na(exit_branch_shf_tr),
-        
-        rem_contrib_nat_mean = mean_or_na(p_rem_nat * q_rem_nat),
-        rem_contrib_shf_mean = mean_or_na(p_rem_shf * q_rem_shf),
 
         Y_target_mean = mean_or_na(Y_target_ar),
         Y_target_sd   = sd_or_na(Y_target_ar),
@@ -2043,6 +1989,8 @@ itmle <- function(
     settings = list(
       start_t        = start_t_global,
       pool_g_death   = pool_g_death,
+      pool_q_exit    = pool_q_exit,
+      pool_time      = pool_time,
       trim           = trim,
       outcome_family = outcome_family,
       variable_info  = list(

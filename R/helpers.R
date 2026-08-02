@@ -375,8 +375,10 @@ print.CausalState_contrast <- function(x, digits = 3L, ...) {
 #'
 #' @param weight_object Output of \code{density_ratio()}.
 #' @param trim Quantile used to cap \code{Rt_t} before computing summaries.
-#'   Mirrors the \code{trim} argument of \code{sdr()}/\code{itmle()}.
-#'   Set to \code{NULL} or \code{1} to skip trimming.
+#'   Default \code{1} (no trimming) so the returned summaries reflect the raw
+#'   density ratios; pass a value \code{< 1} (e.g. \code{0.99}) to see how a
+#'   given trim reshapes the weight distribution before choosing what to hand
+#'   to \code{sdr()}/\code{itmle()}.
 #'
 #' @return A \code{data.table} with one row per time step and columns:
 #'   \code{t}, \code{n_risk};
@@ -389,7 +391,7 @@ print.CausalState_contrast <- function(x, digits = 3L, ...) {
 #' @seealso [density_ratio()], [sdr()], [itmle()]
 #'
 #' @export
-weight_diagnostics <- function(weight_object, trim = 0.99) {
+weight_diagnostics <- function(weight_object, trim = 1) {
   weights_dt <- extract_weights_dt(weight_object)
   s    <- weight_object$settings
   id   <- s$id

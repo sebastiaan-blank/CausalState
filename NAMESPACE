@@ -36,6 +36,12 @@ export(branch_cal_summary)
 export(method.WB_dr)
 export(absorb_rule)
 
+# --- Exports: simulation helpers (for vignettes/examples) ------------------
+
+export(sim_bin)
+export(sim_cont)
+export(sim_multi)
+
 # --- Exports: default targeting library vector ----------------------------
 
 export(sl_tmle)

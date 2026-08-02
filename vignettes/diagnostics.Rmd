@@ -1,0 +1,418 @@
+---
+title: "Diagnostics workflow"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Diagnostics workflow}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE, purl = FALSE)
+```
+
+```{r setup}
+library(CausalState)
+library(SuperLearner)
+```
+
+## Overview
+
+`CausalState` produces a lot of diagnostic output. This vignette walks
+through a *stable, objective workflow* for using it. The core idea is that
+several checks and tuning decisions should happen **before** the final
+estimation, and a smaller set of post-estimation checks confirm the fit
+behaved sensibly.
+
+The recommended flow:
+
+1. **Density ratios** — fit the weights first; use `weight_diagnostics()`
+   and `policy_change_summary` to judge whether the intervention is
+   supported and to pick `trim`.
+2. **Q calibration** — fit `sdr()`, `itmle()`, or `qreg()` under the
+   **natural-course** policy; use `branch_cal_summary()` to tune the
+   SuperLearner libraries for the g- and Q-branches. For `itmle()` this
+   is also where you tune the targeting library `sl_tmle`.
+3. **Final estimation** — once weights and Q-branches look reasonable,
+   run `sdr()` / `itmle()` under the actual policy of interest.
+4. **Post-estimation sanity checks** — `recursion_diag`, `target_cal`
+   (iTMLE only), and `ic_df`. These describe what the estimator *did*
+   with a final fit; they are informative but not part of the tuning
+   loop.
+
+We use `sim_bin()` throughout for illustration. `sim_cont()` (continuous
+treatment) and `sim_multi()` (any mix of binary + continuous treatments)
+follow the same shape.
+
+```{r sim}
+df <- sim_bin(n = 2000L, tmax = 5L, seed = 1L)
+head(df)
+```
+
+## 1. Density ratios: is the intervention supportable?
+
+Fit the density ratios before touching any outcome model. This step
+answers two independent questions:
+
+- **Are the weights well-behaved?** Very large cumulative-product weights
+  (a handful of subjects with `Rt_cum >> N`) will destabilise both the
+  SDR and iTMLE corrections regardless of how well the Q-models fit.
+- **Is the intervention shift plausible?** If the policy is far from
+  the observed treatment distribution, `policy_change_summary` will
+  show it as extreme shift magnitudes.
+
+```{r dr}
+sl_lib <- c("SL.mean", "SL.glm")
+
+policy_bin <- function(D_block, t, a_names) {
+  out <- D_block[, ..a_names, drop = FALSE]
+  out[[a_names[1]]] <- pmax(
+    D_block[[a_names[1]]], as.integer(D_block[["L1"]] > 1.0)
+  )
+  out
+}
+
+wr <- density_ratio(
+  df              = df,
+  a_names         = "A",
+  tmax            = 5L,
+  baseline        = c("age", "sex"),
+  tv_names        = c("L1", "L2"),
+  sl_g            = sl_lib,
+  k               = 1L,
+  inner_v         = 3L,
+  v               = 3L,
+  seed            = 1L,
+  id              = "id",
+  time            = "time",
+  policy_spec_fun = policy_bin
+)
+```
+
+### `weight_diagnostics()`
+
+```{r weightdiag}
+weight_diagnostics(wr)
+```
+
+The most important columns:
+
+- **`cum_mean`** — mean of the cumulative density-ratio product at each
+  time step. This is what actually drives the size of the EIF
+  correction in `sdr()` / `itmle()`. If `cum_mean` blows up (say
+  above 5) or the ratio between successive time steps grows,
+  cumulative weights are accumulating fast — the correction will be
+  variance-dominated and the estimator will be noisy.
+- **`Rt_mean`** — mean of the *instantaneous* density ratio at each
+  step (restricted to at-risk subjects). Tells you where in time the
+  shift is biting hardest. A single spike says the intervention is
+  extreme at that time; a gentle slope across time is easier to
+  handle.
+
+Secondary columns, useful for tuning and plausibility checks:
+
+- **`Rt_ess`**, **`cum_ess`** — Kish effective sample size. Low values
+  flag that most of the mass is concentrated in a few subjects. Not a
+  hard rule but useful when comparing candidate `sl_g` libraries or
+  candidate policies.
+- **`Rt_max`**, **`cum_max`** — worst-case weight. Useful for spotting
+  positivity violations. If `cum_max` is orders of magnitude larger
+  than `cum_mean`, the intervention is unrealistic somewhere in the
+  covariate space.
+
+### `policy_change_summary`
+
+```{r change}
+wr$policy_change_summary
+```
+
+Shows the fraction of subjects whose treatment actually changed under
+the policy at each time-step, plus the mean/quantiles of the
+observed-vs-shifted difference *among those who changed*. A policy
+that changes 100% of subjects by large amounts will have extreme
+weights by construction — the diagnostics above are then just
+confirming a design choice rather than a modelling problem.
+
+### Picking a trim
+
+`weight_diagnostics()` accepts `trim` (default `1`, i.e. no trimming) so
+you can see how a candidate trim reshapes the weight distribution
+before committing:
+
+```{r trim}
+weight_diagnostics(wr, trim = 0.99)   # cap Rt_t at the 99th percentile
+weight_diagnostics(wr, trim = 0.95)
+```
+
+`sdr()` and `itmle()` take the same `trim` argument. Trimming reduces
+variance at the cost of a small (usually negligible) bias in the
+weighted correction — the tradeoff is worth it when a small number of
+extreme weights are dominating the influence curve.
+
+## 2. Q calibration: are the outcome models trustworthy?
+
+Once weights look reasonable, fit the estimator **under the natural
+course** — i.e. with a policy that returns the observed treatment
+unchanged. This diagnostic run has two properties that make it
+uniquely useful for tuning:
+
+- The mean of the estimated Q at time 1 should approximately equal
+  the observed outcome mean. If it doesn't, the Q-branches are
+  miscalibrated.
+- The `branch_cal` table is populated with per-fold, per-time
+  calibration slopes and target-vs-pred means for each of the four
+  branches (`g_remain`, `g_death`, `q_rem`, `q_exit`).
+
+Under the *actual* intervention policy, calibration is *unmeasurable*
+in the usual sense — the counterfactual outcome is never observed.
+That is why you should tune here, under the natural course, and then
+lock the SL library choice before the intervention run.
+
+```{r natrun}
+policy_nat <- function(D_block, t, a_names) {
+  D_block[, ..a_names, drop = FALSE]
+}
+
+wr_nat <- density_ratio(
+  df = df, a_names = "A", tmax = 5L,
+  baseline = c("age", "sex"), tv_names = c("L1", "L2"),
+  sl_g = sl_lib, k = 1L, inner_v = 3L, v = 3L, seed = 1L,
+  id = "id", time = "time",
+  policy_spec_fun = policy_nat
+)
+
+res_nat <- sdr(
+  df = df, weight_object = wr_nat, tmax = 5L,
+  id = "id", time = "time", alive = "alive", in_state = "in_state", y = "Y",
+  baseline = c("age", "sex"), tv_names = c("L1", "L2"), a_names = "A",
+  sl_remain = sl_lib, sl_death = sl_lib,
+  sl_recursive = sl_lib, sl_y = sl_lib,
+  k = 1L, inner_v = 3L, parallel = FALSE, seed = 1L,
+  policy_spec_fun = policy_nat
+)
+```
+
+### `branch_cal_summary()`
+
+```{r branchcal}
+bc <- branch_cal_summary(res_nat)
+print(bc)
+```
+
+Focus on:
+
+- **`tgt_vl`** — empirical mean of the target on the validation folds.
+- **`pred_vl`** — mean of the model prediction on the same folds. Under
+  the natural course, these should track closely per branch.
+- **`cal_slope_vl`** — slope from regressing the target on the model
+  prediction (on the logit scale for binomial branches). A slope of
+  `1.0` is perfect calibration; `< 1` indicates over-fitting (the
+  model spread its predictions too widely); `> 1` indicates
+  under-fitting (predictions too flat).
+
+A slope of `0.7-1.3` and `tgt_vl ≈ pred_vl` per branch is a reasonable
+target. When a branch is systematically off, revise the corresponding
+`sl_*` library — usually by adding smoother learners (`SL.glm`,
+`SL.glmnet`) if calibration slope is `< 1`, or richer learners
+(`SL.xgboost`, spline learners) if slope is `> 1` and the target is
+poorly matched.
+
+### Alternative: pure Q-view with `qreg()`
+
+`sdr()` computes both g- and Q-branches, and both are reflected in
+`branch_cal`. If you want to isolate the Q-side without the g-branch
+noise (or without needing weights), `qreg()` runs the pure
+Q-recursion under the natural course:
+
+```{r qreg}
+res_qreg <- qreg(
+  df = df, tmax = 5L,
+  id = "id", time = "time", alive = "alive", in_state = "in_state", y = "Y",
+  baseline = c("age", "sex"), tv_names = c("L1", "L2"), a_names = "A",
+  sl_remain = sl_lib, sl_death = sl_lib,
+  sl_recursive = sl_lib, sl_y = sl_lib,
+  k = 1L, inner_v = 3L, parallel = FALSE, seed = 1L,
+  policy_spec_fun = policy_nat
+)
+branch_cal_summary(res_qreg)
+```
+
+### Tuning the targeting library (`itmle()` only)
+
+`itmle()` adds a fluctuation/targeting step on top of the Q-mixture.
+The targeting model has its own SuperLearner library
+(`sl_tmle` / `tgt_lib`). A natural-course `itmle()` run lets you tune
+this library too:
+
+```{r itmlenat}
+tgt_lib <- c("SL.tmle_empty", "SL.tmle_intercept", "SL.tmle_glm")
+
+res_itmle_nat <- itmle(
+  df = df, weight_object = wr_nat, tmax = 5L,
+  id = "id", time = "time", alive = "alive", in_state = "in_state", y = "Y",
+  baseline = c("age", "sex"), tv_names = c("L1", "L2"), a_names = "A",
+  sl_remain = sl_lib, sl_death = sl_lib,
+  sl_recursive = sl_lib, sl_y = sl_lib, sl_tmle = tgt_lib,
+  k = 1L, inner_v = 3L, v_target_itmle = 3L, v_sl_inner_itmle = 3L,
+  parallel = FALSE, seed = 1L, policy_spec_fun = policy_nat
+)
+res_itmle_nat$diagnostics$target_sl
+```
+
+`target_sl` shows which targeting wrappers were selected per (fold, t).
+If a wrapper never gets picked, drop it from `tgt_lib`. If the fit
+looks unstable, prefer covariate-adaptive wrappers (`SL.tmle_glm`,
+`SL.tmle_glmnet_*`) over intercept-only ones.
+
+## 3. Final estimation
+
+Only after the weight and calibration diagnostics are satisfactory
+should you run the estimator under the actual policy of interest.
+Keep the SL library choice locked from the tuning step.
+
+```{r final}
+res <- sdr(
+  df = df, weight_object = wr, tmax = 5L,
+  id = "id", time = "time", alive = "alive", in_state = "in_state", y = "Y",
+  baseline = c("age", "sex"), tv_names = c("L1", "L2"), a_names = "A",
+  sl_remain = sl_lib, sl_death = sl_lib,
+  sl_recursive = sl_lib, sl_y = sl_lib,
+  k = 1L, inner_v = 3L, parallel = FALSE, seed = 1L,
+  policy_spec_fun = policy_bin, trim = 0.99
+)
+res
+```
+
+## 4. Post-estimation sanity checks
+
+The remaining diagnostics describe what the estimator did with the
+final fit. They cannot easily be used to tune before running the
+estimator because they depend on the joint behaviour of the weights,
+the Q-models, *and* the specific intervention. Treat them as
+sanity checks rather than a feedback loop.
+
+### `diagnostics$recursion_diag`
+
+One row per fold × time-step, ordered from `t = tmax` down to `1`.
+The columns are grouped by concept.
+
+**Sample counts and fit-status flags**
+
+- `n_train_at_risk`, `n_valid_at_risk` — subjects available for the
+  recursion at each `t`.
+- `n_train_death`, `n_train_dc`, `n_train_remain` — outcome counts
+  used to fit that time-step's models.
+- `used_const_rem` / `_dex` / `_qexit` / `_qrem` — `TRUE` when the
+  corresponding SL fit had too few observations and a constant was
+  substituted. A cluster of `TRUE` values at later `t` typically
+  indicates late-follow-up subject scarcity.
+
+**Predicted branch probabilities and means (natural vs shifted, training side)**
+
+- `p_rem_{nat,shf}_{mean,sd}` — `g_remain` predictions (probability
+  of staying in-state).
+- `p_dex_{nat,shf}_{mean,sd}` — `g_death_exit` predictions (probability
+  of death given exit).
+- `q_rem_{nat,shf}_{mean,sd}` — `Q_rem` predictions (expected outcome
+  for remainers).
+- `q_exit_{nat,shf}_{mean,sd}` — mean of the exit-branch mixture
+  `p_dex · q_death + (1 - p_dex) · q_dc`.
+
+Differences between `_nat` and `_shf` columns reflect how much the
+intervention shifts the branch predictions. Very small differences on
+a policy that meaningfully changes treatment suggest the models are
+insensitive to the treatment covariates — worth investigating.
+
+**Full mixture Q on training data**
+
+- `Q_{nat,shf}_pre_{mean,sd,min,max}` — mixture Q at time `t`, before
+  the EIF update (SDR) or targeting (iTMLE).
+- `Y_target_{mean,sd,min,max}` — the current regression target passed
+  into the `Q_rem` model at this step. For SDR this is the running
+  pseudo-outcome pre-update; for iTMLE it is the targeted Q from the
+  outer step `s+1`.
+- `pseudo_post_{mean,sd,min,max}` — pseudo-outcome after the EIF
+  update (SDR only). Should stay close to `Y_target` in-mean; large
+  divergence in the tails signals weight extremes.
+
+**EIF update / targeting magnitudes**
+
+- `delta_{sd, q95_abs, max_abs}` (SDR) — spread and tail of the EIF
+  correction (`pseudo_post - Y_target`). Big `delta_max_abs` relative
+  to `delta_sd` indicates a small number of subjects are driving the
+  correction — usually because of extreme weights.
+- `delta_{nat,shf}_target_{sd, q95_abs, max_abs}` (iTMLE) — same idea
+  but for the targeting update rather than the EIF update, computed
+  separately under natural and shifted branches.
+- `n_post_below_0`, `n_post_above_1` — how many EIF-corrected
+  pseudo-outcomes fell outside `[0, 1]`. Meaningful only for
+  binomial or bounded-Gaussian outcomes; a couple of violations per
+  fold is normal, a large number signals that the correction is
+  frequently pushing predictions out of the plausible range.
+- `n_{nat,shf}_post_{below_0,above_1}` (iTMLE) — same, but for the
+  post-targeting Q rather than the EIF-corrected pseudo-outcome.
+
+**Model residuals**
+
+- `resid_{sd, q95_abs, max_abs}` — `Y_target - Q_{shf}`. This is
+  how far off the fitted Q was from the target it was regressing
+  against, evaluated on the shifted branch. Large residuals suggest
+  the recursive Q model is misspecified for the current
+  pseudo-outcome — a signal to revisit `sl_recursive` (or
+  `sl_rec_early` if the miss is concentrated at early time-points).
+
+**Validation-side sanity**
+
+- `Q_{nat,shf}_vl_mean` (SDR) or `Q_{nat,shf}_vl_{pre,post}_mean`
+  (iTMLE) — validation-fold Q means. Comparing to their training
+  counterparts is a quick check for cross-fitting stability. Large
+  training-vs-validation gaps signal over-fitting somewhere in the
+  Q-recursion.
+- `delta_{nat,shf}_vl_target_q95_abs` (iTMLE) — validation-side
+  targeting update magnitude, useful for the same
+  overfit/underfit check.
+
+### `diagnostics$target_cal` (iTMLE only)
+
+One row per (fold, outer iteration, inner iteration) of the Luedtke
+targeting loop. Tracks:
+
+- The EIF magnitude at each iteration — should decrease toward
+  convergence.
+- The fluctuation coefficient at each step.
+
+Useful for spotting a targeting loop that is not converging (EIF
+magnitude not shrinking, or coefficients oscillating). If this
+happens under the actual policy, it usually points to weight-driven
+instability in the fluctuation step.
+
+### `diagnostics$sl_summary`
+
+Per-fold, per-time, per-component SuperLearner weight table. Consistently
+zero-weight learners can be pruned from the library on the next run —
+this is a legitimate feedback loop back into the tuning step.
+
+### `ic_df`
+
+Per-subject influence curve values, used by `contrast()` to build
+risk-difference / risk-ratio / odds-ratio contrasts with valid
+standard errors. Not typically inspected directly; consumed by:
+
+```{r contrast}
+# res_nat and res are the natural-course and shifted fits from above.
+contrast(res, res_nat)
+```
+
+## Workflow summary
+
+1. `density_ratio()` → `weight_diagnostics()` + `policy_change_summary`
+   → pick `trim`, revise policy or `sl_g` if weights or shift look
+   unreasonable.
+2. NAT-run `sdr()` (or `itmle()`, or `qreg()`) →
+   `branch_cal_summary()` → revise `sl_remain` / `sl_death` /
+   `sl_recursive` / `sl_y` (and for iTMLE, `sl_tmle`) until each
+   branch calibrates.
+3. Final `sdr()` / `itmle()` under the intervention policy.
+4. Inspect `recursion_diag` (and `target_cal` for iTMLE) for
+   sanity; use `sl_summary` to prune dead learners for the next run;
+   use `ic_df` via `contrast()` for downstream comparisons.

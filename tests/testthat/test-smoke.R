@@ -156,6 +156,30 @@ test_that("sdr returns a finite psi with positive se", {
   expect_gt(res$se, 0)
 })
 
+test_that("sdr with pooled g_death + Q_exit runs under each pool_time mode", {
+  for (mode in c("spline", "linear", "factor")) {
+    res <- sdr(
+      df              = df_smoke,
+      weight_object   = wr_smoke,
+      tmax            = 3L,
+      id              = "id", time = "time",
+      alive = "alive", in_state = "in_state", y = "Y",
+      baseline = c("age", "sex"),
+      tv_names = c("L1", "L2"),
+      a_names  = "A",
+      sl_remain = sl_fast, sl_death = sl_fast,
+      sl_recursive = sl_fast, sl_y = sl_fast,
+      outcome_family = "binomial",
+      k = 1L, inner_v = 2L, parallel = FALSE, seed = 1L,
+      policy_spec_fun = policy_up,
+      pool_g_death = TRUE, pool_q_exit = TRUE, pool_time = mode
+    )
+    expect_true(is.finite(res$psi), info = paste("mode =", mode))
+    expect_gt(res$se, 0, label = paste("se, mode =", mode))
+    expect_identical(res$settings$pool_time, mode)
+  }
+})
+
 # ── itmle ─────────────────────────────────────────────────────────────────
 
 test_that("itmle returns finite psi, positive se, and ordered ci", {

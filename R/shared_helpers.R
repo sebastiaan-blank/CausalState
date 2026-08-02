@@ -668,6 +668,89 @@ absorb_rule <- function(cond, value, branch = c("any", "death", "dc")) {
   )
 }
 
+# ------------------------------------------------------------------
+# pool_time basis: encode time t in pooled models (g_death_exit, Q_exit)
+# ------------------------------------------------------------------
+# For pool_g_death / pool_q_exit fits, `t` enters the design matrix as
+# one or more columns encoding the time-step index. Three choices:
+#   linear -- single column `.__t = tt` (compact, but assumes linear-in-t
+#             on the link scale)
+#   factor -- tmax-1 dummies (`.__t_lvl2..lvlN`); fully flexible per t
+#             but expensive for large tmax and starves cells of data
+#   spline -- restricted cubic spline (Harrell RCS) with K = min(5, tmax)
+#             equally-spaced knots, df = K-1. Smooth low-df flexibility;
+#             a reasonable default across learner libraries.
+#
+# Values of tt are always integers in 1..tmax, so we precompute a
+# `tmax x df` basis matrix once and index into it. Tree learners can
+# split on any basis column and recover step-in-t; linear learners get
+# the smoothness they need. See `make_pool_time_basis`.
+
+.rcs_basis <- function(x, knots) {
+  # Harrell restricted cubic spline: K knots => K-1 basis functions.
+  # Col 1: x (linear). Cols 2..K-1: constrained cubic terms.
+  K <- length(knots)
+  if (K < 3L) stop(".rcs_basis: need >= 3 knots", call. = FALSE)
+  n <- length(x)
+  B <- matrix(0.0, nrow = n, ncol = K - 1L)
+  B[, 1L] <- x
+  denom <- knots[K] - knots[K - 1L]
+  for (j in seq_len(K - 2L)) {
+    tj   <- knots[j]
+    tk_1 <- knots[K - 1L]
+    tk   <- knots[K]
+    t1 <- pmax(x - tj,   0)^3
+    t2 <- pmax(x - tk_1, 0)^3 * (tk   - tj) / denom
+    t3 <- pmax(x - tk,   0)^3 * (tk_1 - tj) / denom
+    B[, j + 1L] <- t1 - t2 + t3
+  }
+  B
+}
+
+make_pool_time_basis <- function(tmax, mode = c("spline", "linear", "factor")) {
+  mode <- match.arg(mode)
+  tmax <- as.integer(tmax)
+
+  if (tmax < 2L) {
+    B <- matrix(1.0, nrow = 1L, ncol = 1L, dimnames = list(NULL, ".__t"))
+    return(structure(list(B = B, colnames = ".__t", mode = "linear"),
+                     class = "pool_time_basis"))
+  }
+
+  if (mode == "linear") {
+    B <- matrix(as.numeric(seq_len(tmax)), ncol = 1L,
+                dimnames = list(NULL, ".__t"))
+  } else if (mode == "factor") {
+    nl <- tmax - 1L
+    cn <- paste0(".__t_lvl", 2:tmax)
+    B  <- matrix(0.0, nrow = tmax, ncol = nl, dimnames = list(NULL, cn))
+    for (j in seq_len(nl)) B[j + 1L, j] <- 1.0
+  } else {  # spline
+    df_eff <- min(4L, tmax - 1L)
+    if (df_eff <= 1L) {
+      B <- matrix(as.numeric(seq_len(tmax)), ncol = 1L,
+                  dimnames = list(NULL, ".__t"))
+    } else {
+      K <- df_eff + 1L
+      knots <- seq(1, tmax, length.out = K)
+      B <- .rcs_basis(as.numeric(seq_len(tmax)), knots)
+      colnames(B) <- paste0(".__t_b", seq_len(ncol(B)))
+    }
+  }
+
+  structure(list(B = B, colnames = colnames(B), mode = mode),
+            class = "pool_time_basis")
+}
+
+apply_pool_time_basis <- function(X, tt, basis) {
+  # X can be a data.frame or list; sets basis columns to basis$B[tt, ]
+  row_t <- basis$B[tt, , drop = TRUE]
+  for (j in seq_along(basis$colnames)) {
+    X[[basis$colnames[j]]] <- row_t[j]
+  }
+  X
+}
+
 align_cols <- function(X, cn) {
   X <- as.data.frame(X)
   miss <- setdiff(cn, names(X))

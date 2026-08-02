@@ -165,9 +165,8 @@ dr_from_prob <- function(p_mat, beta, bounds, denom_cap) {
 #'   or GPU-based learners. Default `NULL`.
 #' @param sl_workers Integer. Workers for parallel learner evaluation within
 #'   each SuperLearner call via [SuperLearner::mcSuperLearner()] (fork-based;
-#'   Linux/Mac only). `NULL` disables. Default `NULL`. **Note:** incompatible
-#'   with `dbarts`/`SL.dbarts` learners -- remove dbarts from `sl_g` when
-#'   `sl_workers` is set.
+#'   Linux/Mac only). `NULL` disables. Default `NULL`. **Note:** not compatible
+#'   with all learners.
 #'
 #' @section Parallelism:
 #'   `t_workers`, `fold_workers`, and `sl_workers` can be used independently
