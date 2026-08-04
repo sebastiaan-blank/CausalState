@@ -188,15 +188,6 @@ See `vignette("getting-started")` for a complete worked example with a
 simulated ICU dataset, including data structure, policy definition,
 SuperLearner library choices, and diagnostics.
 
-## Relationship to `lmtp`
-
-CausalState is built on the same LMTP framework as the
-[`lmtp`](https://github.com/nt-williams/lmtp) package and implements the
-same SDR and TMLE estimators. It is a complementary tool rather than a
-replacement: CausalState adds explicit modelling of absorbing-state
-transitions, allowing the MTP to shift the transition dynamics themselves
-rather than only the terminal outcome.
-
 ## Citation
 
     Blank S (2026). CausalState: SDR and iTMLE for State-Aware Longitudinal
