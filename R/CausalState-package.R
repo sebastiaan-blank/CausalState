@@ -1,10 +1,9 @@
-#' CausalState: SDR and iTMLE for State-Aware Longitudinal Modified Treatment Policies
+#' CausalState: Causal Inference in a Longitudinal Transitioning State Environment
 #'
 #' Two sequentially doubly robust estimators for longitudinal modified treatment
-#' policies (MTPs) in settings with absorbing state transitions - such as ICU
+#' policies (MTPs) in settings with transitioning states - such as ICU
 #' stay, ward admission, or ED episodes - where treatment is structurally
-#' inapplicable after transition to an absorbing state (e.g. discharge or
-#' death).
+#' inapplicable after a state transition (e.g. discharge or death).
 #'
 #' @section Sequential Doubly Robust estimator - [sdr()]:
 #' Implements the LMTP-SDR estimator of Diaz et al. (2021), which extends the
