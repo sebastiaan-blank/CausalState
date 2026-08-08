@@ -1,6 +1,6 @@
 Package: CausalState
 Type: Package
-Title: Sequential Doubly Robust and Infinite-Dimensional TMLE Estimators for State-Aware Longitudinal Modified Treatment Policies
+Title: Causal Inference in a Longitudinal Transitioning State Environment
 Version: 0.10.0
 Authors@R: person(given = "Sebastiaan",
     family = "Blank",
@@ -9,12 +9,14 @@ Authors@R: person(given = "Sebastiaan",
     comment = c(ORCID = "0000-0001-9115-2138"))
 Description: Implements Sequential Doubly Robust (SDR) and infinite-dimensional
     Targeted Maximum Likelihood (iTMLE) estimators for longitudinal modified treatment
-    policies in settings with absorbing state transitions, such as ICU, ward,
-    or emergency department care episodes. Treatment is permitted in active
-    states and becomes structurally inapplicable after transition to an
-    absorbing state (e.g. discharge or death). Supports asymmetric g- and
-    Q-model regularisation, k-fold cross-fitting, and pluggable SuperLearner
-    ensembles via included custom learner wrappers.
+    policies in settings with transitioning states, such as ICU, ward, or
+    emergency department care episodes. Treatment is permitted in active states
+    and becomes structurally inapplicable after a state transition (e.g.
+    discharge or death). Supports asymmetric g- and Q-model regularisation,
+    k-fold cross-fitting, and pluggable SuperLearner ensembles via included
+    custom learner wrappers. Methods based on Diaz et al. (2021)
+    <doi:10.1080/01621459.2021.1955691> and Luedtke et al. (2017)
+    <https://arxiv.org/abs/1705.02459>.
 License: AGPL-3
 Encoding: UTF-8
 Depends:

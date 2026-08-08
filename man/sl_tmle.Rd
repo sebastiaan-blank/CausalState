@@ -7,6 +7,10 @@ sl_tmle
 \format{
 A character vector of SuperLearner learner names.
 }
+\value{
+A character vector of SuperLearner learner name strings to be passed to
+the \code{sl_target} argument of \code{\link{itmle}}.
+}
 \description{
 A character vector naming the default library of learners used in the
 iTMLE targeting step.  Contains empty, intercept-only, GLM, and XGBoost

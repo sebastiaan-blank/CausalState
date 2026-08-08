@@ -116,9 +116,6 @@ local({
         msg <- sprintf("[method.NNloglik_safe][pid=%d] optim failed -> NNLS fallback: %s",
                        Sys.getpid(), conditionMessage(e))
         message(msg)
-        try(cat(paste0(format(Sys.time(), "%F %T"), " ", msg, "\n"),
-                file = .SL_WARN_FILE,
-                append = TRUE), silent = TRUE)
         SuperLearner::method.NNLS()$computeCoef(Z, Y, libraryNames, verbose, obsWeights, control, ...)
       }
     )
