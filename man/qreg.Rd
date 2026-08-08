@@ -39,7 +39,8 @@ qreg(
   pool_time = c("spline", "linear", "factor"),
   weight_object = NULL,
   v = 5L,
-  trim = 0.99
+  trim = 0.99,
+  verbose = TRUE
 )
 }
 \arguments{
@@ -176,6 +177,10 @@ independent folds are created using \code{v} and \code{seed}.}
 \item{trim}{Quantile for capping density ratios before EIF-based SE
 computation (only used when \code{weight_object} is supplied).
 Default \code{0.99}.}
+
+\item{verbose}{Logical. When \code{TRUE} (default), prints a data-check summary
+on startup and per-fold per-time progress messages during the backward
+recursion. Set to \code{FALSE} to suppress all informational output.}
 }
 \value{
 A list with:

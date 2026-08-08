@@ -352,7 +352,8 @@ density_ratio <- function(
     parallel_t = FALSE,
     t_workers = NULL,
     fold_workers = NULL,
-    sl_workers = NULL
+    sl_workers = NULL,
+    verbose = TRUE
 ) {
 
   `%||%` <- function(x, y) if (!is.null(x)) x else y
@@ -367,7 +368,8 @@ density_ratio <- function(
 
   data_check(data = df, id = id, time = time,
              a_names = a_names, tv_names = tv_names,
-             bs = baseline, tmin = 1, tmax = tmax)
+             bs = baseline, tmin = 1, tmax = tmax,
+             verbose = verbose)
 
   DT <- data.table::as.data.table(df)
   data.table::setorderv(DT, c(id, time))

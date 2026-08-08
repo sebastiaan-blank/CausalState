@@ -27,7 +27,8 @@ density_ratio(
   parallel_t = FALSE,
   t_workers = NULL,
   fold_workers = NULL,
-  sl_workers = NULL
+  sl_workers = NULL,
+  verbose = TRUE
 )
 }
 \arguments{
@@ -113,9 +114,10 @@ or GPU-based learners. Default \code{NULL}.}
 
 \item{sl_workers}{Integer. Workers for parallel learner evaluation within
 each SuperLearner call via \code{\link[SuperLearner:mcSuperLearner]{SuperLearner::mcSuperLearner()}} (fork-based;
-Linux/Mac only). \code{NULL} disables. Default \code{NULL}. \strong{Note:} incompatible
-with \code{dbarts}/\code{SL.dbarts} learners -- remove dbarts from \code{sl_g} when
-\code{sl_workers} is set.}
+Linux/Mac only). \code{NULL} disables. Default \code{NULL}.}
+
+\item{verbose}{Logical. When \code{TRUE} (default), prints a data-check summary
+on startup. Set to \code{FALSE} to suppress all informational output.}
 }
 \value{
 A list with components:

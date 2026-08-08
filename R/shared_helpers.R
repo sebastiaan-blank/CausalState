@@ -1,6 +1,6 @@
 data_check <- function(data, id, time, a_names, tv_names,
                        bs = NULL, y_col = NULL, alive_col = NULL, in_state_col = NULL,
-                       tmin = 1, tmax = NULL) {
+                       tmin = 1, tmax = NULL, verbose = TRUE) {
 
   `%||%` <- function(x, y) if (is.null(x)) y else x
 
@@ -94,25 +94,27 @@ data_check <- function(data, id, time, a_names, tv_names,
     ))
   }
 
-  cat("data_check passed\n")
-  cat(sprintf("  Patients      : %d\n", dplyr::n_distinct(data[[id]])))
-  cat(sprintf("  Time range    : %d to %d\n",
-              min(data[[time]], na.rm = TRUE),
-              max(data[[time]], na.rm = TRUE)))
-  cat(sprintf("  Trial rows    : %d  (t >= %d%s)\n",
-              nrow(trial_data), tmin,
-              if (!is.null(tmax)) sprintf(", t <= %d", tmax) else ""))
-  cat(sprintf("  Columns checked: %d  (%d baseline, %d time-varying, %d treatment)\n",
-              length(check_vars), length(bs), length(tv_names), length(a_names)))
-  cat("Resolved columns:\n")
-  cat(sprintf("  id           : %s\n", id))
-  cat(sprintf("  time         : %s\n", time))
-  cat(sprintf("  treatment    : %s\n", paste(a_names, collapse = ", ")))
-  cat(sprintf("  time-varying : %s\n", paste(tv_names, collapse = ", ")))
-  cat(sprintf("  baseline     : %s\n", paste(bs, collapse = ", ")))
-  cat(sprintf("  outcome      : %s\n", paste(y_col, collapse = ", ")))
-  cat(sprintf("  alive        : %s\n", paste(alive_col, collapse = ", ")))
-  cat(sprintf("  in_state          : %s\n", paste(in_state_col, collapse = ", ")))
+  if (verbose) {
+    message("data_check passed")
+    message(sprintf("  Patients      : %d", dplyr::n_distinct(data[[id]])))
+    message(sprintf("  Time range    : %d to %d",
+                    min(data[[time]], na.rm = TRUE),
+                    max(data[[time]], na.rm = TRUE)))
+    message(sprintf("  Trial rows    : %d  (t >= %d%s)",
+                    nrow(trial_data), tmin,
+                    if (!is.null(tmax)) sprintf(", t <= %d", tmax) else ""))
+    message(sprintf("  Columns checked: %d  (%d baseline, %d time-varying, %d treatment)",
+                    length(check_vars), length(bs), length(tv_names), length(a_names)))
+    message("Resolved columns:")
+    message(sprintf("  id           : %s", id))
+    message(sprintf("  time         : %s", time))
+    message(sprintf("  treatment    : %s", paste(a_names, collapse = ", ")))
+    message(sprintf("  time-varying : %s", paste(tv_names, collapse = ", ")))
+    message(sprintf("  baseline     : %s", paste(bs, collapse = ", ")))
+    message(sprintf("  outcome      : %s", paste(y_col, collapse = ", ")))
+    message(sprintf("  alive        : %s", paste(alive_col, collapse = ", ")))
+    message(sprintf("  in_state     : %s", paste(in_state_col, collapse = ", ")))
+  }
 
   invisible(TRUE)
 }

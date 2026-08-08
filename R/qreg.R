@@ -247,7 +247,8 @@ qreg <- function(
     pool_time       = c("spline", "linear", "factor"),
     weight_object   = NULL,
     v               = 5L,
-    trim            = 0.99
+    trim            = 0.99,
+    verbose         = TRUE
 ) {
   stopifnot(requireNamespace("data.table", quietly = TRUE))
   stopifnot(requireNamespace("SuperLearner", quietly = TRUE))
@@ -269,7 +270,8 @@ qreg <- function(
   data_check(data = df, id = id, time = time,
              a_names = a_names, tv_names = tv_names,
              bs = baseline, y_col = y, alive_col = alive,
-             in_state_col = in_state, tmin = 1, tmax = tmax)
+             in_state_col = in_state, tmin = 1, tmax = tmax,
+             verbose = verbose)
 
   if (is.null(sl_remain)) stop("`sl_remain` must be provided (SL library for g_remain).", call. = FALSE)
   if (is.null(sl_death))  stop("`sl_death` must be provided (SL library for g_death_exit).", call. = FALSE)
@@ -458,8 +460,8 @@ qreg <- function(
 
     for (tt in rev(seq_len(tmax))) {
 
-      message(sprintf("[qreg][fold %d][t=%d][pid=%d] %s",
-                      f_idx, tt, Sys.getpid(), format(Sys.time(), "%H:%M:%S")))
+      if (verbose) message(sprintf("[qreg][fold %d][t=%d][pid=%d] %s",
+                                   f_idx, tt, Sys.getpid(), format(Sys.time(), "%H:%M:%S")))
 
       sl_dex <- sl_rem <- sl_qexit <- sl_qrem <- NULL
       fit_dex <- fit_rem <- fit_qexit <- fit_qrem <- NULL

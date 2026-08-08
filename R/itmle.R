@@ -885,7 +885,8 @@ itmle <- function(
     cluster_se_only = FALSE,
     pool_g_death = FALSE,
     pool_q_exit  = FALSE,
-    pool_time    = c("spline", "linear", "factor")
+    pool_time    = c("spline", "linear", "factor"),
+    verbose      = TRUE
 ) {
   stopifnot(requireNamespace("data.table", quietly = TRUE))
   stopifnot(requireNamespace("SuperLearner", quietly = TRUE))
@@ -912,7 +913,8 @@ itmle <- function(
   data_check(data = df, id = id, time = time,
              a_names = a_names, tv_names = tv_names,
              bs = baseline, y_col = y, alive_col = alive,
-             in_state_col = in_state, tmin = 1, tmax = tmax)
+             in_state_col = in_state, tmin = 1, tmax = tmax,
+             verbose = verbose)
   
   set.seed(seed)
   
@@ -1151,7 +1153,7 @@ itmle <- function(
     
     for (tt in rev(seq_len(tmax))) {
       
-      message(sprintf("[fold %d][t=%d][pid=%d] %s", f_idx, tt, Sys.getpid(), format(Sys.time(), "%H:%M:%S")))
+      if (verbose) message(sprintf("[fold %d][t=%d][pid=%d] %s", f_idx, tt, Sys.getpid(), format(Sys.time(), "%H:%M:%S")))
       
       
       sl_dex <- sl_rem <- sl_qexit <- sl_qrem <- NULL
