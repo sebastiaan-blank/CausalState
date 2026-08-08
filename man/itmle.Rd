@@ -21,7 +21,7 @@ itmle(
   sl_remain = NULL,
   sl_death = NULL,
   sl_recursive = NULL,
-  sl_rec_simple = NULL,
+  sl_rec_early = NULL,
   rec_transition = NULL,
   sl_y = NULL,
   outcome_family = c("binomial", "gaussian"),
@@ -96,14 +96,14 @@ treatment values under the MTP (one per treatment variable in \code{a_names}).}
 \item{sl_recursive}{SuperLearner library for the recursive Q-remain model.
 Required.}
 
-\item{sl_rec_simple}{Optional SuperLearner library for the recursive Q-remain
+\item{sl_rec_early}{Optional SuperLearner library for the recursive Q-remain
 model at early time points (\code{tt <= rec_transition}). When supplied, a
 simpler/more-regularised library is used for the noisiest pseudo-outcome
 steps. Requires \code{rec_transition}.}
 
-\item{rec_transition}{Integer. Time-point threshold: \code{sl_rec_simple} is used
+\item{rec_transition}{Integer. Time-point threshold: \code{sl_rec_early} is used
 for \code{tt <= rec_transition}, \code{sl_recursive} for later time points. Required
-when \code{sl_rec_simple} is provided.}
+when \code{sl_rec_early} is provided.}
 
 \item{sl_y}{SuperLearner library for the Q-exit (outcome-at-exit) model.
 Required.}
