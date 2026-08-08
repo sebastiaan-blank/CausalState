@@ -4,7 +4,7 @@
 \alias{weight_diagnostics}
 \title{Per-time weight diagnostics for a density ratio object}
 \usage{
-weight_diagnostics(weight_object, trim = 0.99)
+weight_diagnostics(weight_object, trim = 1)
 }
 \arguments{
 \item{weight_object}{Output of \code{density_ratio()}.}

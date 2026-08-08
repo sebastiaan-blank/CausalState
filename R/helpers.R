@@ -1,11 +1,11 @@
-# helpers.R — user-facing diagnostic and inference helpers
+# helpers.R \u2014 user-facing diagnostic and inference helpers
 #
-# print.sdr_fit        — print method for sdr() output
-# print.itmle_fit      — print method for itmle() output
-# print.qreg_fit       — print method for qreg() output
-# contrast()           — RD / RR / OR between two fitted estimators
-# weight_diagnostics() — per-time weight summary for a density_ratio object
-# branch_cal_summary() — fold-averaged calibration table per t x branch
+# print.sdr_fit        \u2014 print method for sdr() output
+# print.itmle_fit      \u2014 print method for itmle() output
+# print.qreg_fit       \u2014 print method for qreg() output
+# contrast()           \u2014 RD / RR / OR between two fitted estimators
+# weight_diagnostics() \u2014 per-time weight summary for a density_ratio object
+# branch_cal_summary() \u2014 fold-averaged calibration table per t x branch
 
 
 # ------------------------------------------------------------------
@@ -589,7 +589,7 @@ print.branch_cal_summary <- function(x, digits = 3L, ...) {
   t_w     <- max(nchar(as.character(t_vals)), nchar(t_label))
 
   fmt_cell <- function(v, w, is_int = FALSE) {
-    if (is.na(v)) return(formatC("—", width = w, flag = "-"))
+    if (is.na(v)) return(formatC("\u2014", width = w, flag = "-"))
     if (is_int)   return(formatC(as.integer(v), width = w, format = "d"))
     formatC(round(v, digits), width = w, format = "f", digits = digits)
   }
@@ -622,7 +622,7 @@ print.branch_cal_summary <- function(x, digits = 3L, ...) {
     row_parts <- vapply(branches, function(b) {
       r <- x_dt[t == tt & branch == b]
       if (nrow(r) == 0L) {
-        return(paste(rep(formatC("—", width = max(col_widths)), length(metrics)),
+        return(paste(rep(formatC("\u2014", width = max(col_widths)), length(metrics)),
                      collapse = " "))
       }
       cells <- c(

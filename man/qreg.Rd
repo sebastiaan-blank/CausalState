@@ -36,6 +36,7 @@ qreg(
   cluster = NULL,
   pool_g_death = FALSE,
   pool_q_exit = FALSE,
+  pool_time = c("spline", "linear", "factor"),
   weight_object = NULL,
   v = 5L,
   trim = 0.99
@@ -159,6 +160,10 @@ with \code{reg_workers > 1}, the two pre-loop fits run simultaneously.
 Predictions are made in two passes -- once with \code{exit_status = 1}
 (death branch) and once with \code{exit_status = 0} (discharge branch) -- on
 all at-risk subjects, not just those who exited. Default \code{FALSE}.}
+
+\item{pool_time}{Character. Time basis used when \code{pool_g_death = TRUE} or
+\code{pool_q_exit = TRUE}. One of \code{"spline"} (restricted cubic spline,
+default), \code{"linear"}, or \code{"factor"} (dummy per time point).}
 
 \item{weight_object}{Optional. Output from \code{\link[=density_ratio]{density_ratio()}}.  If supplied,
 an EIF-based SE is computed in addition to the naive SE.  The fold

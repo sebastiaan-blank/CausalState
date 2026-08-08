@@ -1,3 +1,19 @@
+# CausalState 0.10.1
+
+## CRAN resubmission fixes
+
+* Title shortened to comply with CRAN length requirement.
+* DOI references added to `Description` field in DESCRIPTION.
+* Added `\value` tag to `sl_tmle.Rd`.
+* Removed dead `cat()`/`SL_WARN_FILE` logging block from `R/sl.R`.
+* Removed `inst/sim_study/` (non-standard directory containing local
+  simulation scripts with global environment side-effects).
+* Replaced non-ASCII em dash characters in `R/helpers.R` with `—`
+  escapes.
+* Added documentation for exported `sim_bin()`, `sim_cont()`, and
+  `sim_multi()` (missing man pages).
+* Added `skip_on_cran()` to `tests/testthat/test-accuracy.R`.
+
 # CausalState 0.10.0
 
 ## Breaking changes

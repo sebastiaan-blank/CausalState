@@ -1,7 +1,7 @@
 Package: CausalState
 Type: Package
 Title: Causal Inference in a Longitudinal Transitioning State Environment
-Version: 0.10.0
+Version: 0.10.1
 Authors@R: person(given = "Sebastiaan",
     family = "Blank",
     role = c("aut", "cre", "cph"),
@@ -16,7 +16,7 @@ Description: Implements Sequential Doubly Robust (SDR) and infinite-dimensional
     k-fold cross-fitting, and pluggable SuperLearner ensembles via included
     custom learner wrappers. Methods based on Diaz et al. (2021)
     <doi:10.1080/01621459.2021.1955691> and Luedtke et al. (2017)
-    <https://arxiv.org/abs/1705.02459>.
+    <doi:10.48550/arXiv.1705.02459>.
 License: AGPL-3
 Encoding: UTF-8
 Depends:
