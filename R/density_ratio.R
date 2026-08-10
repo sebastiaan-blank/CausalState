@@ -567,12 +567,21 @@ density_ratio <- function(
     }
 
     for (fr in fold_res) {
+      if (inherits(fr, "try-error"))
+        stop(sprintf("density_ratio: fold worker crashed at t=%d -- %s",
+                     t, conditionMessage(attr(fr, "condition"))),
+             call. = FALSE)
       if (length(fr$idx_valid))  r_hat[fr$idx_valid]                       <- fr$r
       if (!is.null(fr$sl_tab))   sl_rows[[length(sl_rows) + 1L]]           <- fr$sl_tab
       if (!is.null(fr$diag_tab)) diag_rows[[length(diag_rows) + 1L]]       <- fr$diag_tab
     }
 
-    r_hat[!is.finite(r_hat) | is.na(r_hat)] <- 1
+    if (anyNA(r_hat))
+      stop(sprintf(
+        "density_ratio: %d subject(s) at t=%d have no density ratio after all folds -- fold assignment may be incomplete",
+        sum(is.na(r_hat)), t), call. = FALSE)
+
+    r_hat[!is.finite(r_hat)] <- 1
 
     sl_tab <- if (length(sl_rows)) data.table::rbindlist(sl_rows, use.names = TRUE, fill = TRUE) else NULL
 
