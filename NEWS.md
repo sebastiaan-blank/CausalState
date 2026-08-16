@@ -1,3 +1,16 @@
+# CausalState 0.10.2
+
+## Bug fixes
+
+* `density_ratio()`: crashed fold workers (returned as `try-error` by
+  `mclapply`) now cause an immediate hard stop with a descriptive message,
+  rather than being silently converted to `Rt_t = 1`. A second guard stops
+  if any subject has `NA` density-ratio weight after the fold loop.
+
+## Internal
+
+* `R/diagnostics.R` merged into `R/helpers.R`; `diagnostics.R` removed.
+
 # CausalState 0.10.1
 
 ## CRAN resubmission fixes
