@@ -39,11 +39,7 @@ make_validRows_cluster_gauss <- function(cluster, v) {
 with_seed <- function(seed, expr) {
   old <- if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) get(".Random.seed", envir = .GlobalEnv) else NULL
   on.exit({
-    if (is.null(old)) {
-      if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) rm(".Random.seed", envir = .GlobalEnv)
-    } else {
-      assign(".Random.seed", old, envir = .GlobalEnv)
-    }
+    if (!is.null(old)) assign(".Random.seed", old, envir = .GlobalEnv)
   }, add = TRUE)
   set.seed(as.integer(seed))
   force(expr)

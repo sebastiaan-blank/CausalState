@@ -1726,7 +1726,11 @@ itmle <- function(
         } else if (!is.na(p_dex_const)) {
           TRUE
         } else NA,
-        used_const_qexit = if (!is.null(sl_qexit)) isTRUE(sl_qexit$used_const) else NA,
+        used_const_qexit = if (!is.null(sl_qexit)) {
+          isTRUE(sl_qexit$used_const)
+        } else if (isTRUE(pool_q_exit) && !is.null(fit_qexit_pooled)) {
+          FALSE
+        } else NA,
         used_const_qrem  = if (!is.null(sl_qrem))  isTRUE(sl_qrem$used_const)  else NA,
         
         p_rem_nat_mean = mean_or_na(p_rem_nat),
