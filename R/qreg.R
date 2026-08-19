@@ -455,6 +455,41 @@ qreg <- function(
       fit_qexit_pooled <- sl_qexit_pooled <- cn_qexit_pool <- cols_pool_qexit <- all_Y_qexit_pool <- NULL
     }
 
+    pooled_dex_used   <- isTRUE(pool_g_death) && !is.null(fit_dex_pooled)
+    pooled_qexit_used <- isTRUE(pool_q_exit)  && !is.null(fit_qexit_pooled)
+
+    if (pooled_dex_used || pooled_qexit_used) {
+      pooled_pred_cache <- build_pooled_pred_cache(
+        tmax             = tmax,
+        tr_ids           = tr_ids,
+        vl_ids           = vl_ids,
+        row_index        = row_index,
+        D                = D,
+        D_shifted        = D_shifted,
+        pool_g_death     = pool_g_death,
+        fit_dex_pooled   = fit_dex_pooled,
+        cols_pool        = cols_pool,
+        cn_pool          = cn_pool,
+        pool_q_exit      = pool_q_exit,
+        fit_qexit_pooled = fit_qexit_pooled,
+        cols_pool_qexit  = cols_pool_qexit,
+        cn_qexit_pool    = cn_qexit_pool,
+        pool_time_basis  = pool_time_basis,
+        a_names          = a_names,
+        k                = k,
+        t_min            = t_min,
+        scale_info       = scale_info
+      )
+      sl_dex_pooled   <- slim_sl(sl_dex_pooled)
+      sl_qexit_pooled <- slim_sl(sl_qexit_pooled)
+      rm(fit_dex_pooled, fit_qexit_pooled)
+      gc(FALSE)
+      fit_dex_pooled   <- NULL
+      fit_qexit_pooled <- NULL
+    } else {
+      pooled_pred_cache <- NULL
+    }
+
     for (tt in rev(seq_len(tmax))) {
 
       if (verbose) message(sprintf("[qreg][fold %d][t=%d][pid=%d] %s",
@@ -506,6 +541,18 @@ qreg <- function(
       Y_pseudo_ar <- shf_train[at_risk_tr, tt + 1L]
       n_ar        <- length(idx_tr_ar)
 
+      rows_vl       <- if (any(at_risk_vl)) row_index[id_vl_ar, tt] else integer(0)
+      cn_base_tr    <- colnames(X_nat_tr_base)
+      X_nat_vl_base <- if (length(rows_vl)) {
+        align_cols(make_design(D, rows_vl, cols_base), cn_base_tr)
+      } else NULL
+      X_shf_vl_base <- if (length(rows_vl)) {
+        align_cols(patch_shifted_design(
+          X_nat = make_design(D, rows_vl, cols_base), D_shifted_tt = D_shifted[[tt]],
+          rows = rows_vl, a_names = a_names, tt = tt, k = k, t_min = t_min
+        ), cn_base_tr)
+      } else NULL
+
       reg_res <- fit_transition_regressions(
         X_nat_tr_base  = X_nat_tr_base,
         X_shf_tr_base  = X_shf_tr_base,
@@ -537,6 +584,11 @@ qreg <- function(
         tt               = tt,
         k                = k,
         t_min            = t_min,
+        pooled_pred_tr   = pooled_pred_cache$tr[[tt]],
+        pooled_pred_vl   = pooled_pred_cache$vl[[tt]],
+        rows_vl          = rows_vl,
+        X_nat_vl_base    = X_nat_vl_base,
+        X_shf_vl_base    = X_shf_vl_base,
         is_binom         = is_binom,
         tmax           = tmax,
         scale_info     = scale_info,
@@ -556,6 +608,7 @@ qreg <- function(
       r_dex  <- reg_res$g_death_exit
       r_exit <- reg_res$Q_exit
       r_qrem <- reg_res$Q_rem
+      r_vl   <- reg_res$valid
 
       sl_rem      <- r_rem$sl_rem;    fit_rem     <- r_rem$fit_rem
       p_rem_const <- r_rem$p_rem_const
@@ -601,7 +654,7 @@ qreg <- function(
 
       if (!is.null(sl_dex)) {
         meta <- sl_meta(sl_dex, f_idx, tt, "g_death_exit", length(exit_idx), n_val_tt)
-      } else if (isTRUE(pool_g_death) && !is.null(fit_dex_pooled) && tt == tmax) {
+      } else if (pooled_dex_used && tt == tmax) {
         meta <- sl_meta(sl_dex_pooled, f_idx, 0L, "g_death_exit_pooled",
                         length(all_Y_pool), n_val_tt)
       } else {
@@ -611,7 +664,7 @@ qreg <- function(
 
       if (!is.null(sl_qexit)) {
         meta <- sl_meta(sl_qexit, f_idx, tt, "Q_exit", length(exit_idx), n_val_tt)
-      } else if (isTRUE(pool_q_exit) && !is.null(fit_qexit_pooled) && tt == tmax) {
+      } else if (pooled_qexit_used && tt == tmax) {
         meta <- sl_meta(sl_qexit_pooled, f_idx, 0L, "Q_exit_pooled",
                         length(all_Y_qexit_pool), n_val_tt)
       } else {
@@ -621,88 +674,15 @@ qreg <- function(
       meta <- sl_meta(sl_qrem,  f_idx, tt, "Q_rem",  length(rem_idx),  n_val_tt)
       if (!is.null(meta)) sl_chunks_here[[length(sl_chunks_here) + 1L]] <- meta
 
-      if (any(at_risk_vl)) {
-        rows_vl       <- row_index[id_vl_ar, tt]
-        X_nat_vl_base <- make_design(D, rows_vl, cols_base)
-        X_shf_vl_base <- patch_shifted_design(
-          X_nat = X_nat_vl_base, D_shifted_tt = D_shifted[[tt]],
-          rows = rows_vl, a_names = a_names, tt = tt, k = k, t_min = t_min
-        )
-        cn_base       <- colnames(X_nat_tr_base)
-        X_nat_vl_base <- align_cols(X_nat_vl_base, cn_base)
-        X_shf_vl_base <- align_cols(X_shf_vl_base, cn_base)
-        X_nat_vl_haz  <- X_nat_vl_base
-        X_shf_vl_haz  <- X_shf_vl_base
-
-        p_rem_nat_vl <- if (!is.null(fit_rem))
-          scale_info$clip(sl_predict(fit_rem, X_nat_vl_haz)) else rep(p_rem_const, nrow(X_nat_vl_haz))
-        p_rem_shf_vl <- if (!is.null(fit_rem))
-          scale_info$clip(sl_predict(fit_rem, X_shf_vl_haz)) else rep(p_rem_const, nrow(X_nat_vl_haz))
-
-        if (!is.null(fit_dex)) {
-          if (isTRUE(pool_g_death)) {
-            X_nat_dex_vl <- make_design(D, rows_vl, cols_pool)
-            X_nat_dex_vl <- apply_pool_time_basis(X_nat_dex_vl, tt, pool_time_basis$g_death)
-            X_shf_dex_vl <- patch_shifted_design(
-              X_nat = X_nat_dex_vl, D_shifted_tt = D_shifted[[tt]],
-              rows = rows_vl, a_names = a_names, tt = tt, k = k, t_min = t_min)
-            X_shf_dex_vl <- apply_pool_time_basis(X_shf_dex_vl, tt, pool_time_basis$g_death)
-            X_nat_dex_vl <- align_cols(X_nat_dex_vl, cn_pool)
-            X_shf_dex_vl <- align_cols(X_shf_dex_vl, cn_pool)
-            p_dex_nat_vl <- scale_info$clip(sl_predict(fit_dex, X_nat_dex_vl))
-            p_dex_shf_vl <- scale_info$clip(sl_predict(fit_dex, X_shf_dex_vl))
-          } else {
-            p_dex_nat_vl <- scale_info$clip(sl_predict(fit_dex, X_nat_vl_haz))
-            p_dex_shf_vl <- scale_info$clip(sl_predict(fit_dex, X_shf_vl_haz))
-          }
-        } else {
-          p_dex_nat_vl <- rep(p_dex_const, nrow(X_nat_vl_haz))
-          p_dex_shf_vl <- rep(p_dex_const, nrow(X_nat_vl_haz))
-        }
-
-        if (!is.null(fit_qexit)) {
-          if (isTRUE(pool_q_exit)) {
-            X_nat_qvl      <- make_design(D, rows_vl, cols_pool_qexit)
-            X_shf_qvl      <- patch_shifted_design(
-              X_nat = X_nat_qvl, D_shifted_tt = D_shifted[[tt]],
-              rows = rows_vl, a_names = a_names, tt = tt, k = k, t_min = t_min)
-            X_nat_d_vl <- apply_pool_time_basis(X_nat_qvl, tt, pool_time_basis$q_exit); X_nat_d_vl$exit_status <- 1
-            X_nat_c_vl <- apply_pool_time_basis(X_nat_qvl, tt, pool_time_basis$q_exit); X_nat_c_vl$exit_status <- 0
-            X_shf_d_vl <- apply_pool_time_basis(X_shf_qvl, tt, pool_time_basis$q_exit); X_shf_d_vl$exit_status <- 1
-            X_shf_c_vl <- apply_pool_time_basis(X_shf_qvl, tt, pool_time_basis$q_exit); X_shf_c_vl$exit_status <- 0
-          } else {
-            X_nat_d_vl <- X_nat_vl_base; X_nat_d_vl$exit_status <- 1
-            X_nat_c_vl <- X_nat_vl_base; X_nat_c_vl$exit_status <- 0
-            X_shf_d_vl <- X_shf_vl_base; X_shf_d_vl$exit_status <- 1
-            X_shf_c_vl <- X_shf_vl_base; X_shf_c_vl$exit_status <- 0
-          }
-          X_nat_d_vl <- align_cols(X_nat_d_vl, cn_qexit)
-          X_nat_c_vl <- align_cols(X_nat_c_vl, cn_qexit)
-          X_shf_d_vl <- align_cols(X_shf_d_vl, cn_qexit)
-          X_shf_c_vl <- align_cols(X_shf_c_vl, cn_qexit)
-          q_death_nat_vl <- scale_info$clip(sl_predict(fit_qexit, X_nat_d_vl))
-          q_dc_nat_vl    <- scale_info$clip(sl_predict(fit_qexit, X_nat_c_vl))
-          q_death_shf_vl <- scale_info$clip(sl_predict(fit_qexit, X_shf_d_vl))
-          q_dc_shf_vl    <- scale_info$clip(sl_predict(fit_qexit, X_shf_c_vl))
-        } else {
-          q_death_nat_vl <- rep(muY, nrow(X_nat_vl_base))
-          q_dc_nat_vl    <- rep(muY, nrow(X_nat_vl_base))
-          q_death_shf_vl <- rep(muY, nrow(X_nat_vl_base))
-          q_dc_shf_vl    <- rep(muY, nrow(X_nat_vl_base))
-        }
-
-        if (!is.null(fit_qrem)) {
-          X_nat_r_vl <- align_cols(X_nat_vl_base, cn_qrem)
-          X_shf_r_vl <- align_cols(X_shf_vl_base, cn_qrem)
-          q_rem_nat_vl <- scale_info$clip(sl_predict(fit_qrem, X_nat_r_vl))
-          q_rem_shf_vl <- scale_info$clip(sl_predict(fit_qrem, X_shf_r_vl))
-        } else {
-          q_rem_nat_vl <- rep(muP, nrow(X_nat_vl_base))
-          q_rem_shf_vl <- rep(muP, nrow(X_nat_vl_base))
-        }
+      if (!is.null(r_vl)) {
+        p_rem_nat_vl   <- r_vl$p_rem_nat;   p_rem_shf_vl   <- r_vl$p_rem_shf
+        p_dex_nat_vl   <- r_vl$p_dex_nat;   p_dex_shf_vl   <- r_vl$p_dex_shf
+        q_death_nat_vl <- r_vl$q_death_nat; q_dc_nat_vl    <- r_vl$q_dc_nat
+        q_death_shf_vl <- r_vl$q_death_shf; q_dc_shf_vl    <- r_vl$q_dc_shf
+        q_rem_nat_vl   <- r_vl$q_rem_nat;   q_rem_shf_vl   <- r_vl$q_rem_shf
 
         if (length(absorb)) {
-          D_block_vl  <- D[rows_vl]
+          D_block_vl     <- D[rows_vl]
           q_death_nat_vl <- apply_absorb_branch(q_death_nat_vl, D_block_vl, tt, "death", scale_info, absorb)
           q_death_shf_vl <- apply_absorb_branch(q_death_shf_vl, D_block_vl, tt, "death", scale_info, absorb)
           q_dc_nat_vl    <- apply_absorb_branch(q_dc_nat_vl,    D_block_vl, tt, "dc",    scale_info, absorb)
@@ -723,8 +703,7 @@ qreg <- function(
         R_vl          <- as.integer(alive_end_vl == 1L & icu_end_vl == 1L)
         rem_idx_vl    <- which(R_vl == 1L)
         exit_idx_vl   <- which(R_vl == 0L)
-        q_exit_obs_vl_raw <- ifelse(D_vl == 1L,
-                                    q_death_nat_vl, q_dc_nat_vl)
+        q_exit_obs_vl_raw <- ifelse(D_vl == 1L, q_death_nat_vl, q_dc_nat_vl)
         q_exit_obs_tr_raw <- ifelse(D_tr == 1L, q_death_nat_raw, q_dc_nat_raw)
 
         m_grem_tr  <- binom_metric(R_tr, p_rem_nat)
