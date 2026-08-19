@@ -1396,6 +1396,8 @@ itmle <- function(
       meta <- sl_meta(sl_qrem,  f_idx, tt, "Q_rem",        length(rem_idx),  n_val_tt)
       if (!is.null(meta)) sl_chunks_here[[length(sl_chunks_here) + 1L]] <- meta
 
+      rm(fit_rem, fit_dex, fit_qexit, fit_qrem); gc(FALSE)
+
       Q_nat_vl           <- numeric(0)
       Q_shf_vl           <- numeric(0)
       p_rem_nat_vl       <- numeric(0)
@@ -1775,8 +1777,7 @@ itmle <- function(
       
       fold_diag_here[[length(fold_diag_here) + 1L]] <- diag_row
       
-      rm(sl_rem, sl_dex, sl_qexit, sl_qrem,
-         fit_rem, fit_dex, fit_qexit, fit_qrem)
+      rm(sl_rem, sl_dex, sl_qexit, sl_qrem)
       gc()
       
     } # end tt loop
