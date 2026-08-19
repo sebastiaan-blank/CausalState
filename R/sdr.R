@@ -370,16 +370,13 @@ sdr <- function(
     cluster_se_only = FALSE,
     pool_g_death = FALSE,
     pool_q_exit  = FALSE,
-    pool_time    = c("spline", "linear", "factor"),
+    pool_time    = "spline",
     verbose      = TRUE
 ) {
   stopifnot(requireNamespace("data.table", quietly = TRUE))
   stopifnot(requireNamespace("SuperLearner", quietly = TRUE))
 
-  pool_time <- match.arg(pool_time)
-  pool_time_basis <- if (isTRUE(pool_g_death) || isTRUE(pool_q_exit)) {
-    make_pool_time_basis(tmax, mode = pool_time)
-  } else NULL
+  pool_time_basis <- make_pool_time_basis_list(pool_time, tmax, pool_g_death, pool_q_exit)
 
   if (!isTRUE(parallel)) sl_workers <- NULL
 
@@ -546,7 +543,7 @@ sdr <- function(
       alive = alive, in_state = in_state,
       cluster_by_id = cluster_by_id,
       sl_death = sl_death, inner_v = inner_v, seed = seed, f_idx = f_idx,
-      pool_time_basis = pool_time_basis,
+      pool_time_basis = pool_time_basis$g_death,
       sl_workers = sl_workers
     )
     .fit_pool_q <- function() fit_pooled_q_exit(
@@ -557,7 +554,7 @@ sdr <- function(
       cluster_by_id = cluster_by_id,
       sl_y = sl_y, inner_v = inner_v, seed = seed, f_idx = f_idx,
       is_binom = is_binom,
-      pool_time_basis = pool_time_basis,
+      pool_time_basis = pool_time_basis$q_exit,
       sl_workers = sl_workers
     )
 
@@ -851,7 +848,7 @@ sdr <- function(
         if (!is.null(fit_dex)) {
           if (isTRUE(pool_g_death)) {
             X_nat_dex_vl <- make_design(D, rows_vl, cols_pool)
-            X_nat_dex_vl <- apply_pool_time_basis(X_nat_dex_vl, tt, pool_time_basis)
+            X_nat_dex_vl <- apply_pool_time_basis(X_nat_dex_vl, tt, pool_time_basis$g_death)
             X_shf_dex_vl <- patch_shifted_design(
               X_nat        = X_nat_dex_vl,
               D_shifted_tt = D_shifted[[tt]],
@@ -862,7 +859,7 @@ sdr <- function(
               t_min        = t_min
             )
 
-            X_shf_dex_vl <- apply_pool_time_basis(X_shf_dex_vl, tt, pool_time_basis)
+            X_shf_dex_vl <- apply_pool_time_basis(X_shf_dex_vl, tt, pool_time_basis$g_death)
             X_nat_dex_vl <- align_cols(X_nat_dex_vl, cn_pool)
             X_shf_dex_vl <- align_cols(X_shf_dex_vl, cn_pool)
             p_dex_nat_vl <- scale_info$clip(sl_predict(fit_dex, X_nat_dex_vl))
@@ -882,10 +879,10 @@ sdr <- function(
             X_shf_qvl  <- patch_shifted_design(
               X_nat = X_nat_qvl, D_shifted_tt = D_shifted[[tt]],
               rows = rows_vl, a_names = a_names, tt = tt, k = k, t_min = t_min)
-            X_nat_d_vl <- apply_pool_time_basis(X_nat_qvl, tt, pool_time_basis); X_nat_d_vl$exit_status <- 1
-            X_nat_c_vl <- apply_pool_time_basis(X_nat_qvl, tt, pool_time_basis); X_nat_c_vl$exit_status <- 0
-            X_shf_d_vl <- apply_pool_time_basis(X_shf_qvl, tt, pool_time_basis); X_shf_d_vl$exit_status <- 1
-            X_shf_c_vl <- apply_pool_time_basis(X_shf_qvl, tt, pool_time_basis); X_shf_c_vl$exit_status <- 0
+            X_nat_d_vl <- apply_pool_time_basis(X_nat_qvl, tt, pool_time_basis$q_exit); X_nat_d_vl$exit_status <- 1
+            X_nat_c_vl <- apply_pool_time_basis(X_nat_qvl, tt, pool_time_basis$q_exit); X_nat_c_vl$exit_status <- 0
+            X_shf_d_vl <- apply_pool_time_basis(X_shf_qvl, tt, pool_time_basis$q_exit); X_shf_d_vl$exit_status <- 1
+            X_shf_c_vl <- apply_pool_time_basis(X_shf_qvl, tt, pool_time_basis$q_exit); X_shf_c_vl$exit_status <- 0
           } else {
             X_nat_d_vl <- X_nat_vl_base; X_nat_d_vl$exit_status <- 1
             X_nat_c_vl <- X_nat_vl_base; X_nat_c_vl$exit_status <- 0

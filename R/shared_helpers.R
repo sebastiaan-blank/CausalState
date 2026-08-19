@@ -744,6 +744,24 @@ make_pool_time_basis <- function(tmax, mode = c("spline", "linear", "factor")) {
             class = "pool_time_basis")
 }
 
+make_pool_time_basis_list <- function(pool_time, tmax, pool_g_death, pool_q_exit) {
+  valid <- c("spline", "linear", "factor")
+  if (is.null(pool_time)) pool_time <- "spline"
+  pool_time <- as.character(pool_time)
+  if (length(pool_time) == 1L) pool_time <- c(pool_time, pool_time)
+  if (length(pool_time) != 2L)
+    stop("pool_time must be length 1 or 2", call. = FALSE)
+  bad <- setdiff(pool_time, valid)
+  if (length(bad))
+    stop(sprintf("pool_time invalid mode(s): %s (valid: %s)",
+                 paste(bad, collapse = ", "),
+                 paste(valid, collapse = ", ")), call. = FALSE)
+  list(
+    g_death = if (isTRUE(pool_g_death)) make_pool_time_basis(tmax, mode = pool_time[1L]) else NULL,
+    q_exit  = if (isTRUE(pool_q_exit))  make_pool_time_basis(tmax, mode = pool_time[2L]) else NULL
+  )
+}
+
 apply_pool_time_basis <- function(X, tt, basis) {
   # X can be a data.frame or list; sets basis columns to basis$B[tt, ]
   row_t <- basis$B[tt, , drop = TRUE]

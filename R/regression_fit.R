@@ -354,7 +354,7 @@ fit_transition_regressions <- function(
       }
 
       X_nat_dex_t <- make_design(D, rows_tr, cols_pool)
-      X_nat_dex_t <- apply_pool_time_basis(X_nat_dex_t, tt, pool_time_basis)
+      X_nat_dex_t <- apply_pool_time_basis(X_nat_dex_t, tt, pool_time_basis$g_death)
 
       X_shf_dex_t <- patch_shifted_design(
         X_nat = X_nat_dex_t,
@@ -365,11 +365,12 @@ fit_transition_regressions <- function(
         k = k,
         t_min = t_min
       )
-      X_shf_dex_t <- apply_pool_time_basis(X_shf_dex_t, tt, pool_time_basis)
+      X_shf_dex_t <- apply_pool_time_basis(X_shf_dex_t, tt, pool_time_basis$g_death)
 
       X_nat_dex_t <- align_cols(X_nat_dex_t, cn_pool)
       X_shf_dex_t <- align_cols(X_shf_dex_t, cn_pool)
 
+      set.seed(est_seed_for(seed, f_idx, 0L, "g_death_exit_pooled", "sl_fit"))
       p_dex_nat <- scale_info$clip(sl_predict(fit_dex_pooled, X_nat_dex_t))
       p_dex_shf <- scale_info$clip(sl_predict(fit_dex_pooled, X_shf_dex_t))
       fit_dex <- fit_dex_pooled
@@ -445,16 +446,17 @@ fit_transition_regressions <- function(
         t_min        = t_min
       )
 
-      X_nat_d <- apply_pool_time_basis(X_nat_pool, tt, pool_time_basis); X_nat_d$exit_status <- 1
-      X_nat_c <- apply_pool_time_basis(X_nat_pool, tt, pool_time_basis); X_nat_c$exit_status <- 0
-      X_shf_d <- apply_pool_time_basis(X_shf_pool, tt, pool_time_basis); X_shf_d$exit_status <- 1
-      X_shf_c <- apply_pool_time_basis(X_shf_pool, tt, pool_time_basis); X_shf_c$exit_status <- 0
+      X_nat_d <- apply_pool_time_basis(X_nat_pool, tt, pool_time_basis$q_exit); X_nat_d$exit_status <- 1
+      X_nat_c <- apply_pool_time_basis(X_nat_pool, tt, pool_time_basis$q_exit); X_nat_c$exit_status <- 0
+      X_shf_d <- apply_pool_time_basis(X_shf_pool, tt, pool_time_basis$q_exit); X_shf_d$exit_status <- 1
+      X_shf_c <- apply_pool_time_basis(X_shf_pool, tt, pool_time_basis$q_exit); X_shf_c$exit_status <- 0
 
       X_nat_d <- align_cols(X_nat_d, cn_qexit_pool)
       X_nat_c <- align_cols(X_nat_c, cn_qexit_pool)
       X_shf_d <- align_cols(X_shf_d, cn_qexit_pool)
       X_shf_c <- align_cols(X_shf_c, cn_qexit_pool)
 
+      set.seed(est_seed_for(seed, f_idx, 0L, "Q_exit_pooled", "sl_fit"))
       q_death_nat <- scale_info$clip(sl_predict(fit_qexit_pooled, X_nat_d))
       q_dc_nat    <- scale_info$clip(sl_predict(fit_qexit_pooled, X_nat_c))
       q_death_shf <- scale_info$clip(sl_predict(fit_qexit_pooled, X_shf_d))
