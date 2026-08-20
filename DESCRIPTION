@@ -13,10 +13,14 @@ Description: Implements Sequential Doubly Robust (SDR) and infinite-dimensional
     emergency department care episodes. Treatment is permitted in active states
     and becomes structurally inapplicable after a state transition (e.g.
     discharge or death). Supports asymmetric g- and Q-model regularisation,
-    k-fold cross-fitting, and pluggable SuperLearner ensembles via included
-    custom learner wrappers. Methods based on Diaz et al. (2021)
-    <doi:10.1080/01621459.2021.1955691> and Luedtke et al. (2017)
-    <doi:10.48550/arXiv.1705.02459>.
+    k-fold cross-fitting, and pluggable SuperLearner ensembles. Includes
+    specialised SuperLearner wrappers (SL.tgt.* and SL.tmle_* families) for
+    the iTMLE targeting step, which pass the logit offset as a covariate column
+    to preserve correct subsetting during SuperLearner cross-validation. Methods
+    based on Diaz et al. (2021) <doi:10.1080/01621459.2021.1955691> and
+    Luedtke et al. (2017) <doi:10.48550/arXiv.1705.02459>.
+URL: https://github.com/sebastiaan-blank/CausalState
+BugReports: https://github.com/sebastiaan-blank/CausalState/issues
 License: AGPL-3
 Encoding: UTF-8
 Depends:

@@ -114,10 +114,11 @@ or GPU-based learners. Default \code{NULL}.}
 
 \item{sl_workers}{Integer. Workers for parallel learner evaluation within
 each SuperLearner call via \code{\link[SuperLearner:mcSuperLearner]{SuperLearner::mcSuperLearner()}} (fork-based;
-Linux/Mac only). \code{NULL} disables. Default \code{NULL}.}
+Linux/Mac only). \code{NULL} disables. Default \code{NULL}. \strong{Note:} not compatible
+with all learners.}
 
-\item{verbose}{Logical. When \code{TRUE} (default), prints a data-check summary
-on startup. Set to \code{FALSE} to suppress all informational output.}
+\item{verbose}{Logical. If \code{TRUE} (default), print per-time progress
+messages during estimation.}
 }
 \value{
 A list with components:

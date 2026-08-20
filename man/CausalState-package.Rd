@@ -165,6 +165,14 @@ that modify the received treatment. \emph{Statistics in Medicine}
 Diaz Munoz I, van der Laan MJ (2012). Population intervention causal
 effects based on stochastic interventions. \emph{Biometrics} 68(2):541-549.
 }
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://github.com/sebastiaan-blank/CausalState}
+  \item Report bugs at \url{https://github.com/sebastiaan-blank/CausalState/issues}
+}
+
+}
 \author{
 \strong{Maintainer}: Sebastiaan Blank \email{sebastiaan.blank@mail.com} (\href{https://orcid.org/0000-0001-9115-2138}{ORCID}) [copyright holder]
 

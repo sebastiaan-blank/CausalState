@@ -32,16 +32,17 @@ regular observed data.}
 }
 \value{
 A \code{data.frame} with columns
-\code{id}, \code{time}, \code{age}, \code{sex}, \code{L1}, \code{A_b1..A_b{n_binary}},
-\code{A_c1..A_c{n_continuous}}, \code{alive}, \code{in_state}, \code{Y}.
+\code{id}, \code{time}, \code{age}, \code{sex}, \code{L1}, \verb{A_b1..A_b\{n_binary\}},
+\verb{A_c1..A_c\{n_continuous\}}, \code{alive}, \code{in_state}, \code{Y}.
 }
 \description{
 Longitudinal ICU-style trajectories with an arbitrary number of binary
 and/or continuous treatments, competing exit events, and a binary outcome.
 Generalises \code{\link[=sim_bin]{sim_bin()}} / \code{\link[=sim_cont]{sim_cont()}} to multi-treatment MTPs.
-
-Binary treatments are named \code{A_b1, A_b2, ...} (first \code{n_binary} columns);
-continuous treatments are named \code{A_c1, A_c2, ...}. Each treatment enters
+}
+\details{
+Binary treatments are named \verb{A_b1, A_b2, ...} (first \code{n_binary} columns);
+continuous treatments are named \verb{A_c1, A_c2, ...}. Each treatment enters
 the exit-event and outcome models with a coefficient scaled by
 \code{1 / sqrt(k)} where \code{k} is the treatment index within its type, so adding
 more treatments does not blow up effect sizes.

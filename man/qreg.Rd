@@ -133,9 +133,7 @@ regression parallelism.}
 \item{sl_workers}{Integer. Workers for parallel learner evaluation within
 each SuperLearner call via \code{\link[SuperLearner:mcSuperLearner]{SuperLearner::mcSuperLearner()}} (fork-based;
 Linux/Mac only). Ignored when \code{parallel = FALSE}. Default \code{NULL}
-(sequential). \strong{Note:} incompatible with \code{dbarts}/\code{SL.dbarts} learners --
-dbarts' C-level RNG state does not survive forking. Remove dbarts from
-\code{sl_remain}/\code{sl_death}/\code{sl_y}/\code{sl_recursive} when \code{sl_workers} is set.}
+(sequential). \strong{Note:} not compatible with all learners.}
 
 \item{inner_v}{Integer. Number of inner cross-validation folds for
 SuperLearner. Default \code{5L}.}
@@ -162,12 +160,10 @@ Predictions are made in two passes -- once with \code{exit_status = 1}
 (death branch) and once with \code{exit_status = 0} (discharge branch) -- on
 all at-risk subjects, not just those who exited. Default \code{FALSE}.}
 
-\item{pool_time}{Character vector of length 1 or 2 giving the time basis used
-when \code{pool_g_death = TRUE} or \code{pool_q_exit = TRUE}. Each element must
-be one of \code{"spline"} (restricted cubic spline, default), \code{"linear"},
-or \code{"factor"} (dummy per time point). If length 1, the same mode is used
-for both pooled models; if length 2, the first element is applied to
-\code{g_death} and the second to \code{Q_exit}.}
+\item{pool_time}{Character. Basis used to encode time as a covariate in
+pooled models. One of \code{"spline"} (natural spline, default), \code{"linear"},
+or \code{"factor"}. Only relevant when \code{pool_g_death = TRUE} or
+\code{pool_q_exit = TRUE}.}
 
 \item{weight_object}{Optional. Output from \code{\link[=density_ratio]{density_ratio()}}.  If supplied,
 an EIF-based SE is computed in addition to the naive SE.  The fold
@@ -181,9 +177,8 @@ independent folds are created using \code{v} and \code{seed}.}
 computation (only used when \code{weight_object} is supplied).
 Default \code{0.99}.}
 
-\item{verbose}{Logical. When \code{TRUE} (default), prints a data-check summary
-on startup and per-fold per-time progress messages during the backward
-recursion. Set to \code{FALSE} to suppress all informational output.}
+\item{verbose}{Logical. If \code{TRUE} (default), print per-fold and per-time
+progress messages during estimation.}
 }
 \value{
 A list with:

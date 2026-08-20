@@ -773,7 +773,7 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #' tgt_lib <- c("SL.tmle_empty", "SL.tmle_intercept", "SL.tmle_glm")
 #'
 #' # ---- Single binary treatment (sim_bin) ------------------------------
-#' df <- sim_bin(n = 500L, tmax = 3L, seed = 1L)
+#' df <- sim_bin(n = 1000L, tmax = 3L, seed = 1L)
 #' policy_bin <- function(D_block, t, a_names) {
 #'   out <- D_block[, ..a_names, drop = FALSE]
 #'   out[[a_names[1]]] <- pmax(
@@ -793,13 +793,13 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #'   baseline = c("age", "sex"), tv_names = c("L1", "L2"), a_names = "A",
 #'   sl_remain = sl_lib, sl_death = sl_lib,
 #'   sl_recursive = sl_lib, sl_y = sl_lib, sl_tmle = tgt_lib,
-#'   k = 1L, inner_v = 3L, v_target_itmle = 3L, v_sl_inner_itmle = 3L,
+#'   k = 1L, inner_v = 2L, v_target_itmle = 2L, v_sl_inner_itmle = 2L,
 #'   parallel = FALSE, seed = 1L, policy_spec_fun = policy_bin
 #' )
 #' res$psi; res$se
 #'
 #' # ---- Single continuous treatment (sim_cont) -------------------------
-#' df_c <- sim_cont(n = 500L, tmax = 3L, seed = 1L)
+#' df_c <- sim_cont(n = 1000L, tmax = 3L, seed = 1L)
 #' policy_cont <- function(D_block, t, a_names) {
 #'   out <- D_block[, ..a_names, drop = FALSE]
 #'   out[[a_names[1]]] <- pmin(D_block[[a_names[1]]] + 0.2, 2.0)
@@ -817,14 +817,14 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #'   baseline = "age", tv_names = "L1", a_names = "A",
 #'   sl_remain = sl_lib, sl_death = sl_lib,
 #'   sl_recursive = sl_lib, sl_y = sl_lib, sl_tmle = tgt_lib,
-#'   k = 1L, inner_v = 3L, v_target_itmle = 3L, v_sl_inner_itmle = 3L,
+#'   k = 1L, inner_v = 2L, v_target_itmle = 2L, v_sl_inner_itmle = 2L,
 #'   parallel = FALSE, seed = 1L, policy_spec_fun = policy_cont
 #' )
 #' res_c$psi; res_c$se
 #'
 #' # ---- Multiple treatments -- binary + continuous (sim_multi) ---------
 #' df_m <- sim_multi(
-#'   n = 500L, tmax = 3L, seed = 1L, n_binary = 1L, n_continuous = 1L
+#'   n = 1000L, tmax = 3L, seed = 1L, n_binary = 1L, n_continuous = 1L
 #' )
 #' policy_multi <- function(D_block, t, a_names) {
 #'   out <- D_block[, ..a_names, drop = FALSE]
@@ -835,7 +835,7 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #' wr_m <- density_ratio(
 #'   df = df_m, a_names = c("A_b1", "A_c1"), tmax = 3L,
 #'   baseline = c("age", "sex"), tv_names = "L1",
-#'   sl_g = sl_lib, k = 1L, inner_v = 3L, v = 3L, seed = 1L,
+#'   sl_g = sl_lib, k = 1L, inner_v = 2L, v = 2L, seed = 1L,
 #'   id = "id", time = "time", policy_spec_fun = policy_multi
 #' )
 #' res_m <- itmle(
@@ -844,7 +844,7 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #'   baseline = c("age", "sex"), tv_names = "L1", a_names = c("A_b1", "A_c1"),
 #'   sl_remain = sl_lib, sl_death = sl_lib,
 #'   sl_recursive = sl_lib, sl_y = sl_lib, sl_tmle = tgt_lib,
-#'   k = 1L, inner_v = 3L, v_target_itmle = 3L, v_sl_inner_itmle = 3L,
+#'   k = 1L, inner_v = 2L, v_target_itmle = 2L, v_sl_inner_itmle = 2L,
 #'   parallel = FALSE, seed = 1L, policy_spec_fun = policy_multi
 #' )
 #' res_m$psi; res_m$se

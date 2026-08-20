@@ -74,6 +74,31 @@ tgt_clip <- function(p, bounds = 1e-5) {
 #'   covariate / density ratio product).
 #' @param id Subject identifiers (passed by SuperLearner, not used directly).
 #' @param bounds Numeric. Clipping bound for predictions. Default `1e-5`.
+#' @param alpha Numeric. Elastic-net mixing parameter passed to
+#'   [glmnet::cv.glmnet()]. `0` = ridge, `1` = lasso. Default `0.5`.
+#'   (`SL.tgt.glmnet` only.)
+#' @param nfolds Integer. Number of cross-validation folds for
+#'   [glmnet::cv.glmnet()]. Default `3L`. (`SL.tgt.glmnet` only.)
+#' @param s_select Character. Lambda selection rule for
+#'   [glmnet::cv.glmnet()]: `"lambda.min"` or `"lambda.1se"`. Default
+#'   `"lambda.min"`. (`SL.tgt.glmnet` only.)
+#' @param nrounds Integer. Number of boosting rounds passed to
+#'   [xgboost::xgb.train()]. Default `100L`. (`SL.tgt.xgboost` only.)
+#' @param max_depth Integer. Maximum tree depth for XGBoost. Default `2L`.
+#'   (`SL.tgt.xgboost` only.)
+#' @param eta Numeric. Learning rate for XGBoost. Default `0.1`.
+#'   (`SL.tgt.xgboost` only.)
+#' @param subsample Numeric. Row subsampling ratio for XGBoost. Default `0.8`.
+#'   (`SL.tgt.xgboost` only.)
+#' @param colsample_bytree Numeric. Column subsampling ratio for XGBoost.
+#'   Default `0.8`. (`SL.tgt.xgboost` only.)
+#' @param max_delta_step Numeric. Maximum delta step for XGBoost leaf weights.
+#'   Values `> 0` help stabilise logistic regression on imbalanced data.
+#'   Default `0`. (`SL.tgt.xgboost` only.)
+#' @param nthread Integer. Number of threads for XGBoost. Default `1L`.
+#'   (`SL.tgt.xgboost` only.)
+#' @param use_cuda Logical. Use CUDA GPU acceleration in XGBoost if available.
+#'   Default `TRUE`. (`SL.tgt.xgboost` only.)
 #' @param ... Additional arguments (ignored).
 #'
 #' @return A list with elements `pred` (numeric predictions on the probability
@@ -94,24 +119,8 @@ tgt_clip <- function(p, bounds = 1e-5) {
 #' )
 #'
 #' @name sl_itmle
-#' @aliases SL.tgt.empty SL.tgt.intercept SL.tgt.glm SL.tgt.glmnet SL.tgt.xgboost SL.tmle_empty SL.tmle_intercept SL.tmle_glm SL.tmle_glmnet_ridge SL.tmle_glmnet_enet SL.tmle_glmnet_lasso SL.tmle_xgb_d1 SL.tmle_xgb_d3 SL.tmle_xgb_d6
-#'
 #' @seealso [itmle()]
-#'
-#' @export SL.tgt.empty
-#' @export SL.tgt.intercept
-#' @export SL.tgt.glm
-#' @export SL.tgt.glmnet
-#' @export SL.tgt.xgboost
-#' @export SL.tmle_empty
-#' @export SL.tmle_intercept
-#' @export SL.tmle_glm
-#' @export SL.tmle_glmnet_ridge
-#' @export SL.tmle_glmnet_enet
-#' @export SL.tmle_glmnet_lasso
-#' @export SL.tmle_xgb_d1
-#' @export SL.tmle_xgb_d3
-#' @export SL.tmle_xgb_d6
+#' @export
 SL.tgt.empty <- function(Y, X, newX, family, obsWeights, id,
                          bounds = 1e-5, ...) {
   pcs <- extract_offset(X, newX)
@@ -129,6 +138,8 @@ predict.SL.tgt.empty <- function(object, newdata, ...) {
   tgt_clip(plogis(pcs$offset_pr), bounds)
 }
 
+#' @rdname sl_itmle
+#' @export
 SL.tgt.intercept <- function(Y, X, newX, family, obsWeights, id,
                              bounds = 1e-5, ...) {
   pcs <- extract_offset(X, newX)
@@ -164,6 +175,8 @@ predict.SL.tgt.intercept <- function(object, newdata, ...) {
   tgt_clip(plogis(pcs$offset_pr + object$eps), bounds)
 }
 
+#' @rdname sl_itmle
+#' @export
 SL.tgt.glm <- function(Y, X, newX, family, obsWeights, id,
                        bounds = 1e-5, ...) {
   pcs <- extract_offset(X, newX)
@@ -241,6 +254,8 @@ predict.SL.tgt.glm <- function(object, newdata, ...) {
   tgt_clip(plogis(pcs$offset_pr + eps), bounds)
 }
 
+#' @rdname sl_itmle
+#' @export
 SL.tgt.glmnet <- function(Y, X, newX, family, obsWeights, id,
                           alpha = 0.5, nfolds = 3L,
                           s_select = "lambda.min",
@@ -328,6 +343,8 @@ predict.SL.tgt.glmnet <- function(object, newdata, ...) {
   tgt_clip(pred_Q, bounds)
 }
 
+#' @rdname sl_itmle
+#' @export
 SL.tgt.xgboost <- function(Y, X, newX, family, obsWeights, id,
                            nrounds = 100L, max_depth = 2L, eta = 0.1,
                            subsample = 0.8, colsample_bytree = 0.8,
@@ -451,17 +468,29 @@ predict.SL.tgt.xgboost.failed <- function(object, newdata, ...) {
 }
 
 
-SL.tmle_empty     <- SL.tgt.empty
-SL.tmle_intercept <- SL.tgt.intercept
+#' @rdname sl_itmle
+#' @export
+SL.tmle_empty <- function(Y, X, newX, family, obsWeights, id, ...) {
+  SL.tgt.empty(Y, X, newX, family, obsWeights, id, ...)
+}
+predict.SL.tmle_empty <- predict.SL.tgt.empty
 
-predict.SL.tmle_empty     <- predict.SL.tgt.empty
+#' @rdname sl_itmle
+#' @export
+SL.tmle_intercept <- function(Y, X, newX, family, obsWeights, id, ...) {
+  SL.tgt.intercept(Y, X, newX, family, obsWeights, id, ...)
+}
 predict.SL.tmle_intercept <- predict.SL.tgt.intercept
 
+#' @rdname sl_itmle
+#' @export
 SL.tmle_glm <- function(Y, X, newX, family, obsWeights, id, ...) {
   SL.tgt.glm(Y, X, newX, family, obsWeights, id, ...)
 }
 predict.SL.tmle_glm <- predict.SL.tgt.glm
 
+#' @rdname sl_itmle
+#' @export
 SL.tmle_glmnet_ridge <- function(Y, X, newX, family, obsWeights, id, ...) {
   SL.tgt.glmnet(
     Y, X, newX, family, obsWeights, id,
@@ -473,18 +502,24 @@ SL.tmle_glmnet_ridge <- function(Y, X, newX, family, obsWeights, id, ...) {
 }
 predict.SL.tmle_glmnet_ridge <- predict.SL.tgt.glmnet
 
+#' @rdname sl_itmle
+#' @export
 SL.tmle_glmnet_enet <- function(Y, X, newX, family, obsWeights, id, ...) {
   SL.tgt.glmnet(Y, X, newX, family, obsWeights, id,
                 alpha = 0.5, nfolds = 3L, s_select = "lambda.min", ...)
 }
 predict.SL.tmle_glmnet_enet <- predict.SL.tgt.glmnet
 
+#' @rdname sl_itmle
+#' @export
 SL.tmle_glmnet_lasso <- function(Y, X, newX, family, obsWeights, id, ...) {
   SL.tgt.glmnet(Y, X, newX, family, obsWeights, id,
                 alpha = 1, nfolds = 3L, s_select = "lambda.min", ...)
 }
 predict.SL.tmle_glmnet_lasso <- predict.SL.tgt.glmnet
 
+#' @rdname sl_itmle
+#' @export
 SL.tmle_xgb_d1 <- function(Y, X, newX, family, obsWeights, id, ...) {
   SL.tgt.xgboost(
     Y, X, newX, family, obsWeights, id,
@@ -498,6 +533,8 @@ SL.tmle_xgb_d1 <- function(Y, X, newX, family, obsWeights, id, ...) {
 }
 predict.SL.tmle_xgb_d1 <- predict.SL.tgt.xgboost
 
+#' @rdname sl_itmle
+#' @export
 SL.tmle_xgb_d3 <- function(Y, X, newX, family, obsWeights, id, ...) {
   SL.tgt.xgboost(
     Y, X, newX, family, obsWeights, id,
@@ -511,6 +548,8 @@ SL.tmle_xgb_d3 <- function(Y, X, newX, family, obsWeights, id, ...) {
 }
 predict.SL.tmle_xgb_d3 <- predict.SL.tgt.xgboost
 
+#' @rdname sl_itmle
+#' @export
 SL.tmle_xgb_d6 <- function(Y, X, newX, family, obsWeights, id, ...) {
   SL.tgt.xgboost(
     Y, X, newX, family, obsWeights, id,

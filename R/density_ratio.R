@@ -167,6 +167,8 @@ dr_from_prob <- function(p_mat, beta, bounds, denom_cap) {
 #'   each SuperLearner call via [SuperLearner::mcSuperLearner()] (fork-based;
 #'   Linux/Mac only). `NULL` disables. Default `NULL`. **Note:** not compatible
 #'   with all learners.
+#' @param verbose Logical. If `TRUE` (default), print per-time progress
+#'   messages during estimation.
 #'
 #' @section Parallelism:
 #'   `t_workers`, `fold_workers`, and `sl_workers` can be used independently

@@ -19,6 +19,61 @@
 \title{Custom SuperLearner wrappers for the iTMLE targeting step}
 \usage{
 SL.tgt.empty(Y, X, newX, family, obsWeights, id, bounds = 1e-05, ...)
+
+SL.tgt.intercept(Y, X, newX, family, obsWeights, id, bounds = 1e-05, ...)
+
+SL.tgt.glm(Y, X, newX, family, obsWeights, id, bounds = 1e-05, ...)
+
+SL.tgt.glmnet(
+  Y,
+  X,
+  newX,
+  family,
+  obsWeights,
+  id,
+  alpha = 0.5,
+  nfolds = 3L,
+  s_select = "lambda.min",
+  bounds = 1e-05,
+  ...
+)
+
+SL.tgt.xgboost(
+  Y,
+  X,
+  newX,
+  family,
+  obsWeights,
+  id,
+  nrounds = 100L,
+  max_depth = 2L,
+  eta = 0.1,
+  subsample = 0.8,
+  colsample_bytree = 0.8,
+  max_delta_step = 0,
+  nthread = 1L,
+  use_cuda = TRUE,
+  bounds = 1e-05,
+  ...
+)
+
+SL.tmle_empty(Y, X, newX, family, obsWeights, id, ...)
+
+SL.tmle_intercept(Y, X, newX, family, obsWeights, id, ...)
+
+SL.tmle_glm(Y, X, newX, family, obsWeights, id, ...)
+
+SL.tmle_glmnet_ridge(Y, X, newX, family, obsWeights, id, ...)
+
+SL.tmle_glmnet_enet(Y, X, newX, family, obsWeights, id, ...)
+
+SL.tmle_glmnet_lasso(Y, X, newX, family, obsWeights, id, ...)
+
+SL.tmle_xgb_d1(Y, X, newX, family, obsWeights, id, ...)
+
+SL.tmle_xgb_d3(Y, X, newX, family, obsWeights, id, ...)
+
+SL.tmle_xgb_d6(Y, X, newX, family, obsWeights, id, ...)
 }
 \arguments{
 \item{Y}{Numeric outcome vector (on \verb{[0, 1]} after scaling).}
@@ -38,6 +93,42 @@ covariate / density ratio product).}
 \item{bounds}{Numeric. Clipping bound for predictions. Default \code{1e-5}.}
 
 \item{...}{Additional arguments (ignored).}
+
+\item{alpha}{Numeric. Elastic-net mixing parameter passed to
+\code{\link[glmnet:cv.glmnet]{glmnet::cv.glmnet()}}. \code{0} = ridge, \code{1} = lasso. Default \code{0.5}.
+(\code{SL.tgt.glmnet} only.)}
+
+\item{nfolds}{Integer. Number of cross-validation folds for
+\code{\link[glmnet:cv.glmnet]{glmnet::cv.glmnet()}}. Default \code{3L}. (\code{SL.tgt.glmnet} only.)}
+
+\item{s_select}{Character. Lambda selection rule for
+\code{\link[glmnet:cv.glmnet]{glmnet::cv.glmnet()}}: \code{"lambda.min"} or \code{"lambda.1se"}. Default
+\code{"lambda.min"}. (\code{SL.tgt.glmnet} only.)}
+
+\item{nrounds}{Integer. Number of boosting rounds passed to
+\code{\link[xgboost:xgb.train]{xgboost::xgb.train()}}. Default \code{100L}. (\code{SL.tgt.xgboost} only.)}
+
+\item{max_depth}{Integer. Maximum tree depth for XGBoost. Default \code{2L}.
+(\code{SL.tgt.xgboost} only.)}
+
+\item{eta}{Numeric. Learning rate for XGBoost. Default \code{0.1}.
+(\code{SL.tgt.xgboost} only.)}
+
+\item{subsample}{Numeric. Row subsampling ratio for XGBoost. Default \code{0.8}.
+(\code{SL.tgt.xgboost} only.)}
+
+\item{colsample_bytree}{Numeric. Column subsampling ratio for XGBoost.
+Default \code{0.8}. (\code{SL.tgt.xgboost} only.)}
+
+\item{max_delta_step}{Numeric. Maximum delta step for XGBoost leaf weights.
+Values \verb{> 0} help stabilise logistic regression on imbalanced data.
+Default \code{0}. (\code{SL.tgt.xgboost} only.)}
+
+\item{nthread}{Integer. Number of threads for XGBoost. Default \code{1L}.
+(\code{SL.tgt.xgboost} only.)}
+
+\item{use_cuda}{Logical. Use CUDA GPU acceleration in XGBoost if available.
+Default \code{TRUE}. (\code{SL.tgt.xgboost} only.)}
 }
 \value{
 A list with elements \code{pred} (numeric predictions on the probability

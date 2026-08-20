@@ -565,7 +565,7 @@ branch_cal_summary <- function(fit) {
   )
 
   out <- data.table::rbindlist(parts, use.names = TRUE, fill = TRUE)
-  out[, branch := factor(branch, levels = c("g_remain", "g_death", "q_rem", "q_exit"))]
+  out$branch <- factor(out$branch, levels = c("g_remain", "g_death", "q_rem", "q_exit"))
   data.table::setorderv(out, c("t", "branch"))
   class(out) <- c("branch_cal_summary", class(out))
   out
@@ -617,7 +617,7 @@ print.branch_cal_summary <- function(x, digits = 3L, ...) {
   x_dt <- data.table::as.data.table(x)
   for (tt in t_vals) {
     row_parts <- vapply(branches, function(b) {
-      r <- x_dt[t == tt & branch == b]
+      r <- x_dt[x_dt$t == tt & x_dt$branch == b, ]
       if (nrow(r) == 0L) {
         return(paste(rep(formatC("\u2014", width = max(col_widths)), length(metrics)),
                      collapse = " "))

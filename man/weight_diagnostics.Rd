@@ -10,8 +10,10 @@ weight_diagnostics(weight_object, trim = 1)
 \item{weight_object}{Output of \code{density_ratio()}.}
 
 \item{trim}{Quantile used to cap \code{Rt_t} before computing summaries.
-Mirrors the \code{trim} argument of \code{sdr()}/\code{itmle()}.
-Set to \code{NULL} or \code{1} to skip trimming.}
+Default \code{1} (no trimming) so the returned summaries reflect the raw
+density ratios; pass a value \code{< 1} (e.g. \code{0.99}) to see how a
+given trim reshapes the weight distribution before choosing what to hand
+to \code{sdr()}/\code{itmle()}.}
 }
 \value{
 A \code{data.table} with one row per time step and columns:

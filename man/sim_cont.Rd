@@ -23,7 +23,7 @@ A \code{data.frame} with columns
 }
 \description{
 Longitudinal ICU-style trajectories with one continuous treatment (\code{A},
-bounded roughly in \code{[0, 2]}), competing exit events, and a binary outcome.
+bounded roughly in \verb{[0, 2]}), competing exit events, and a binary outcome.
 Continuous-treatment analogue of \code{\link[=sim_bin]{sim_bin()}}.
 }
 \seealso{

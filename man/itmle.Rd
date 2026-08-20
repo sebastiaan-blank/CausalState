@@ -98,9 +98,10 @@ treatment values under the MTP (one per treatment variable in \code{a_names}).}
 Required.}
 
 \item{sl_rec_early}{Optional SuperLearner library for the recursive Q-remain
-model at early time points (\code{tt <= rec_transition}). When supplied, a
-simpler/more-regularised library is used for the noisiest pseudo-outcome
-steps. Requires \code{rec_transition}.}
+model at early time points (\code{tt <= rec_transition}). When supplied, this
+library is used for those early time steps and \code{sl_recursive} is used for
+the later ones -- letting the user tune the recursion separately for
+early vs. late time points. Requires \code{rec_transition}.}
 
 \item{rec_transition}{Integer. Time-point threshold: \code{sl_rec_early} is used
 for \code{tt <= rec_transition}, \code{sl_recursive} for later time points. Required
@@ -160,9 +161,7 @@ regression parallelism.}
 \item{sl_workers}{Integer. Workers for parallel learner evaluation within
 each SuperLearner call via \code{\link[SuperLearner:mcSuperLearner]{SuperLearner::mcSuperLearner()}} (fork-based;
 Linux/Mac only). Ignored when \code{parallel = FALSE}. Default \code{NULL}
-(sequential). \strong{Note:} incompatible with \code{dbarts}/\code{SL.dbarts} learners --
-dbarts' C-level RNG state does not survive forking. Remove dbarts from
-\code{sl_remain}/\code{sl_death}/\code{sl_y}/\code{sl_recursive} when \code{sl_workers} is set.}
+(sequential). \strong{Note:} not compatible with all learners.}
 
 \item{inner_v}{Integer. Number of inner cross-validation folds for
 SuperLearner. Default \code{5L}.}
@@ -202,16 +201,13 @@ Predictions are made in two passes -- once with \code{exit_status = 1}
 (death branch) and once with \code{exit_status = 0} (discharge branch) -- on
 all at-risk subjects, not just those who exited. Default \code{FALSE}.}
 
-\item{pool_time}{Character vector of length 1 or 2 giving the time basis used
-when \code{pool_g_death = TRUE} or \code{pool_q_exit = TRUE}. Each element must
-be one of \code{"spline"} (restricted cubic spline, default), \code{"linear"},
-or \code{"factor"} (dummy per time point). If length 1, the same mode is used
-for both pooled models; if length 2, the first element is applied to
-\code{g_death} and the second to \code{Q_exit}.}
+\item{pool_time}{Character. Basis used to encode time as a covariate in
+pooled models. One of \code{"spline"} (natural spline, default), \code{"linear"},
+or \code{"factor"}. Only relevant when \code{pool_g_death = TRUE} or
+\code{pool_q_exit = TRUE}.}
 
-\item{verbose}{Logical. When \code{TRUE} (default), prints a data-check summary
-on startup and per-fold per-time progress messages during the backward
-recursion. Set to \code{FALSE} to suppress all informational output.}
+\item{verbose}{Logical. If \code{TRUE} (default), print per-fold and per-time
+progress messages during estimation.}
 }
 \value{
 A named list with the same structure as \code{\link[=sdr]{sdr()}}, except where
@@ -246,12 +242,18 @@ per time point, one row per subject.
 summaries. iTMLE-specific additions are noted.
 \describe{
 \item{\verb{$recursion_diag}}{\code{data.table}, one row per fold x time point.
-Tracks g/Q predictions under natural and shifted policy; also
-includes pre- and post-targeting Q means on the validation set
-(\code{Q_nat_vl_pre_mean}, \code{Q_shf_vl_pre_mean}, \code{Q_nat_vl_post_mean},
-\code{Q_shf_vl_post_mean}) and targeting update magnitudes.}
+Tracks g/Q predictions under natural and shifted policy, the
+current regression target (\verb{Y_target_*}, the outer-step targeted
+Q at t+1), pre- and post-targeting Q on the training side
+(\verb{Q_\{nat,shf\}_pre_*}, \verb{Q_\{nat,shf\}_post_*}), model-fit residuals
+(\code{resid_sd}, \code{resid_q95_abs}, \code{resid_max_abs} -- \code{Y_target} minus
+shifted-mixture Q), targeting update magnitudes
+(\verb{delta_\{nat,shf\}_target_\{sd,q95_abs,max_abs\}}), and pre-/post-
+targeting Q means on the validation set (\code{Q_nat_vl_pre_mean},
+\code{Q_shf_vl_pre_mean}, \code{Q_nat_vl_post_mean}, \code{Q_shf_vl_post_mean}).}
 \item{\verb{$branch_cal}}{Per-fold, per-time calibration table for
-\code{g_remain}, \code{g_death}, and \code{Q_rem}. Same structure as \code{\link[=sdr]{sdr()}}.}
+\code{g_remain}, \code{g_death}, \code{Q_rem}, and \code{Q_exit}. Same structure as
+\code{\link[=sdr]{sdr()}}.}
 \item{\verb{$target_cal}}{\emph{(iTMLE only)} \code{data.table} with one row per
 targeting iteration (fold x time x iteration), tracking EIF
 magnitude as it decreases toward convergence.}
@@ -316,176 +318,110 @@ still be sufficient events across the pooled structure.  All built-in
 examples use a minimum of 2,000 subjects.
 }
 
+\section{Diagnostics}{
+
+The returned fit carries several diagnostic tables under \verb{$diagnostics}:
+\itemize{
+\item \code{branch_cal} -- per-fold, per-time calibration for the four
+branches (\code{g_remain}, \code{g_death}, \code{q_rem}, \code{q_exit}); summarise with
+\code{\link[=branch_cal_summary]{branch_cal_summary()}} and use to tune the g/Q SuperLearner libraries.
+\item \code{recursion_diag} -- per-fold, per-time EIF/targeting mechanics
+(\verb{Y_target_*}, \verb{Q_*_pre/post_*}, \verb{delta_*_target_*}, \verb{resid_*},
+range-violation counts, validation-side Q means). Post-hoc sanity.
+\item \code{target_cal} -- per outer/inner targeting iteration, tracks EIF
+magnitude toward convergence.
+\item \code{target_sl} -- per (fold, t) SuperLearner coefficients from the
+fluctuation model; use to prune \code{sl_tmle} wrappers that never fire.
+}
+\code{sl_summary} (per-(fold, t, component) SuperLearner coefficients for the
+g/Q models) and \code{ic_df} (per-subject influence-curve values consumed by
+\code{\link[=contrast]{contrast()}}) are also attached. Weight diagnostics live on the
+\code{\link[=density_ratio]{density_ratio()}} object itself -- see \code{\link[=weight_diagnostics]{weight_diagnostics()}}. A worked
+workflow is in \code{vignette("diagnostics")}.
+}
+
 \examples{
 \donttest{
 library(SuperLearner)
+sl_lib  <- c("SL.mean", "SL.glm")
+tgt_lib <- c("SL.tmle_empty", "SL.tmle_intercept", "SL.tmle_glm")
 
-# ICU-like DGP: patients die, discharge, or remain in state each time point
-sim_ex <- function(n = 2000L, tmax = 5L) {
-  set.seed(42L)
-  rows <- vector("list", n)
-  for (i in seq_len(n)) {
-    age <- round(rnorm(1, 65, 10)); L1 <- rnorm(1)
-    pat <- list()
-    for (t in seq_len(tmax)) {
-      A     <- rbinom(1, 1, plogis(0.3 * L1 - 0.4))
-      u     <- runif(1)
-      p_die <- plogis(-4.0 + 0.2 * L1 - 0.1 * age / 10)
-      p_dc  <- plogis(-2.5 + 0.5 * A)
-      if (u < p_die) {
-        alive <- 0L; in_state <- 0L
-      } else if (u < p_die + p_dc) {
-        alive <- 1L; in_state <- 0L
-      } else {
-        alive <- 1L; in_state <- 1L
-      }
-      Y <- rbinom(1, 1, plogis(-0.5 + 0.4 * A - 0.2 * L1))
-      pat[[length(pat) + 1L]] <- data.frame(
-        id = i, time = t, age = age, L1 = L1,
-        A = A, alive = alive, in_state = in_state, Y = Y
-      )
-      if (in_state == 0L) break
-      if (t < tmax) L1 <- L1 + rnorm(1, -0.1 * A, 0.3)
-    }
-    rows[[i]] <- do.call(rbind, pat)
-  }
-  do.call(rbind, rows)
-}
-df <- sim_ex()
-
-# Policy: increase treatment probability by 0.3
-policy_fn <- function(D_block, t, a_names) {
+# ---- Single binary treatment (sim_bin) ------------------------------
+df <- sim_bin(n = 1000L, tmax = 3L, seed = 1L)
+policy_bin <- function(D_block, t, a_names) {
   out <- D_block[, ..a_names, drop = FALSE]
-  out[[a_names[1]]] <- pmin(D_block[[a_names[1]]] + 0.3, 1)
+  out[[a_names[1]]] <- pmax(
+    D_block[[a_names[1]]], as.integer(D_block[["L1"]] > 1.0)
+  )
   out
 }
-
-sl_lib <- c("SL.mean", "SL.glm")
-
 wr <- density_ratio(
-  df = df, a_names = "A", tmax = 5L, baseline = "age", tv_names = "L1",
+  df = df, a_names = "A", tmax = 3L,
+  baseline = c("age", "sex"), tv_names = c("L1", "L2"),
   sl_g = sl_lib, k = 1L, inner_v = 3L, v = 3L, seed = 1L,
-  id = "id", time = "time", policy_spec_fun = policy_fn
+  id = "id", time = "time", policy_spec_fun = policy_bin
 )
-
 res <- itmle(
-  df               = df,
-  weight_object    = wr,
-  tmax             = 5L,
-  id               = "id",
-  time             = "time",
-  alive            = "alive",
-  in_state         = "in_state",
-  y                = "Y",
-  baseline         = "age",
-  tv_names         = "L1",
-  a_names          = "A",
-  sl_remain        = sl_lib,
-  sl_death         = sl_lib,
-  sl_recursive     = sl_lib,
-  sl_y             = sl_lib,
-  sl_tmle          = c("SL.tmle_empty", "SL.tmle_intercept", "SL.tmle_glm"),
-  k                = 1L,
-  inner_v          = 3L,
-  v_target_itmle   = 3L,
-  v_sl_inner_itmle = 3L,
-  parallel         = FALSE,
-  seed             = 1L,
-  policy_spec_fun  = policy_fn
+  df = df, weight_object = wr, tmax = 3L,
+  id = "id", time = "time", alive = "alive", in_state = "in_state", y = "Y",
+  baseline = c("age", "sex"), tv_names = c("L1", "L2"), a_names = "A",
+  sl_remain = sl_lib, sl_death = sl_lib,
+  sl_recursive = sl_lib, sl_y = sl_lib, sl_tmle = tgt_lib,
+  k = 1L, inner_v = 2L, v_target_itmle = 2L, v_sl_inner_itmle = 2L,
+  parallel = FALSE, seed = 1L, policy_spec_fun = policy_bin
 )
-res$psi
-res$se
-}
+res$psi; res$se
 
-# Multi-treatment: joint policy over two binary treatments (A1, A2)
-\donttest{
-library(SuperLearner)
-
-sim_multi <- function(n = 2000L, tmax = 5L) {
-  set.seed(42L)
-  rows <- vector("list", n)
-  for (i in seq_len(n)) {
-    age <- round(rnorm(1, 65, 10)); L1 <- rnorm(1)
-    pat <- list()
-    for (t in seq_len(tmax)) {
-      A1    <- rbinom(1, 1, plogis(0.3 * L1 - 0.4))
-      A2    <- rbinom(1, 1, plogis(0.2 * L1 + 0.3 * A1 - 0.3))
-      u     <- runif(1)
-      p_die <- plogis(-4.0 + 0.2 * L1 - 0.1 * age / 10)
-      p_dc  <- plogis(-2.5 + 0.4 * A1 + 0.3 * A2)
-      if (u < p_die) {
-        alive <- 0L; in_state <- 0L
-      } else if (u < p_die + p_dc) {
-        alive <- 1L; in_state <- 0L
-      } else {
-        alive <- 1L; in_state <- 1L
-      }
-      Y <- rbinom(1, 1, plogis(-0.5 + 0.3 * A1 + 0.3 * A2 - 0.2 * L1))
-      pat[[length(pat) + 1L]] <- data.frame(
-        id = i, time = t, age = age, L1 = L1,
-        A1 = A1, A2 = A2, alive = alive, in_state = in_state, Y = Y
-      )
-      if (in_state == 0L) break
-      if (t < tmax) L1 <- L1 + rnorm(1, -0.1 * A1, 0.3)
-    }
-    rows[[i]] <- do.call(rbind, pat)
-  }
-  do.call(rbind, rows)
-}
-df2 <- sim_multi()
-
-policy_fn2 <- function(D_block, t, a_names) {
+# ---- Single continuous treatment (sim_cont) -------------------------
+df_c <- sim_cont(n = 1000L, tmax = 3L, seed = 1L)
+policy_cont <- function(D_block, t, a_names) {
   out <- D_block[, ..a_names, drop = FALSE]
-  out[[a_names[1]]] <- pmin(D_block[[a_names[1]]] + 0.3, 1)
-  out[[a_names[2]]] <- pmin(D_block[[a_names[2]]] + 0.3, 1)
+  out[[a_names[1]]] <- pmin(D_block[[a_names[1]]] + 0.2, 2.0)
   out
 }
-
-sl_lib <- c("SL.mean", "SL.glm")
-
-wr2 <- density_ratio(
-  df              = df2,
-  a_names         = c("A1", "A2"),
-  tmax            = 5L,
-  baseline        = "age",
-  tv_names        = "L1",
-  sl_g            = sl_lib,
-  k               = 1L,
-  inner_v         = 3L,
-  v               = 3L,
-  seed            = 1L,
-  id              = "id",
-  time            = "time",
-  policy_spec_fun = policy_fn2
+wr_c <- density_ratio(
+  df = df_c, a_names = "A", tmax = 3L,
+  baseline = "age", tv_names = "L1",
+  sl_g = sl_lib, k = 1L, inner_v = 3L, v = 3L, seed = 1L,
+  id = "id", time = "time", policy_spec_fun = policy_cont
 )
-
-res2 <- itmle(
-  df               = df2,
-  weight_object    = wr2,
-  tmax             = 5L,
-  id               = "id",
-  time             = "time",
-  alive            = "alive",
-  in_state         = "in_state",
-  y                = "Y",
-  baseline         = "age",
-  tv_names         = "L1",
-  a_names          = c("A1", "A2"),
-  sl_remain        = sl_lib,
-  sl_death         = sl_lib,
-  sl_recursive     = sl_lib,
-  sl_y             = sl_lib,
-  sl_tmle          = c("SL.tmle_empty", "SL.tmle_intercept", "SL.tmle_glm"),
-  k                = 1L,
-  inner_v          = 3L,
-  v_target_itmle   = 3L,
-  v_sl_inner_itmle = 3L,
-  parallel         = FALSE,
-  seed             = 1L,
-  policy_spec_fun  = policy_fn2
+res_c <- itmle(
+  df = df_c, weight_object = wr_c, tmax = 3L,
+  id = "id", time = "time", alive = "alive", in_state = "in_state", y = "Y",
+  baseline = "age", tv_names = "L1", a_names = "A",
+  sl_remain = sl_lib, sl_death = sl_lib,
+  sl_recursive = sl_lib, sl_y = sl_lib, sl_tmle = tgt_lib,
+  k = 1L, inner_v = 2L, v_target_itmle = 2L, v_sl_inner_itmle = 2L,
+  parallel = FALSE, seed = 1L, policy_spec_fun = policy_cont
 )
-res2$psi
-res2$se
+res_c$psi; res_c$se
+
+# ---- Multiple treatments -- binary + continuous (sim_multi) ---------
+df_m <- sim_multi(
+  n = 1000L, tmax = 3L, seed = 1L, n_binary = 1L, n_continuous = 1L
+)
+policy_multi <- function(D_block, t, a_names) {
+  out <- D_block[, ..a_names, drop = FALSE]
+  out[["A_b1"]] <- pmax(D_block[["A_b1"]], as.integer(D_block[["L1"]] > 1.0))
+  out[["A_c1"]] <- pmin(D_block[["A_c1"]] + 0.2, 2.0)
+  out
+}
+wr_m <- density_ratio(
+  df = df_m, a_names = c("A_b1", "A_c1"), tmax = 3L,
+  baseline = c("age", "sex"), tv_names = "L1",
+  sl_g = sl_lib, k = 1L, inner_v = 2L, v = 2L, seed = 1L,
+  id = "id", time = "time", policy_spec_fun = policy_multi
+)
+res_m <- itmle(
+  df = df_m, weight_object = wr_m, tmax = 3L,
+  id = "id", time = "time", alive = "alive", in_state = "in_state", y = "Y",
+  baseline = c("age", "sex"), tv_names = "L1", a_names = c("A_b1", "A_c1"),
+  sl_remain = sl_lib, sl_death = sl_lib,
+  sl_recursive = sl_lib, sl_y = sl_lib, sl_tmle = tgt_lib,
+  k = 1L, inner_v = 2L, v_target_itmle = 2L, v_sl_inner_itmle = 2L,
+  parallel = FALSE, seed = 1L, policy_spec_fun = policy_multi
+)
+res_m$psi; res_m$se
 }
 
 }
@@ -498,5 +434,6 @@ Effects Based on Longitudinal Modified Treatment Policies. \emph{JASA}
 118(542):846-857.
 }
 \seealso{
-\code{\link[=density_ratio]{density_ratio()}}, \code{\link[=sdr]{sdr()}}, \code{\link[=contrast]{contrast()}}, \code{\link[=absorb_rule]{absorb_rule()}}, \link{sl_itmle}
+\code{\link[=density_ratio]{density_ratio()}}, \code{\link[=sdr]{sdr()}}, \code{\link[=contrast]{contrast()}}, \code{\link[=absorb_rule]{absorb_rule()}},
+\link{sl_itmle}, \code{\link[=weight_diagnostics]{weight_diagnostics()}}, \code{\link[=branch_cal_summary]{branch_cal_summary()}}
 }

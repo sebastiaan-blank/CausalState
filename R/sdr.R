@@ -126,6 +126,12 @@
 #'   Predictions are made in two passes -- once with `exit_status = 1`
 #'   (death branch) and once with `exit_status = 0` (discharge branch) -- on
 #'   all at-risk subjects, not just those who exited. Default `FALSE`.
+#' @param pool_time Character. Basis used to encode time as a covariate in
+#'   pooled models. One of `"spline"` (natural spline, default), `"linear"`,
+#'   or `"factor"`. Only relevant when `pool_g_death = TRUE` or
+#'   `pool_q_exit = TRUE`.
+#' @param verbose Logical. If `TRUE` (default), print per-fold and per-time
+#'   progress messages during estimation.
 #'
 #' @return A named list. Top-level elements:
 #'   \describe{
@@ -261,7 +267,7 @@
 #' sl_lib <- c("SL.mean", "SL.glm")
 #'
 #' # ---- Single binary treatment (sim_bin) ------------------------------
-#' df <- sim_bin(n = 500L, tmax = 3L, seed = 1L)
+#' df <- sim_bin(n = 1000L, tmax = 3L, seed = 1L)
 #' policy_bin <- function(D_block, t, a_names) {
 #'   out <- D_block[, ..a_names, drop = FALSE]
 #'   out[[a_names[1]]] <- pmax(
@@ -272,7 +278,7 @@
 #' wr <- density_ratio(
 #'   df = df, a_names = "A", tmax = 3L,
 #'   baseline = c("age", "sex"), tv_names = c("L1", "L2"),
-#'   sl_g = sl_lib, k = 1L, inner_v = 3L, v = 3L, seed = 1L,
+#'   sl_g = sl_lib, k = 1L, inner_v = 2L, v = 2L, seed = 1L,
 #'   id = "id", time = "time", policy_spec_fun = policy_bin
 #' )
 #' res <- sdr(
@@ -281,13 +287,13 @@
 #'   baseline = c("age", "sex"), tv_names = c("L1", "L2"), a_names = "A",
 #'   sl_remain = sl_lib, sl_death = sl_lib,
 #'   sl_recursive = sl_lib, sl_y = sl_lib,
-#'   k = 1L, inner_v = 3L, parallel = FALSE, seed = 1L,
+#'   k = 1L, inner_v = 2L, parallel = FALSE, seed = 1L,
 #'   policy_spec_fun = policy_bin
 #' )
 #' res$psi; res$se
 #'
 #' # ---- Single continuous treatment (sim_cont) -------------------------
-#' df_c <- sim_cont(n = 500L, tmax = 3L, seed = 1L)
+#' df_c <- sim_cont(n = 1000L, tmax = 3L, seed = 1L)
 #' policy_cont <- function(D_block, t, a_names) {
 #'   out <- D_block[, ..a_names, drop = FALSE]
 #'   out[[a_names[1]]] <- pmin(D_block[[a_names[1]]] + 0.2, 2.0)
@@ -296,7 +302,7 @@
 #' wr_c <- density_ratio(
 #'   df = df_c, a_names = "A", tmax = 3L,
 #'   baseline = "age", tv_names = "L1",
-#'   sl_g = sl_lib, k = 1L, inner_v = 3L, v = 3L, seed = 1L,
+#'   sl_g = sl_lib, k = 1L, inner_v = 2L, v = 2L, seed = 1L,
 #'   id = "id", time = "time", policy_spec_fun = policy_cont
 #' )
 #' res_c <- sdr(
@@ -305,14 +311,14 @@
 #'   baseline = "age", tv_names = "L1", a_names = "A",
 #'   sl_remain = sl_lib, sl_death = sl_lib,
 #'   sl_recursive = sl_lib, sl_y = sl_lib,
-#'   k = 1L, inner_v = 3L, parallel = FALSE, seed = 1L,
+#'   k = 1L, inner_v = 2L, parallel = FALSE, seed = 1L,
 #'   policy_spec_fun = policy_cont
 #' )
 #' res_c$psi; res_c$se
 #'
 #' # ---- Multiple treatments -- binary + continuous (sim_multi) ---------
 #' df_m <- sim_multi(
-#'   n = 500L, tmax = 3L, seed = 1L, n_binary = 1L, n_continuous = 1L
+#'   n = 1000L, tmax = 3L, seed = 1L, n_binary = 1L, n_continuous = 1L
 #' )
 #' policy_multi <- function(D_block, t, a_names) {
 #'   out <- D_block[, ..a_names, drop = FALSE]
@@ -323,7 +329,7 @@
 #' wr_m <- density_ratio(
 #'   df = df_m, a_names = c("A_b1", "A_c1"), tmax = 3L,
 #'   baseline = c("age", "sex"), tv_names = "L1",
-#'   sl_g = sl_lib, k = 1L, inner_v = 3L, v = 3L, seed = 1L,
+#'   sl_g = sl_lib, k = 1L, inner_v = 2L, v = 2L, seed = 1L,
 #'   id = "id", time = "time", policy_spec_fun = policy_multi
 #' )
 #' res_m <- sdr(
@@ -332,7 +338,7 @@
 #'   baseline = c("age", "sex"), tv_names = "L1", a_names = c("A_b1", "A_c1"),
 #'   sl_remain = sl_lib, sl_death = sl_lib,
 #'   sl_recursive = sl_lib, sl_y = sl_lib,
-#'   k = 1L, inner_v = 3L, parallel = FALSE, seed = 1L,
+#'   k = 1L, inner_v = 2L, parallel = FALSE, seed = 1L,
 #'   policy_spec_fun = policy_multi
 #' )
 #' res_m$psi; res_m$se
