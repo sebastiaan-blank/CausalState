@@ -52,10 +52,10 @@ print.qreg_fit <- function(x, digits = 3L, ...) {
   vi <- x$settings$variable_info
   cat(sprintf("Q-regression  (outcome: %s, family: %s, tmax: %d)\n",
               vi$outcome, x$settings$outcome_family, vi$tmax))
-  cat(sprintf("n = %d subjects\n\n", x$n))
-  .fmt_est("Shifted", x$estimate, x$se, x$ci, digits)
-  if (!is.null(x$psi_natural))
-    cat(sprintf("  %-12s  %.*f\n", "Natural", digits, x$psi_natural))
+  cat(sprintf("n = %d subjects\n\n", x$settings$n))
+  .fmt_est("Shifted", x$psi, x$se, x$ci, digits)
+  if (!is.null(x$decomposition$psi_plugin_nat))
+    cat(sprintf("  %-12s  %.*f\n", "Natural", digits, x$decomposition$psi_plugin_nat))
   invisible(x)
 }
 

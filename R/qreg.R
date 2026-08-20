@@ -923,28 +923,42 @@ qreg <- function(
     se          <- se_scaled
   }
 
+  ic_df <- if (!is.null(weights_dt) && exists("ic_scaled"))
+    data.table::data.table(id = ids, ic = ic_scaled) else NULL
+
   out <- list(
-    estimate    = psi,
-    se          = se,
-    se_naive    = se_naive,
-    se_eif      = se_eif,
-    ci          = c(psi - 1.96 * se, psi + 1.96 * se),
-    psi_natural = psi_natural,
-    psi_shifted = psi_shifted,
-    n           = length(ids),
-    sl_summary  = if (length(sl_chunks))
-      data.table::rbindlist(sl_chunks, use.names = TRUE, fill = TRUE) else NULL,
-    fold_diag   = fold_diag,
-    diagnostics = list(
-      branch_cal = branch_diag,
-      diag_table = diag_table
+    psi   = psi,
+    se    = se,
+    ci    = c(psi - 1.96 * se, psi + 1.96 * se),
+    ic_df = ic_df,
+
+    predictions = list(
+      natural = pred_nat_all,
+      shifted = pred_shf_all
     ),
+
+    diagnostics = list(
+      recursion_diag = fold_diag,
+      branch_cal     = branch_diag,
+      sl_summary     = if (length(sl_chunks))
+        data.table::rbindlist(sl_chunks, use.names = TRUE, fill = TRUE) else NULL,
+      diag_table     = diag_table
+    ),
+
+    decomposition = list(
+      psi_plugin_nat = psi_natural,
+      psi_plugin_shf = psi_shifted,
+      se_naive       = se_naive,
+      se_eif         = se_eif
+    ),
+
     settings = list(
+      n              = length(ids),
       outcome_family = outcome_family,
       pool_g_death   = pool_g_death,
       pool_q_exit    = pool_q_exit,
       pool_time      = pool_time,
-      variable_info = list(
+      variable_info  = list(
         id           = id,
         time         = time,
         alive        = alive,
