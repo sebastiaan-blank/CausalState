@@ -788,16 +788,50 @@ qreg <- function(
         shf_valid[!at_risk_vl, tt] <- shf_valid[!at_risk_vl, tt + 1L]
       }
 
+      exit_branch_nat_tr <- p_dex_nat * q_death_nat + (1 - p_dex_nat) * q_dc_nat
+      exit_branch_shf_tr <- p_dex_shf * q_death_shf + (1 - p_dex_shf) * q_dc_shf
+
       fold_diag_here[[length(fold_diag_here) + 1L]] <- data.table::data.table(
         fold = f_idx, t = tt,
+
         n_train_at_risk = sum(at_risk_tr),
         n_valid_at_risk = sum(at_risk_vl),
         n_train_death   = sum(D_tr == 1L),
         n_train_dc      = sum(C_tr == 1L),
         n_train_remain  = sum(R_tr == 1L),
-        Q_nat_mean = mean_or_na(Q_nat_ar),
-        Q_shf_mean = mean_or_na(Q_shf_ar),
-        Q_diff_mean = mean_or_na(Q_shf_ar - Q_nat_ar)
+
+        used_const_rem   = if (!is.null(sl_rem))   isTRUE(sl_rem$used_const)   else NA,
+        used_const_dex   = if (!is.null(sl_dex)) {
+          isTRUE(sl_dex$used_const)
+        } else if (pooled_dex_used) FALSE else if (!is.na(p_dex_const)) TRUE else NA,
+        used_const_qexit = if (!is.null(sl_qexit)) {
+          isTRUE(sl_qexit$used_const)
+        } else if (pooled_qexit_used) FALSE else NA,
+        used_const_qrem  = if (!is.null(sl_qrem))  isTRUE(sl_qrem$used_const)  else NA,
+
+        p_rem_nat_mean = mean_or_na(p_rem_nat), p_rem_nat_sd = sd_or_na(p_rem_nat),
+        p_rem_shf_mean = mean_or_na(p_rem_shf), p_rem_shf_sd = sd_or_na(p_rem_shf),
+
+        p_dex_nat_mean = mean_or_na(p_dex_nat), p_dex_nat_sd = sd_or_na(p_dex_nat),
+        p_dex_shf_mean = mean_or_na(p_dex_shf), p_dex_shf_sd = sd_or_na(p_dex_shf),
+
+        q_rem_nat_mean = mean_or_na(q_rem_nat), q_rem_nat_sd = sd_or_na(q_rem_nat),
+        q_rem_shf_mean = mean_or_na(q_rem_shf), q_rem_shf_sd = sd_or_na(q_rem_shf),
+
+        q_exit_nat_mean = mean_or_na(exit_branch_nat_tr), q_exit_nat_sd = sd_or_na(exit_branch_nat_tr),
+        q_exit_shf_mean = mean_or_na(exit_branch_shf_tr), q_exit_shf_sd = sd_or_na(exit_branch_shf_tr),
+
+        Q_nat_pre_mean = mean_or_na(Q_nat_ar), Q_nat_pre_sd = sd_or_na(Q_nat_ar),
+        Q_nat_pre_min  = min_or_na(Q_nat_ar),  Q_nat_pre_max = max_or_na(Q_nat_ar),
+
+        Q_shf_pre_mean = mean_or_na(Q_shf_ar), Q_shf_pre_sd = sd_or_na(Q_shf_ar),
+        Q_shf_pre_min  = min_or_na(Q_shf_ar),  Q_shf_pre_max = max_or_na(Q_shf_ar),
+
+        Y_target_mean = mean_or_na(Y_pseudo_ar), Y_target_sd = sd_or_na(Y_pseudo_ar),
+        Y_target_min  = min_or_na(Y_pseudo_ar),  Y_target_max = max_or_na(Y_pseudo_ar),
+
+        Q_nat_vl_mean = if (!is.null(r_vl)) mean_or_na(Q_nat_vl) else NA_real_,
+        Q_shf_vl_mean = if (!is.null(r_vl)) mean_or_na(Q_shf_vl) else NA_real_
       )
 
       rm(sl_rem, sl_dex, sl_qexit, sl_qrem)
