@@ -924,6 +924,8 @@ qreg <- function(
 
   se_scaled <- if (!is.null(se_eif_scaled)) se_eif_scaled else se_naive_scaled
 
+  Y_obs_scaled <- mean(Y_init, na.rm = TRUE)
+
   t_vec <- seq_len(tmax)
   diag_table <- data.frame(
     t          = t_vec,
@@ -945,6 +947,7 @@ qreg <- function(
     se_naive    <- scale_info$y_rng * se_naive_scaled
     se_eif      <- if (!is.null(se_eif_scaled)) scale_info$y_rng * se_eif_scaled else NULL
     se          <- scale_info$y_rng * se_scaled
+    Y_obs       <- scale_info$from_unit(Y_obs_scaled)
     diag_table$mean_Q_nat <- scale_info$from_unit(diag_table$mean_Q_nat)
     diag_table$mean_Q_shf <- scale_info$from_unit(diag_table$mean_Q_shf)
     diag_table$delta      <- scale_info$y_rng * diag_table$delta
@@ -955,6 +958,7 @@ qreg <- function(
     se_naive    <- se_naive_scaled
     se_eif      <- se_eif_scaled
     se          <- se_scaled
+    Y_obs       <- Y_obs_scaled
   }
 
   ic_df <- if (!is.null(weights_dt) && exists("ic_scaled"))
@@ -964,6 +968,7 @@ qreg <- function(
     psi   = psi,
     se    = se,
     ci    = c(psi - 1.96 * se, psi + 1.96 * se),
+    Y_obs = Y_obs,
     ic_df = ic_df,
 
     predictions = list(
