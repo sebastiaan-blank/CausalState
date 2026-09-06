@@ -900,6 +900,12 @@ overwrite_policy_history_for_Q <- function(
     }
   }
 
+  for (a in intersect(a_names, names(DT))) {
+    if (any(!is.finite(DT[[a]][rows_tt])))
+      stop(sprintf("policy_spec_fun returned non-finite value(s) for '%s' at t=%d", a, t),
+           call. = FALSE)
+  }
+
   DT
 }
 

@@ -49,19 +49,34 @@ build_stack <- function(
   A_obs[] <- lapply(A_obs, function(z) suppressWarnings(as.numeric(z)))
 
   block_t <- DT[rows_t]
-  spec <- try(policy_spec_fun(block_t, t, a_names), silent = TRUE)
+  spec    <- policy_spec_fun(block_t, t, a_names)
 
   A_shift <- A_obs
-  if (inherits(spec, "data.frame") && nrow(spec) == nrow(block_t)) {
-    for (a in intersect(names(spec), a_names)) {
-      A_shift[[a]] <- suppressWarnings(as.numeric(spec[[a]]))
+  if (!is.null(spec) && length(spec)) {
+    if (is.data.frame(spec)) {
+      for (a in intersect(names(spec), a_names)) {
+        A_shift[[a]] <- suppressWarnings(as.numeric(spec[[a]]))
+      }
+    } else {
+      for (a in intersect(names(spec), a_names)) {
+        s <- spec[[a]]
+        if (is.atomic(s) && is.numeric(s)) {
+          A_shift[[a]] <- if (length(s) == 1L) rep(as.numeric(s), nrow(A_obs)) else as.numeric(s)
+        } else if (is.list(s)) {
+          m <- if (!is.null(s$idx) && length(s$idx) == nrow(A_obs)) as.logical(s$idx) else rep(TRUE, nrow(A_obs))
+          m[is.na(m)] <- FALSE
+          if (!any(m)) next
+          val_any <- if (!is.null(s$value)) s$value else if (!is.null(s$mean)) s$mean else s$setto
+          vals <- if (length(val_any) == 1L) rep(as.numeric(val_any), nrow(A_obs)) else as.numeric(val_any)
+          A_shift[[a]][m] <- vals[m]
+        }
+      }
     }
-  }
-  for (a in names(A_shift)) {
-    v  <- suppressWarnings(as.numeric(A_shift[[a]]))
-    vo <- A_obs[[a]]
-    bad <- !is.finite(v); if (any(bad)) v[bad] <- vo[bad]
-    A_shift[[a]] <- v
+    for (a in names(A_shift)) {
+      if (any(!is.finite(A_shift[[a]])))
+        stop(sprintf("policy_spec_fun returned non-finite value(s) for '%s' at t=%d", a, t),
+             call. = FALSE)
+    }
   }
 
   X_obs   <- cbind(X_hist, A_obs)

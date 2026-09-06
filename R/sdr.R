@@ -126,10 +126,15 @@
 #'   Predictions are made in two passes -- once with `exit_status = 1`
 #'   (death branch) and once with `exit_status = 0` (discharge branch) -- on
 #'   all at-risk subjects, not just those who exited. Default `FALSE`.
-#' @param pool_time Character. Basis used to encode time as a covariate in
-#'   pooled models. One of `"spline"` (natural spline, default), `"linear"`,
-#'   or `"factor"`. Only relevant when `pool_g_death = TRUE` or
-#'   `pool_q_exit = TRUE`.
+#' @param pool_time Character scalar or length-2 character vector. Basis used
+#'   to encode time as a covariate in pooled models. Valid values are
+#'   `"spline"` (natural spline, default), `"linear"`, and `"factor"`.
+#'   When a single value is supplied it applies to both pooled components.
+#'   When two values are supplied the first applies to `pool_g_death` and the
+#'   second to `pool_q_exit` -- for example,
+#'   `pool_time = c("spline", "factor")` fits the death-hazard pooled model
+#'   with a spline and the Q-exit pooled model with a dummy-coded time factor.
+#'   Only relevant when `pool_g_death = TRUE` or `pool_q_exit = TRUE`.
 #' @param verbose Logical. If `TRUE` (default), print per-fold and per-time
 #'   progress messages during estimation.
 #'

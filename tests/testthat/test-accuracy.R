@@ -7,17 +7,16 @@ skip_on_cran()
 
 # End-to-end accuracy tests against known Monte Carlo truths.
 #
-# Three clinically motivated DGPs:
+# Three synthetic DGPs with competing events (death / discharge):
 #
-#   1. Binary treatment: ICU care bundle (A ∈ {0,1}).
-#      Policy: mandate bundle for patients with elevated biomarker (L1 > 1).
-#      Returns 0L / 1L — no fractional treatment values.
+#   1. Binary treatment (A ∈ {0,1}).
+#      Policy: threshold rule — A → max(A, I(L1 > 1)).
 #
-#   2. Continuous treatment: vasopressor dose (A ≥ 0, mcg/kg/min).
-#      Policy: increase dose by 0.3 units, capped at 2.0.
+#   2. Continuous treatment (A ≥ 0).
+#      Policy: additive shift — A → min(A + 0.3, 2.0).
 #
-#   3. Two treatments: antibiotic decision (A1 ∈ {0,1}) + steroid dose (A2 ≥ 0).
-#      Policy: mandate antibiotics for L1 > 1; increase steroid dose by 0.2.
+#   3. Two treatments: binary A1 ∈ {0,1} and continuous A2 ≥ 0.
+#      Policy: threshold rule on A1; additive shift on A2.
 #
 # For each DGP, E[Y(d)] is obtained by simulating n = 50,000 subjects under
 # the policy (Monte Carlo error < 0.002 for all scenarios).
@@ -45,17 +44,12 @@ check_accuracy <- function(res, truth, label) {
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
-# DGP 1 — Binary treatment: ICU care bundle
+# DGP 1 — Binary treatment (A ∈ {0,1})
 # ══════════════════════════════════════════════════════════════════════════════
 #
-# Patients are ICU admissions.  A ∈ {0,1}: 1 = evidence-based care bundle
-# implemented.  L1 is a continuous biomarker (higher = more severe).  L2 is a
-# binary comorbidity flag.
-#
-# Natural propensity: bundle more likely for higher L1 and male sex.
-# Policy: mandate bundle for any patient with L1 > 1.0 (moderate–severe
-#   elevation).  Patients already receiving the bundle are unaffected.
-#   d(A, H) = max(A, I(L1 > 1))  →  always 0L or 1L.
+# L1: continuous covariate (higher = worse prognosis).
+# L2: binary covariate.
+# Policy: threshold rule — d(A, H) = max(A, I(L1 > 1)), always 0L or 1L.
 
 sim_bin <- function(n = 2000L, tmax = 5L, seed = 1L,
                     apply_policy = FALSE) {
@@ -246,20 +240,19 @@ test_that("qreg [binary A]: natural-course plug-in close to observed mean", {
     res$estimate, obs_mean_bin, diff_cal
   ))
   expect_true(is.finite(res$estimate))
-  expect_gt(res$se_naive, 0)
-  expect_lt(diff_cal, 10 * res$se_naive,
+  expect_gt(res$decomposition$se_naive, 0)
+  expect_lt(diff_cal, 10 * res$decomposition$se_naive,
             label = "qreg nat-course plug-in outside 3*se_naive of observed mean")
 })
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# DGP 2 — Continuous treatment: vasopressor dose
+# DGP 2 — Continuous treatment (A ≥ 0)
 # ══════════════════════════════════════════════════════════════════════════════
 #
-# Patients in septic shock.  A ≥ 0: norepinephrine dose (mcg/kg/min).
-# Natural dose is severity-driven (higher L1 → higher dose) with noise.
-# Policy: increase dose by 0.3 mcg/kg/min, capped at 2.0.
-# Additive shift of a continuous dose is the canonical LMTP use case.
+# L1: continuous covariate.
+# A ≥ 0: continuous treatment.
+# Policy: additive shift — d(A, H) = min(A + 0.3, 2.0).
 
 DOSE_SHIFT <- 0.3
 
@@ -269,7 +262,7 @@ sim_cont <- function(n = 2000L, tmax = 5L, seed = 1L, dose_shift = 0) {
 
   for (i in seq_len(n)) {
     age <- round(rnorm(1, 65, 10))
-    L1  <- rnorm(1, 0, 1)    # hemodynamic instability (higher = worse)
+    L1  <- rnorm(1, 0, 1)
     pat <- list()
 
     for (t in seq_len(tmax)) {
@@ -437,8 +430,8 @@ test_that("qreg [continuous A]: natural-course calibration and finite shifted es
     res_nat$estimate, obs_mean_cont, diff_cal
   ))
   expect_true(is.finite(res_nat$estimate))
-  expect_gt(res_nat$se_naive, 0)
-  expect_lt(diff_cal, 10 * res_nat$se_naive,
+  expect_gt(res_nat$decomposition$se_naive, 0)
+  expect_lt(diff_cal, 10 * res_nat$decomposition$se_naive,
             label = "qreg cont nat-course plug-in outside 3*se_naive of observed mean")
 
   res_shf <- qreg(
@@ -467,26 +460,26 @@ test_that("qreg [continuous A]: natural-course calibration and finite shifted es
 
   message(sprintf(
     "[accuracy] qreg [cont A] shifted: estimate=%.4f  se_naive=%.4f",
-    res_shf$estimate, res_shf$se_naive
+    res_shf$estimate, res_shf$decomposition$se_naive
   ))
   expect_true(is.finite(res_shf$estimate))
-  expect_gt(res_shf$se_naive, 0)
+  expect_gt(res_shf$decomposition$se_naive, 0)
   expect_true(res_shf$psi_shifted != res_shf$psi_natural,
               label = "qreg cont shifted estimate equals natural (policy had no effect)")
 })
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# DGP 3 — Two treatments: antibiotic (binary) + steroid dose (continuous)
+# DGP 3 — Two treatments: A1 binary + A2 continuous
 # ══════════════════════════════════════════════════════════════════════════════
 #
-# ICU sepsis patients with two independent treatment decisions:
-#   A1 ∈ {0,1}: antibiotic prescription (binary).
-#   A2 ≥ 0:     corticosteroid dose (mcg/kg/h, continuous).
+# L1: continuous covariate.
+# A1 ∈ {0,1}: binary treatment.
+# A2 ≥ 0:     continuous treatment.
 #
 # Policy:
-#   A1: mandate antibiotics for patients with L1 > 1.0 (severe sepsis).
-#   A2: increase steroid dose by 0.2 units, capped at 2.0.
+#   A1: set to 1 when L1 > 1.0.
+#   A2: additive shift +0.2, capped at 2.0.
 
 sim_two <- function(n = 2000L, tmax = 5L, seed = 1L, apply_policy = FALSE) {
   set.seed(seed)
@@ -495,16 +488,16 @@ sim_two <- function(n = 2000L, tmax = 5L, seed = 1L, apply_policy = FALSE) {
   for (i in seq_len(n)) {
     age <- round(rnorm(1, 65, 10))
     sex <- rbinom(1, 1, 0.5)
-    L1  <- rnorm(1, 0, 1)     # severity (infection + hemodynamics)
+    L1  <- rnorm(1, 0, 1)
     pat <- list()
 
     for (t in seq_len(tmax)) {
-      # A1: antibiotic
+      # A1: binary treatment
       p_A1   <- plogis(0.5 * L1 + 0.2 * sex - 0.3)
       A1_nat <- rbinom(1, 1, p_A1)
       A1     <- if (apply_policy && L1 > 1.0) 1L else A1_nat
 
-      # A2: steroid dose (independent of antibiotic decision)
+      # A2: continuous treatment (independent of A1)
       A2_nat <- pmax(0, rnorm(1, 0.4 + 0.3 * L1, 0.3))
       A2     <- if (apply_policy) pmin(A2_nat + 0.2, 2.0) else A2_nat
 
@@ -542,7 +535,7 @@ sim_two <- function(n = 2000L, tmax = 5L, seed = 1L, apply_policy = FALSE) {
   do.call(rbind, rows)
 }
 
-# Policy: A1 → mandate for L1 > 1 (binary output); A2 → +0.2, capped at 2.0
+# Policy: A1 → set to 1 when L1 > 1; A2 → +0.2, capped at 2.0
 policy_two <- function(D_block, t, a_names) {
   out <- D_block[, ..a_names, drop = FALSE]
   out[[a_names[1]]] <- pmax(D_block[[a_names[1]]],
