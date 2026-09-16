@@ -188,10 +188,15 @@ Predictions are made in two passes -- once with \code{exit_status = 1}
 (death branch) and once with \code{exit_status = 0} (discharge branch) -- on
 all at-risk subjects, not just those who exited. Default \code{FALSE}.}
 
-\item{pool_time}{Character. Basis used to encode time as a covariate in
-pooled models. One of \code{"spline"} (natural spline, default), \code{"linear"},
-or \code{"factor"}. Only relevant when \code{pool_g_death = TRUE} or
-\code{pool_q_exit = TRUE}.}
+\item{pool_time}{Character scalar or length-2 character vector. Basis used
+to encode time as a covariate in pooled models. Valid values are
+\code{"spline"} (natural spline, default), \code{"linear"}, and \code{"factor"}.
+When a single value is supplied it applies to both pooled components.
+When two values are supplied the first applies to \code{pool_g_death} and the
+second to \code{pool_q_exit} -- for example,
+\code{pool_time = c("spline", "factor")} fits the death-hazard pooled model
+with a spline and the Q-exit pooled model with a dummy-coded time factor.
+Only relevant when \code{pool_g_death = TRUE} or \code{pool_q_exit = TRUE}.}
 
 \item{verbose}{Logical. If \code{TRUE} (default), print per-fold and per-time
 progress messages during estimation.}

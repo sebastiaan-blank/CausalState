@@ -20,6 +20,8 @@ qreg(
   sl_remain = NULL,
   sl_death = NULL,
   sl_recursive = NULL,
+  sl_rec_early = NULL,
+  rec_transition = NULL,
   sl_y = NULL,
   outcome_family = c("binomial", "gaussian"),
   y_bounds = NULL,
@@ -86,6 +88,16 @@ treatment values under the MTP (one per treatment variable in \code{a_names}).}
 
 \item{sl_recursive}{SuperLearner library for the recursive Q-remain model.
 Required.}
+
+\item{sl_rec_early}{Optional SuperLearner library for the recursive Q-remain
+model at early time points (\code{tt <= rec_transition}). When supplied, this
+library is used for those early time steps and \code{sl_recursive} is used for
+the later ones -- letting the user tune the recursion separately for
+early vs. late time points. Requires \code{rec_transition}.}
+
+\item{rec_transition}{Integer. Time-point threshold: \code{sl_rec_early} is used
+for \code{tt <= rec_transition}, \code{sl_recursive} for later time points. Required
+when \code{sl_rec_early} is provided.}
 
 \item{sl_y}{SuperLearner library for the Q-exit (outcome-at-exit) model.
 Required.}
@@ -160,10 +172,15 @@ Predictions are made in two passes -- once with \code{exit_status = 1}
 (death branch) and once with \code{exit_status = 0} (discharge branch) -- on
 all at-risk subjects, not just those who exited. Default \code{FALSE}.}
 
-\item{pool_time}{Character. Basis used to encode time as a covariate in
-pooled models. One of \code{"spline"} (natural spline, default), \code{"linear"},
-or \code{"factor"}. Only relevant when \code{pool_g_death = TRUE} or
-\code{pool_q_exit = TRUE}.}
+\item{pool_time}{Character scalar or length-2 character vector. Basis used
+to encode time as a covariate in pooled models. Valid values are
+\code{"spline"} (natural spline, default), \code{"linear"}, and \code{"factor"}.
+When a single value is supplied it applies to both pooled components.
+When two values are supplied the first applies to \code{pool_g_death} and the
+second to \code{pool_q_exit} -- for example,
+\code{pool_time = c("spline", "factor")} fits the death-hazard pooled model
+with a spline and the Q-exit pooled model with a dummy-coded time factor.
+Only relevant when \code{pool_g_death = TRUE} or \code{pool_q_exit = TRUE}.}
 
 \item{weight_object}{Optional. Output from \code{\link[=density_ratio]{density_ratio()}}.  If supplied,
 an EIF-based SE is computed in addition to the naive SE.  The fold

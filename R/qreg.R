@@ -228,6 +228,8 @@ qreg <- function(
     sl_remain       = NULL,
     sl_death        = NULL,
     sl_recursive    = NULL,
+    sl_rec_early    = NULL,
+    rec_transition  = NULL,
     sl_y            = NULL,
     outcome_family  = c("binomial", "gaussian"),
     y_bounds        = NULL,
@@ -270,10 +272,12 @@ qreg <- function(
              in_state_col = in_state, tmin = 1, tmax = tmax,
              verbose = verbose)
 
-  if (is.null(sl_remain)) stop("`sl_remain` must be provided (SL library for g_remain).", call. = FALSE)
-  if (is.null(sl_death))  stop("`sl_death` must be provided (SL library for g_death_exit).", call. = FALSE)
+  if (is.null(sl_remain))    stop("`sl_remain` must be provided (SL library for g_remain).", call. = FALSE)
+  if (is.null(sl_death))     stop("`sl_death` must be provided (SL library for g_death_exit).", call. = FALSE)
   if (is.null(sl_y))         stop("`sl_y` must be provided.", call. = FALSE)
   if (is.null(sl_recursive)) stop("`sl_recursive` must be provided.", call. = FALSE)
+  if (!is.null(sl_rec_early) && is.null(rec_transition))
+    stop("`sl_rec_early` requires `rec_transition` to be specified.", call. = FALSE)
 
   set.seed(seed)
 
@@ -596,6 +600,8 @@ qreg <- function(
         sl_death       = sl_death,
         sl_y           = sl_y,
         sl_recursive   = sl_recursive,
+        sl_rec_early   = sl_rec_early,
+        rec_transition = rec_transition,
         inner_v        = inner_v,
         seed           = seed,
         f_idx          = f_idx,
