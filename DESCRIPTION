@@ -48,7 +48,8 @@ Suggests:
     dbarts,
     mgcv,
     earth,
-    nnls
+    nnls,
+    nloptr
 Config/testthat/edition: 3
 VignetteBuilder: knitr
 Roxygen: list(markdown = TRUE, roclets = c("collate", "rd"))

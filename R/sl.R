@@ -133,45 +133,66 @@ method.WB_dr <- function(dr_floor = 1e-10) {
           coef   = setNames(1, libraryNames)
         ))
       }
+      if (!requireNamespace("nloptr", quietly = TRUE))
+        stop("[method.WB_dr] package 'nloptr' is required for the WB metalearner -- install it with install.packages('nloptr')")
+
       Z[] <- pmax(Z, dr_floor)
       s2  <- 1 - 2 * as.numeric(Y)
+
       cvRisk <- vapply(seq_len(K), function(k) {
         mean(s2 * log(Z[, k]))
       }, numeric(1L))
       names(cvRisk) <- libraryNames
-      loss_fn <- function(alpha) {
-        b       <- exp(alpha - max(alpha))
-        b       <- b / sum(b)
-        psi_bar <- pmax(as.vector(Z %*% b), dr_floor)
-        sum(s2 * log(psi_bar))
+
+      loss_and_grad <- function(b) {
+        r_mix <- pmax(as.vector(Z %*% b), dr_floor)
+        list(
+          objective = mean(s2 * log(r_mix)),
+          gradient  = colMeans(s2 * (Z / r_mix))
+        )
       }
+
       opt <- tryCatch(
-        stats::optim(rep(0, K), loss_fn, method = "BFGS",
-                     control = list(maxit = 500L, reltol = 1e-8)),
+        nloptr::nloptr(
+          x0        = rep(1 / K, K),
+          eval_f    = loss_and_grad,
+          lb        = rep(0, K),
+          ub        = rep(1, K),
+          eval_g_eq = function(b) list(
+            constraints = sum(b) - 1,
+            jacobian    = rep(1, K)
+          ),
+          opts = list(
+            algorithm = "NLOPT_LD_SLSQP",
+            xtol_rel  = 1e-8,
+            maxeval   = 1000L
+          )
+        ),
         error = function(e) {
-          warning(sprintf("[method.WB_dr] BFGS error: %s -- using equal weights",
+          warning(sprintf("[method.WB_dr] nloptr error: %s -- using equal weights",
                           conditionMessage(e)))
           NULL
         }
       )
-      if (is.null(opt) || opt$convergence > 1L) {
-        if (!is.null(opt)) {
-          warning(sprintf(
-            "[method.WB_dr] BFGS did not converge (code %d) -- using equal weights",
-            opt$convergence))
-        }
+
+      if (is.null(opt) || opt$status < 0L) {
+        if (!is.null(opt))
+          warning(sprintf("[method.WB_dr] SLSQP failed (status %d: %s) -- using equal weights",
+                          opt$status, opt$message))
         beta <- rep(1 / K, K)
       } else {
-        a    <- opt$par
-        beta <- exp(a - max(a))
+        if (opt$status == 5L)
+          warning(sprintf("[method.WB_dr] SLSQP hit maxeval (1000) -- solution may not be fully converged"))
+        beta <- pmax(opt$solution, 0)
         beta <- beta / sum(beta)
       }
+
       names(beta) <- libraryNames
       list(cvRisk = cvRisk, coef = beta)
     },
     computePred = function(predY, coef, control, ...) {
-      predY    <- as.matrix(predY)
-      predY[]  <- pmax(predY, dr_floor)
+      predY   <- as.matrix(predY)
+      predY[] <- pmax(predY, dr_floor)
       as.vector(predY %*% coef)
     }
   )

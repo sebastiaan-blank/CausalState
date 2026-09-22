@@ -107,23 +107,19 @@ density ratios (not probabilities) and there is no probability-space
 analogue to clip against.
 
 Clipping in the WB pathway is instead handled by `dr_floor` inside
-`method.WB_dr()`:
-
-```{r dr-floor}
-# dr_floor floors every base-learner density-ratio prediction before
-# the log is taken.  Prevents log(0) during BFGS and in computePred.
-method.WB_dr(dr_floor = 1e-10)
-```
-
-Pass this to `density_ratio()` via the `method_g` argument:
+`method.WB_dr()`.  The `dr_floor` value is set when the metalearner is
+constructed; to use a non-default floor, pass a custom `method.WB_dr()` call
+via the `method` argument of `density_ratio()`:
 
 ```{r wb-call}
 wr <- density_ratio(
   ...,
-  dr_sl    = TRUE,
-  method_g = method.WB_dr(dr_floor = 1e-10)
+  dr_sl  = TRUE
 )
 ```
+
+The default `dr_floor = 1e-10` is used automatically.  There is no separate
+`method_g` argument; `dr_sl = TRUE` activates the WB metalearner internally.
 
 ---
 
@@ -212,7 +208,6 @@ wr_wb <- density_ratio(
   tv_names        = c("L1", "L2"),
   sl_g            = sl_g_dr,           # DR-returning wrappers only
   dr_sl           = TRUE,
-  method_g        = method.WB_dr(dr_floor = 1e-10),
   k               = 5L,
   inner_v         = 5L,
   v               = 5L,
