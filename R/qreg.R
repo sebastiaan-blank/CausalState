@@ -257,7 +257,11 @@ qreg <- function(
 
   pool_time_basis <- make_pool_time_basis_list(pool_time, tmax, pool_g_death, pool_q_exit)
 
-  if (!isTRUE(parallel)) sl_workers <- NULL
+  if (!isTRUE(parallel)) {
+    fold_workers <- NULL
+    reg_workers  <- NULL
+    sl_workers   <- NULL
+  }
 
   keep_cols <- unique(c(
     id, time, a_names, y, alive, in_state,

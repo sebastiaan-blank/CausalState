@@ -170,13 +170,14 @@ dr_from_prob <- function(p_mat, beta, bounds, denom_cap) {
 #'   the WB pathway are planned for version 1.0.
 #' @param drop_small_cluster_splits Logical. Drop time points where a fold
 #'   has too few clusters to fit a model. Default `TRUE`.
-#' @param parallel_t Logical. Parallelise across time points. Default `FALSE`.
+#' @param parallel Logical. Parallelise across time points via
+#'   [parallel::mclapply()] (fork-based; Linux/Mac only). Default `FALSE`.
 #' @param t_workers Integer. Number of workers for time-point parallelism.
-#'   `NULL` auto-detects.
+#'   `NULL` disables (sequential). Default `NULL`.
 #' @param fold_workers Integer. Workers for parallelising across outer
 #'   cross-fitting folds within each time point via [parallel::mclapply()]
 #'   (fork-based; Linux/Mac only). `NULL` disables. When combined with
-#'   `parallel_t`, the nested `mclapply` scheme limits use of multi-threaded
+#'   `parallel`, the nested `mclapply` scheme limits use of multi-threaded
 #'   or GPU-based learners. Default `NULL`.
 #' @param sl_workers Integer. Workers for parallel learner evaluation within
 #'   each SuperLearner call via [SuperLearner::mcSuperLearner()] (fork-based;
@@ -186,11 +187,13 @@ dr_from_prob <- function(p_mat, beta, bounds, denom_cap) {
 #'   messages during estimation.
 #'
 #' @section Parallelism:
-#'   `t_workers`, `fold_workers`, and `sl_workers` can be used independently
-#'   or together. Using a single level is robust with all learners. Combining
-#'   two or more creates nested `mclapply` calls; in that case multi-threaded
-#'   or GPU-based learners (e.g. xgboost with CUDA, OpenMP-based methods) may
-#'   crash in the child processes and should be avoided or limited to one thread.
+#'   `parallel = FALSE` disables all parallelism (`t_workers`, `fold_workers`,
+#'   and `sl_workers` are all ignored). When `parallel = TRUE`, the three
+#'   worker arguments control independent levels of nested parallelism.
+#'   Using a single level is robust with all learners; combining two or more
+#'   creates nested `mclapply` calls and multi-threaded or GPU-based learners
+#'   (e.g. xgboost with CUDA, OpenMP-based methods) may crash in child
+#'   processes and should be limited to one thread.
 #'
 #' @return A list with components:
 #'   \describe{
@@ -366,7 +369,7 @@ density_ratio <- function(
     bounds = 1e-5,
     dr_sl = FALSE,
     drop_small_cluster_splits = TRUE,
-    parallel_t = FALSE,
+    parallel = FALSE,
     t_workers = NULL,
     fold_workers = NULL,
     sl_workers = NULL,
@@ -374,6 +377,11 @@ density_ratio <- function(
 ) {
 
   `%||%` <- function(x, y) if (!is.null(x)) x else y
+  if (!isTRUE(parallel)) {
+    t_workers    <- NULL
+    fold_workers <- NULL
+    sl_workers   <- NULL
+  }
 
   keep_cols <- unique(c(
     id, time, a_names,
@@ -576,12 +584,7 @@ density_ratio <- function(
       list(idx_valid = idx_valid, r = r, sl_tab = sl_tab, diag_tab = diag_tab)
     }
 
-    fold_res <- if (!is.null(fold_workers)) {
-      parallel::mclapply(folds_here, fit_one_fold,
-                         mc.cores = as.integer(fold_workers), mc.set.seed = TRUE)
-    } else {
-      lapply(folds_here, fit_one_fold)
-    }
+    fold_res <- par_lapply(folds_here, fit_one_fold, workers = fold_workers, parallel = parallel)
 
     for (fr in fold_res) {
       if (inherits(fr, "try-error"))
@@ -617,26 +620,7 @@ density_ratio <- function(
     ))
   }
 
-  if (isTRUE(parallel_t)) {
-    if (is.null(t_workers)) {
-      t_workers <- min(as.integer(getOption("mc.cores", 1L)), as.integer(tmax))
-    }
-
-    if (is.na(t_workers) || t_workers < 1L) {
-      t_workers <- 1L
-    }
-
-    t_workers <- min(as.integer(t_workers), as.integer(tmax))
-
-    res_by_t <- parallel::mclapply(
-      X           = seq_len(tmax),
-      FUN         = fit_one_t,
-      mc.cores    = t_workers,
-      mc.set.seed = TRUE
-    )
-  } else {
-    res_by_t <- lapply(seq_len(tmax), fit_one_t)
-  }
+  res_by_t <- par_lapply(seq_len(tmax), fit_one_t, workers = t_workers, parallel = parallel)
 
   sl_chunks     <- list()
   diag_chunks   <- list()
