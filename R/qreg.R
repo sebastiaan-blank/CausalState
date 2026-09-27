@@ -33,28 +33,28 @@ make_subject_folds_qreg <- function(ids, v, cluster_by_id, seed) {
 #' Carlo variability of the plug-in.
 #'
 #' @inheritParams sdr
-#' @param weight_object Optional. Output from [density_ratio()].  If supplied,
-#'   an EIF-based SE is computed in addition to the naive SE.  The fold
-#'   structure is inherited from \code{weight_object} when provided; otherwise
-#'   independent folds are created using \code{v} and \code{seed}.
-#' @param v Integer. Number of cross-fitting folds used when
-#'   \code{weight_object = NULL}. Default \code{5L}.
-#' @param trim Quantile for capping density ratios before EIF-based SE
-#'   computation (only used when \code{weight_object} is supplied).
-#'   Default \code{0.99}.
+#' @param v Integer. Number of cross-fitting folds. Default \code{5L}.
+#' @param n_boot Integer. Number of bootstrap replicates for SE estimation.
+#'   \code{0L} (default) returns only the naive SE (\eqn{s(\hat Q_1)/\sqrt{n}}).
+#'   When \code{> 0}, subjects (or clusters when \code{cluster} is set) are
+#'   resampled with replacement, the full Q-recursion is refit for each
+#'   replicate, and \code{se = sd(psi_boot)}.  The bootstrap distribution is
+#'   stored in \code{decomposition$boot_psi_dist}.
 #'
 #' @return A list with:
 #'   \describe{
-#'     \item{\code{estimate}}{Point estimate \eqn{\hat\Psi}.}
-#'     \item{\code{se_naive}}{Naive SE (always present).}
-#'     \item{\code{se_eif}}{EIF-based SE (\code{NULL} if no \code{weight_object}).}
-#'     \item{\code{se}}{Best available SE: \code{se_eif} if available, else \code{se_naive}.}
+#'     \item{\code{psi}}{Point estimate \eqn{\hat\Psi}.}
+#'     \item{\code{se}}{Best available SE: bootstrap SE if \code{n_boot > 0},
+#'       otherwise naive SE.}
 #'     \item{\code{ci}}{95% Wald CI using \code{se}.}
-#'     \item{\code{psi_natural}}{Plug-in estimate under the natural course.}
-#'     \item{\code{psi_shifted}}{Plug-in estimate under the MTP (= \code{estimate}).}
+#'     \item{\code{Y_obs}}{Observed mean of \code{y} (natural-course reference).}
+#'     \item{\code{decomposition$se_naive}}{Naive SE \eqn{s(\hat Q_1)/\sqrt{n}}.}
+#'     \item{\code{decomposition$se_boot}}{Bootstrap SE (\code{NULL} if
+#'       \code{n_boot = 0}).}
+#'     \item{\code{decomposition$boot_psi_dist}}{Vector of per-replicate psi
+#'       values (\code{NULL} if \code{n_boot = 0}).}
 #'     \item{\code{sl_summary}}{`data.table` of SuperLearner learner weights per
 #'       (fold, time-point, model component). Same structure as in [sdr()].}
-#'     \item{\code{fold_diag}}{`data.table` of per-fold, per-time-point diagnostics.}
 #'     \item{\code{diagnostics$branch_cal}}{Per-fold, per-time branch calibration
 #'       table: empirical mean targets vs. predictions for `g_remain`, `g_death`,
 #'       and `Q_remain`. Use this to check whether the Q-models are
@@ -247,9 +247,8 @@ qreg <- function(
     pool_g_death    = FALSE,
     pool_q_exit     = FALSE,
     pool_time       = "spline",
-    weight_object   = NULL,
     v               = 5L,
-    trim            = 0.99,
+    n_boot          = 0L,
     verbose         = TRUE
 ) {
   stopifnot(requireNamespace("data.table", quietly = TRUE))
@@ -322,20 +321,9 @@ qreg <- function(
     cluster_by_id <- ids
   }
 
-  if (!is.null(weight_object)) {
-    weights_dt <- extract_weights_dt(weight_object)
-    w_tmax     <- max(as.integer(weights_dt[[time]]), na.rm = TRUE)
-    if (w_tmax < tmax) stop(sprintf(
-      "weight_object covers up to t=%d but tmax=%d.", w_tmax, tmax), call. = FALSE)
-    fold_info  <- get_folds_from_weights(weights_dt, id, ids,
-                                         cluster_by_id = cluster_by_id)
-    folds      <- fold_info$folds
-  } else {
-    weights_dt <- NULL
-    folds      <- make_subject_folds_qreg(ids, v = v,
-                                           cluster_by_id = cluster_by_id,
-                                           seed = seed)
-  }
+  folds <- make_subject_folds_qreg(ids, v = v,
+                                    cluster_by_id = cluster_by_id,
+                                    seed = seed)
 
   all_names  <- names(D)
   cols_by_t  <- lapply(seq_len(tmax), function(tt) {
@@ -362,7 +350,8 @@ qreg <- function(
 
   sl_chunks <- list()
 
-  fold_worker <- function(f_idx) {
+  fold_worker <- function(f_idx, folds, Y_init, row_index, cluster_by_id,
+                          verbose_fold = verbose) {
 
     is_binom <- scale_info$is_binom
 
@@ -500,7 +489,7 @@ qreg <- function(
 
     for (tt in rev(seq_len(tmax))) {
 
-      if (verbose) message(sprintf("[qreg][fold %d][t=%d][pid=%d] %s",
+      if (verbose_fold) message(sprintf("[qreg][fold %d][t=%d][pid=%d] %s",
                                    f_idx, tt, Sys.getpid(), format(Sys.time(), "%H:%M:%S")))
 
       sl_dex <- sl_rem <- sl_qexit <- sl_qrem <- NULL
@@ -865,7 +854,7 @@ qreg <- function(
 
   res_by_fold <- par_lapply(
     X        = seq_along(folds),
-    FUN      = fold_worker,
+    FUN      = function(f_idx) fold_worker(f_idx, folds, Y_init, row_index, cluster_by_id),
     workers  = fold_workers,
     parallel = parallel,
     seed     = TRUE
@@ -904,35 +893,55 @@ qreg <- function(
   if (n_eff < 2L) stop("qreg: fewer than 2 finite Q predictions at t=1.", call. = FALSE)
   se_naive_scaled <- stats::sd(q1_vec[ok_q1]) / sqrt(n_eff)
 
-  se_eif_scaled <- NULL
-  if (!is.null(weights_dt)) {
-    density_ratios <- build_density_ratios(
-      weights_dt, id, time, ids, tmax,
-      row_index = row_index, trim = trim
-    )
-    eif_vec    <- eif(density_ratios, pred_shf_all, pred_nat_all, 1L, tmax)
-    ic_scaled  <- as.numeric(eif_vec - psi_scaled)
-    ok_ic      <- is.finite(ic_scaled)
+  se_scaled      <- se_naive_scaled
+  se_boot_scaled <- NULL
+  boot_psi_scaled <- NULL
 
-    if (is.null(cluster_by_id) || identical(cluster_by_id, ids)) {
-      n_ic <- sum(ok_ic)
-      if (n_ic >= 2L)
-        se_eif_scaled <- stats::sd(ic_scaled[ok_ic]) / sqrt(n_ic)
-    } else {
-      cl  <- cluster_by_id
-      ok  <- ok_ic & !is.na(cl)
-      dt  <- data.table::data.table(cl = cl[ok], ic = ic_scaled[ok])
-      S   <- dt[, .(S = sum(ic)), by = cl]
-      G   <- nrow(S)
-      if (G >= 2L) {
-        Sbar          <- mean(S$S)
-        n_ic          <- nrow(dt)
-        se_eif_scaled <- sqrt((G / (G - 1)) * sum((S$S - Sbar)^2) / n_ic^2)
+  if (n_boot > 0L) {
+    unique_cl        <- unique(cluster_by_id)
+    n_cl             <- length(unique_cl)
+    use_cluster_boot <- n_cl < N
+
+    boot_psi_scaled <- numeric(n_boot)
+    for (b in seq_len(n_boot)) {
+      if (use_cluster_boot) {
+        boot_cl <- sample(unique_cl, n_cl, replace = TRUE)
+        bidx    <- unlist(lapply(boot_cl, function(cl) which(cluster_by_id == cl)),
+                          use.names = FALSE)
+      } else {
+        bidx <- sample(N, N, replace = TRUE)
       }
+      N_b             <- length(bidx)
+      Y_init_b        <- Y_init[bidx]
+      row_index_b     <- row_index[bidx, , drop = FALSE]
+      cluster_by_id_b <- cluster_by_id[bidx]
+      folds_b         <- make_subject_folds_qreg(seq_len(N_b), v = v,
+                                                  cluster_by_id = cluster_by_id_b,
+                                                  seed = seed + b)
+      res_b <- par_lapply(
+        X        = seq_along(folds_b),
+        FUN      = function(f_idx) fold_worker(f_idx, folds_b, Y_init_b,
+                                               row_index_b, cluster_by_id_b,
+                                               verbose_fold = FALSE),
+        workers  = fold_workers,
+        parallel = parallel,
+        seed     = TRUE
+      )
+      failed_b <- sapply(res_b, function(x) inherits(x, "error") || is.character(x))
+      if (any(failed_b)) {
+        warning(sprintf("qreg bootstrap rep %d: fold worker failed, skipping", b))
+        boot_psi_scaled[b] <- NA_real_
+        next
+      }
+      pred_shf_b <- matrix(NA_real_, nrow = N_b, ncol = tmax + 1L)
+      pred_shf_b[, tmax + 1L] <- Y_init_b
+      for (fr in res_b) pred_shf_b[fr$valid_ids, ] <- fr$shf_valid
+      boot_psi_scaled[b] <- mean(pred_shf_b[, 1L], na.rm = TRUE)
     }
+    ok_b           <- is.finite(boot_psi_scaled)
+    se_boot_scaled <- if (sum(ok_b) >= 2L) stats::sd(boot_psi_scaled[ok_b]) else NA_real_
+    se_scaled      <- se_boot_scaled
   }
-
-  se_scaled <- if (!is.null(se_eif_scaled)) se_eif_scaled else se_naive_scaled
 
   Y_obs_scaled <- mean(Y_init, na.rm = TRUE)
 
@@ -955,7 +964,7 @@ qreg <- function(
     psi_natural <- scale_info$from_unit(psi_plugin_nat_scaled)
     psi_shifted <- scale_info$from_unit(psi_plugin_shf_scaled)
     se_naive    <- scale_info$y_rng * se_naive_scaled
-    se_eif      <- if (!is.null(se_eif_scaled)) scale_info$y_rng * se_eif_scaled else NULL
+    se_boot     <- if (!is.null(se_boot_scaled)) scale_info$y_rng * se_boot_scaled else NULL
     se          <- scale_info$y_rng * se_scaled
     Y_obs       <- scale_info$from_unit(Y_obs_scaled)
     diag_table$mean_Q_nat <- scale_info$from_unit(diag_table$mean_Q_nat)
@@ -966,20 +975,16 @@ qreg <- function(
     psi_natural <- psi_plugin_nat_scaled
     psi_shifted <- psi_plugin_shf_scaled
     se_naive    <- se_naive_scaled
-    se_eif      <- se_eif_scaled
+    se_boot     <- se_boot_scaled
     se          <- se_scaled
     Y_obs       <- Y_obs_scaled
   }
-
-  ic_df <- if (!is.null(weights_dt) && exists("ic_scaled"))
-    data.table::data.table(id = ids, ic = ic_scaled) else NULL
 
   out <- list(
     psi   = psi,
     se    = se,
     ci    = c(psi - 1.96 * se, psi + 1.96 * se),
     Y_obs = Y_obs,
-    ic_df = ic_df,
 
     predictions = list(
       natural = pred_nat_all,
@@ -995,10 +1000,13 @@ qreg <- function(
     ),
 
     decomposition = list(
-      psi_plugin_nat = psi_natural,
-      psi_plugin_shf = psi_shifted,
-      se_naive       = se_naive,
-      se_eif         = se_eif
+      psi_plugin_nat  = psi_natural,
+      psi_plugin_shf  = psi_shifted,
+      se_naive        = se_naive,
+      se_boot         = se_boot,
+      boot_psi_dist   = if (!is.null(boot_psi_scaled)) {
+        if (scale_info$bounded) scale_info$from_unit(boot_psi_scaled) else boot_psi_scaled
+      } else NULL
     ),
 
     settings = list(

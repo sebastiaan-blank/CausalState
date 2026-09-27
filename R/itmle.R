@@ -868,7 +868,7 @@ itmle <- function(
     outcome_family = c("binomial", "gaussian"),
     y_bounds = NULL,
     bounds = 1e-5,
-    trim = 0.99,
+    trim = 0.999,
     absorb = list(),
     policy_spec_fun = function(D_block, t, a_names) NULL,
     k = 2,
