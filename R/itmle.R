@@ -244,7 +244,8 @@ itmle_target_fit <- function(
                 validRows = sl_validRows
               )
             )
-          )
+          ),
+          use_lecuyer = use_mc_tgt
         ),
         error = function(e) {
           message(sprintf(
