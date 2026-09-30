@@ -36,11 +36,16 @@ make_validRows_cluster_gauss <- function(cluster, v) {
   lapply(seq_len(v), function(fi) which(g %in% fold_groups[[fi]]))
 }
 
-with_seed <- function(seed, expr) {
-  old <- if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) get(".Random.seed", envir = .GlobalEnv) else NULL
+with_seed <- function(seed, expr, use_lecuyer = FALSE) {
+  old_seed <- if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) get(".Random.seed", envir = .GlobalEnv) else NULL
   on.exit({
-    if (!is.null(old)) assign(".Random.seed", old, envir = .GlobalEnv)
+    if (!is.null(old_seed)) assign(".Random.seed", old_seed, envir = .GlobalEnv)
   }, add = TRUE)
+  if (use_lecuyer) {
+    old_kind <- RNGkind()
+    on.exit(do.call(RNGkind, as.list(old_kind)), add = TRUE)
+    RNGkind("L'Ecuyer-CMRG")
+  }
   set.seed(as.integer(seed))
   force(expr)
 }
@@ -355,7 +360,8 @@ sl_block_fit <- function(
       control    = SuperLearner::SuperLearner.control(saveFitLibrary = TRUE),
       id         = if (!is.null(cluster_inner)) cluster_inner else seq_len(length(Y_use)),
       verbose    = FALSE
-    )
+    ),
+    use_lecuyer = use_mc
   )
 
   sl_tab <- if (!is.null(fit_sl$coef)) {
