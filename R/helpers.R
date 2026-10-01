@@ -252,7 +252,7 @@ contrast <- function(fit1, fit0 = NULL, df = NULL, id_col = NULL, cluster = NULL
       stop(sprintf("contrast: id_col '%s' not found in df.", id_col), call. = FALSE)
     if (!cluster %in% names(df))
       stop(sprintf("contrast: cluster column '%s' not found in df.", cluster), call. = FALSE)
-    cl_tbl <- unique(df[, c(id_col, cluster), drop = FALSE])
+    cl_tbl <- unique(as.data.frame(df)[, c(id_col, cluster), drop = FALSE])
     cl_map <- setNames(cl_tbl[[cluster]], as.character(cl_tbl[[id_col]]))
     cl     <- cl_map[as.character(merged$id)]
   }
