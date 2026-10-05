@@ -136,7 +136,7 @@ wr_bin <- density_ratio(
   seed            = 1L,
   id              = "id",
   time            = "time",
-  parallel_t      = FALSE,
+  parallel        = FALSE,
   policy_spec_fun = policy_bin
 )
 
@@ -234,12 +234,12 @@ test_that("qreg [binary A]: natural-course plug-in close to observed mean", {
     policy_spec_fun = policy_nat
   )
 
-  diff_cal <- abs(res$estimate - obs_mean_bin)
+  diff_cal <- abs(res$psi - obs_mean_bin)
   message(sprintf(
     "[accuracy] qreg [binary A] nat: plug-in=%.4f  obs_mean=%.4f  diff=%.4f",
-    res$estimate, obs_mean_bin, diff_cal
+    res$psi, obs_mean_bin, diff_cal
   ))
-  expect_true(is.finite(res$estimate))
+  expect_true(is.finite(res$psi))
   expect_gt(res$decomposition$se_naive, 0)
   expect_lt(diff_cal, 10 * res$decomposition$se_naive,
             label = "qreg nat-course plug-in outside 3*se_naive of observed mean")
@@ -329,7 +329,7 @@ wr_cont <- density_ratio(
   seed            = 1L,
   id              = "id",
   time            = "time",
-  parallel_t      = FALSE,
+  parallel        = FALSE,
   policy_spec_fun = policy_cont
 )
 
@@ -424,12 +424,12 @@ test_that("qreg [continuous A]: natural-course calibration and finite shifted es
     policy_spec_fun = policy_nat
   )
 
-  diff_cal <- abs(res_nat$estimate - obs_mean_cont)
+  diff_cal <- abs(res_nat$psi - obs_mean_cont)
   message(sprintf(
     "[accuracy] qreg [cont A] nat: plug-in=%.4f  obs_mean=%.4f  diff=%.4f",
-    res_nat$estimate, obs_mean_cont, diff_cal
+    res_nat$psi, obs_mean_cont, diff_cal
   ))
-  expect_true(is.finite(res_nat$estimate))
+  expect_true(is.finite(res_nat$psi))
   expect_gt(res_nat$decomposition$se_naive, 0)
   expect_lt(diff_cal, 10 * res_nat$decomposition$se_naive,
             label = "qreg cont nat-course plug-in outside 3*se_naive of observed mean")
@@ -460,11 +460,11 @@ test_that("qreg [continuous A]: natural-course calibration and finite shifted es
 
   message(sprintf(
     "[accuracy] qreg [cont A] shifted: estimate=%.4f  se_naive=%.4f",
-    res_shf$estimate, res_shf$decomposition$se_naive
+    res_shf$psi, res_shf$decomposition$se_naive
   ))
-  expect_true(is.finite(res_shf$estimate))
+  expect_true(is.finite(res_shf$psi))
   expect_gt(res_shf$decomposition$se_naive, 0)
-  expect_true(res_shf$psi_shifted != res_shf$psi_natural,
+  expect_true(res_shf$decomposition$psi_plugin_shf != res_shf$decomposition$psi_plugin_nat,
               label = "qreg cont shifted estimate equals natural (policy had no effect)")
 })
 
@@ -565,7 +565,7 @@ wr_two <- density_ratio(
   seed            = 1L,
   id              = "id",
   time            = "time",
-  parallel_t      = FALSE,
+  parallel        = FALSE,
   policy_spec_fun = policy_two
 )
 

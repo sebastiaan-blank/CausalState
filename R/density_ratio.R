@@ -436,6 +436,7 @@ density_ratio <- function(
     if (is.null(stk)) return(NULL)
 
     n_nat    <- nrow(stk$X_obs)
+    rows_idx <- stk$rows_idx
     A_cols   <- intersect(a_names, names(stk$X_obs))
     A_shft_t <- stk$X[seq_len(n_nat) + n_nat, A_cols, drop = FALSE]
     no_shift <- all(stk$X_obs[, A_cols, drop = FALSE] == A_shft_t, na.rm = TRUE)
@@ -480,7 +481,7 @@ density_ratio <- function(
     if (no_shift) {
       message(sprintf("t=%d: no shift -- ratios set to 1 (n=%d)", t, n_nat))
       return(list(
-        idx    = stk$rows_idx,
+        idx    = rows_idx,
         r_t    = rep(1, n_nat),
         sl     = NULL,
         diag   = NULL,
@@ -581,6 +582,7 @@ density_ratio <- function(
       pred_val <- as.numeric(sl_predict(fit, newdata = newdata_obs))
       r <- if (isTRUE(dr_sl)) pred_val else dr_from_prob(pred_val, 1, bounds, 0.999)
 
+      rm(sl_res, fit); gc(FALSE)
       list(idx_valid = idx_valid, r = r, sl_tab = sl_tab, diag_tab = diag_tab)
     }
 
@@ -595,6 +597,7 @@ density_ratio <- function(
       if (!is.null(fr$sl_tab))   sl_rows[[length(sl_rows) + 1L]]           <- fr$sl_tab
       if (!is.null(fr$diag_tab)) diag_rows[[length(diag_rows) + 1L]]       <- fr$diag_tab
     }
+    rm(stk, fold_res); gc(FALSE)
 
     if (anyNA(r_hat))
       stop(sprintf(
@@ -612,7 +615,7 @@ density_ratio <- function(
     }
 
     return(list(
-      idx    = stk$rows_idx,
+      idx    = rows_idx,
       r_t    = r_hat,
       sl     = sl_tab,
       diag   = diag_tab,

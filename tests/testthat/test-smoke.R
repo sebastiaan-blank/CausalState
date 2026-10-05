@@ -106,7 +106,7 @@ wr_smoke <- density_ratio(
   seed            = 1L,
   id              = "id",
   time            = "time",
-  parallel_t      = FALSE,
+  parallel        = FALSE,
   policy_spec_fun = policy_up
 )
 
@@ -263,10 +263,12 @@ test_that("qreg without weight_object returns finite estimate and naive SE only"
   expect_gt(res$ci[2], res$psi)
 })
 
-test_that("qreg with weight_object computes EIF-based SE and se == se_eif", {
+test_that("qreg gaussian outcome returns finite estimate with se_naive", {
+  df_g <- df_smoke
+  df_g$Y <- as.numeric(df_g$Y)
+
   res <- qreg(
-    df              = df_smoke,
-    weight_object   = wr_smoke,
+    df              = df_g,
     tmax            = 3L,
     id              = "id",
     time            = "time",
@@ -280,9 +282,10 @@ test_that("qreg with weight_object computes EIF-based SE and se == se_eif", {
     sl_death        = sl_fast,
     sl_recursive    = sl_fast,
     sl_y            = sl_fast,
-    outcome_family  = "binomial",
+    outcome_family  = "gaussian",
     k               = 1L,
     inner_v         = 2L,
+    v               = 2L,
     parallel        = FALSE,
     seed            = 1L,
     policy_spec_fun = policy_up
@@ -294,9 +297,8 @@ test_that("qreg with weight_object computes EIF-based SE and se == se_eif", {
   expect_lte(res$psi, 1)
   expect_true(is.finite(res$decomposition$se_naive))
   expect_gt(res$decomposition$se_naive, 0)
-  expect_true(is.finite(res$decomposition$se_eif))
-  expect_gt(res$decomposition$se_eif, 0)
-  expect_equal(res$se, res$decomposition$se_eif)
+  expect_null(res$decomposition$se_eif)
+  expect_equal(res$se, res$decomposition$se_naive)
   expect_length(res$ci, 2)
   expect_true(all(is.finite(res$ci)))
   expect_lt(res$ci[1], res$psi)
