@@ -29,7 +29,9 @@ export(qreg)
 
 # --- Exports: building blocks (advanced users) ----------------------------
 
+export(fit_g)
 export(density_ratio)
+export(balance_check)
 export(contrast)
 export(weight_diagnostics)
 export(branch_cal_summary)
@@ -75,6 +77,7 @@ S3method(print, sdr_fit)
 S3method(print, itmle_fit)
 S3method(print, qreg_fit)
 S3method(print, branch_cal_summary)
+S3method(print, balance_check)
 
 S3method(predict, SL.tgt.empty)
 S3method(predict, SL.tgt.intercept)
