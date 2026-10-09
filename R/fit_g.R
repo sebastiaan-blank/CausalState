@@ -118,21 +118,20 @@ dr_from_prob <- function(p_mat, beta, bounds, denom_cap) {
 #' Two estimation methods are available via the `method` argument:
 #'
 #' \describe{
-#'   \item{`"classification"` (default)}{Stacks observed and shifted treatment
-#'     rows and fits a binary classifier to distinguish the two worlds. The
-#'     density ratio is recovered as the classifier odds ratio. Works for any
-#'     treatment type and is recommended for joint multi-treatment (package)
-#'     interventions.}
-#'   \item{`"propensity"`}{Directly estimates the treatment mechanism
+#'   \item{`"propensity"` (default)}{Directly estimates the treatment mechanism
 #'     \eqn{g(A|W)} and computes the density ratio analytically. For binary
 #'     treatment this is a single binomial SuperLearner on the treatment
 #'     indicator. For continuous treatment two Gaussian SuperLearner fits are
 #'     used: one for \eqn{E[A|W]} and one for \eqn{Var(A|W)}; the density
 #'     ratio is then evaluated under a normal or log-normal distributional
-#'     assumption controlled by the `dist` argument. Avoids the stacking
-#'     class-imbalance bias that can affect the classification path when
-#'     treatment prevalence is far from 50\%, and directly models the clinical
-#'     decision function.}
+#'     assumption controlled by the `dist` argument. Recommended for single
+#'     treatments — avoids the stacking class-imbalance bias that affects the
+#'     classification path when treatment prevalence is far from 50\%.}
+#'   \item{`"classification"`}{Stacks observed and shifted treatment rows and
+#'     fits a binary classifier to distinguish the two worlds. The density ratio
+#'     is recovered as the classifier odds ratio. Recommended for joint
+#'     multi-treatment (package) interventions where a direct propensity model
+#'     is not available.}
 #' }
 #'
 #' Cross-fitting is used throughout: treatment models are trained on one fold
@@ -165,8 +164,8 @@ dr_from_prob <- function(p_mat, beta, bounds, denom_cap) {
 #' @param id Character. Subject identifier column name. Default `"id"`.
 #' @param time Character. Time column name. Default `"trial_time"`.
 #' @param bounds Numeric. Probability floor for clipping. Default `1e-5`.
-#' @param method Character. Estimation method: `"classification"` (default) or
-#'   `"propensity"`. See Details.
+#' @param method Character. Estimation method: `"propensity"` (default) or
+#'   `"classification"`. See Details.
 #' @param dist Character. Distributional assumption for continuous treatment
 #'   under `method = "propensity"`: `"lognormal"` (default, recommended for
 #'   ICU doses) or `"normal"`. Ignored for binary treatment and for
@@ -213,7 +212,7 @@ fit_g <- function(
     policy_spec_fun,
     id = "id", time = "trial_time",
     bounds = 1e-5,
-    method = "classification",
+    method = "propensity",
     dist   = "lognormal",
     dr_sl  = FALSE,
     drop_small_cluster_splits = TRUE,
@@ -226,7 +225,7 @@ fit_g <- function(
 
   `%||%` <- function(x, y) if (!is.null(x)) x else y
 
-  method <- match.arg(method, c("classification", "propensity"))
+  method <- match.arg(method, c("propensity", "classification"))
   dist   <- match.arg(dist,   c("lognormal", "normal"))
 
   is_propensity <- method == "propensity"
@@ -359,6 +358,22 @@ fit_g <- function(
       ))
     }
 
+    # Evaluate policy at A=0 and A=1 to get marginal policy distribution
+    # (binary propensity path only — deterministic or stochastic policies handled uniformly)
+    d_at_1 <- NULL
+    d_at_0 <- NULL
+    if (is_propensity && is_binary_a) {
+      a_col_b <- a_names[1L]
+      bt  <- DT[rows_idx]
+      ba1 <- data.table::copy(bt); ba1[[a_col_b]] <- 1L
+      ba0 <- data.table::copy(bt); ba0[[a_col_b]] <- 0L
+      sp1 <- policy_spec_fun(ba1, t, a_names)
+      sp0 <- policy_spec_fun(ba0, t, a_names)
+      d_at_1 <- pmin(1, pmax(0, as.numeric(sp1[[a_col_b]])))
+      d_at_0 <- pmin(1, pmax(0, as.numeric(sp0[[a_col_b]])))
+      rm(bt, ba1, ba0, sp1, sp0)
+    }
+
     fvec_t     <- DT$global_fold[stk$rows_idx]
     folds_here <- sort(unique(fvec_t))
 
@@ -417,13 +432,16 @@ fit_g <- function(
             as.numeric(sl_predict(sl_res$fit, newdata = X_vl))
           ))
 
-          a_obs_vl  <- A_obs_all[idx_valid]
-          a_shft_vl <- pmin(1, pmax(0, A_shft_all[idx_valid]))
+          a_obs_vl <- A_obs_all[idx_valid]
 
-          # r = g*(A_obs|W) / g(A_obs|W) for each observed A value
-          g_obs  <- a_obs_vl * p_hat + (1 - a_obs_vl) * (1 - p_hat)
-          g_star <- a_obs_vl * a_shft_vl + (1 - a_obs_vl) * (1 - a_shft_vl)
-          r      <- g_star / pmax(g_obs, bounds)
+          # g*(A|W) via marginal policy distribution: P_d(A=1|W) = d1*p + d0*(1-p)
+          d1       <- d_at_1[idx_valid]
+          d0       <- d_at_0[idx_valid]
+          g_star_1 <- d1 * p_hat + d0 * (1 - p_hat)
+          g_star_0 <- 1 - g_star_1
+          g_obs    <- a_obs_vl * p_hat + (1 - a_obs_vl) * (1 - p_hat)
+          g_star   <- a_obs_vl * g_star_1 + (1 - a_obs_vl) * g_star_0
+          r        <- g_star / pmax(g_obs, bounds)
           r[!is.finite(r)] <- 1
 
           sl_tab <- if (!is.null(sl_res$fit$coef)) data.table::data.table(

@@ -165,6 +165,9 @@ est_seed_for <- function(seed, fold = 0L, t = 0L, component, phase = "fit") {
   component_code <- switch(
     as.character(component),
     "density_ratio"       = 10L,
+    "g_prop"              = 11L,
+    "g_mean"              = 12L,
+    "g_var"               = 13L,
     "g_remain"            = 20L,
     "g_death_exit"        = 30L,
     "g_death_exit_pooled" = 31L,
