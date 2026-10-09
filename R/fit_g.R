@@ -167,9 +167,12 @@ dr_from_prob <- function(p_mat, beta, bounds, denom_cap) {
 #' @param method Character. Estimation method: `"propensity"` (default) or
 #'   `"classification"`. See Details.
 #' @param dist Character. Distributional assumption for continuous treatment
-#'   under `method = "propensity"`: `"lognormal"` (default, recommended for
-#'   ICU doses) or `"normal"`. Ignored for binary treatment and for
-#'   `method = "classification"`.
+#'   under `method = "propensity"`: `"lognormal"` (default), `"twoPart"`, or
+#'   `"normal"`. Use `"twoPart"` when treatment has a point mass at zero (e.g.
+#'   diuretics, vasopressors): mean and variance models are fitted on A>0
+#'   observations only, and A=0 observations receive r=1 if the policy keeps
+#'   them at zero or r=0 if the policy shifts them to a positive dose.
+#'   Ignored for binary treatment and for `method = "classification"`.
 #' @param dr_sl Logical. When `method = "classification"`, use the
 #'   Wu-Benkeser metalearner in density-ratio space. Default `FALSE`.
 #' @param drop_small_cluster_splits Logical. Default `TRUE`.
@@ -226,7 +229,7 @@ fit_g <- function(
   `%||%` <- function(x, y) if (!is.null(x)) x else y
 
   method <- match.arg(method, c("propensity", "classification"))
-  dist   <- match.arg(dist,   c("lognormal", "normal"))
+  dist   <- match.arg(dist,   c("lognormal", "twoPart", "normal"))
 
   is_propensity <- method == "propensity"
 
@@ -459,19 +462,37 @@ fit_g <- function(
           a_obs_all  <- as.numeric(stk$X_obs[, A_cols[1L]])
           a_shft_all <- as.numeric(stk$X[seq_len(n_nat) + n_nat, A_cols[1L]])
 
-          use_log <- identical(dist, "lognormal")
-          y_all   <- if (use_log) log(pmax(a_obs_all, .Machine$double.eps)) else a_obs_all
-          y_tr    <- y_all[rows_train_nat]
+          use_log     <- dist %in% c("lognormal", "twoPart")
+          use_twopart <- identical(dist, "twoPart")
+
+          # Two-part: fit only on A>0 training rows; A=0 handled analytically below.
+          # pi(W) cancels in the A>0 density ratio so no binary SL is needed.
+          if (use_twopart) {
+            pos_tr <- rows_train_nat[a_obs_all[rows_train_nat] > 0]
+            if (length(pos_tr) < 4L)
+              return(list(idx_valid = idx_valid, r = rep(1, length(idx_valid)),
+                          sl_tab = NULL, diag_tab = NULL))
+            id_fit   <- DT[[id]][stk$rows_idx][pos_tr]
+            cl_fit   <- if (!is.null(cl_t)) cl_t[pos_tr] else NULL
+            X_tr_fit <- as.data.frame(X_hist[pos_tr, , drop = FALSE])
+            y_tr_fit <- log(pmax(a_obs_all[pos_tr], .Machine$double.eps))
+          } else {
+            id_fit   <- id_nat
+            cl_fit   <- cl_fold
+            X_tr_fit <- X_tr
+            y_tr_fit <- if (use_log) log(pmax(a_obs_all[rows_train_nat], .Machine$double.eps))
+                        else a_obs_all[rows_train_nat]
+          }
 
           # Mean model
           fit_mean <- sl_block_fit(
-            Y             = y_tr,
-            X             = X_tr,
+            Y             = y_tr_fit,
+            X             = X_tr_fit,
             family        = stats::gaussian(),
             sl_lib        = sl_g,
             v_inner       = inner_v,
-            id_inner      = if (is.null(cl_fold)) id_nat else NULL,
-            cluster_inner = cl_fold,
+            id_inner      = if (is.null(cl_fit)) id_fit else NULL,
+            cluster_inner = cl_fit,
             seed_inner    = est_seed_for(seed, fold = kk, t = t, component = "g_mean", phase = "fit"),
             seed_cv_rows  = est_seed_for(seed, fold = kk, t = t, component = "g_mean", phase = "cv_rows"),
             seed_sl_fit   = est_seed_for(seed, fold = kk, t = t, component = "g_mean", phase = "sl_fit"),
@@ -479,20 +500,20 @@ fit_g <- function(
             sl_workers    = sl_workers
           )
 
-          mu_tr <- as.numeric(sl_predict(fit_mean$fit, newdata = as.data.frame(X_tr)))
+          mu_tr <- as.numeric(sl_predict(fit_mean$fit, newdata = X_tr_fit))
           mu_vl <- as.numeric(sl_predict(fit_mean$fit, newdata = as.data.frame(X_vl)))
 
           # Variance model on squared residuals
-          resid_sq_tr <- (y_tr - mu_tr)^2
+          resid_sq_tr <- (y_tr_fit - mu_tr)^2
 
           fit_var <- sl_block_fit(
             Y             = resid_sq_tr,
-            X             = X_tr,
+            X             = X_tr_fit,
             family        = stats::gaussian(),
             sl_lib        = sl_g,
             v_inner       = inner_v,
-            id_inner      = if (is.null(cl_fold)) id_nat else NULL,
-            cluster_inner = cl_fold,
+            id_inner      = if (is.null(cl_fit)) id_fit else NULL,
+            cluster_inner = cl_fit,
             seed_inner    = est_seed_for(seed, fold = kk, t = t, component = "g_var", phase = "fit"),
             seed_cv_rows  = est_seed_for(seed, fold = kk, t = t, component = "g_var", phase = "cv_rows"),
             seed_sl_fit   = est_seed_for(seed, fold = kk, t = t, component = "g_var", phase = "sl_fit"),
@@ -520,6 +541,12 @@ fit_g <- function(
                  pmax(dnorm(a_obs_vl, mu_vl, sigma_vl), .Machine$double.eps)
           }
           r[!is.finite(r)] <- 1
+
+          # Two-part: A=0 obs get r=1 if policy keeps at 0, r=0 if shifted to positive
+          if (use_twopart) {
+            zero_vl <- a_obs_vl == 0
+            if (any(zero_vl)) r[zero_vl] <- as.numeric(a_shft_vl[zero_vl] == 0)
+          }
 
           sl_tab <- data.table::rbindlist(list(
             if (!is.null(fit_mean$fit$coef)) data.table::data.table(
