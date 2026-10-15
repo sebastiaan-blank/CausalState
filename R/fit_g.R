@@ -118,20 +118,18 @@ dr_from_prob <- function(p_mat, beta, bounds, denom_cap) {
 #' Two estimation methods are available via the `method` argument:
 #'
 #' \describe{
-#'   \item{`"propensity"` (default)}{Directly estimates the treatment mechanism
-#'     \eqn{g(A|W)} and computes the density ratio analytically. For binary
-#'     treatment this is a single binomial SuperLearner on the treatment
-#'     indicator. For continuous treatment two Gaussian SuperLearner fits are
-#'     used: one for \eqn{E[A|W]} and one for \eqn{Var(A|W)}; the density
-#'     ratio is then evaluated under a normal or log-normal distributional
-#'     assumption controlled by the `dist` argument. Recommended for single
-#'     treatments — avoids the stacking class-imbalance bias that affects the
-#'     classification path when treatment prevalence is far from 50\%.}
-#'   \item{`"classification"`}{Stacks observed and shifted treatment rows and
-#'     fits a binary classifier to distinguish the two worlds. The density ratio
-#'     is recovered as the classifier odds ratio. Recommended for joint
-#'     multi-treatment (package) interventions where a direct propensity model
-#'     is not available.}
+#'   \item{`"classification"` (default)}{Stacks observed and shifted treatment
+#'     rows and fits a binary classifier to distinguish the two worlds. The
+#'     density ratio is recovered as the classifier odds ratio. Works for
+#'     binary, continuous, categorical, and multi-treatment interventions.}
+#'   \item{`"propensity"`}{Directly estimates the treatment mechanism
+#'     \eqn{g(A|W)} and computes the density ratio analytically. Requires
+#'     binary treatment (values 0 and 1 only). Fits a single binomial
+#'     SuperLearner on the treatment indicator. Avoids the stacking
+#'     class-imbalance bias when treatment prevalence is far from 50\%.
+#'     Supports stochastic interventions: when `policy_spec_fun` returns a
+#'     probability in \eqn{[0,1]} the density ratio \eqn{g^*(A|W)/g(A|W)} is
+#'     non-zero for all observations.}
 #' }
 #'
 #' Cross-fitting is used throughout: treatment models are trained on one fold
@@ -146,9 +144,7 @@ dr_from_prob <- function(p_mat, beta, bounds, denom_cap) {
 #' @param no_lag_vars Character vector of variables that should not be lagged.
 #' @param policy_names Character vector of column names holding shifted
 #'   treatment values under the MTP.
-#' @param sl_g SuperLearner library for treatment models. Required. For
-#'   `method = "propensity"` with continuous treatment this library is used for
-#'   both the mean and variance models.
+#' @param sl_g SuperLearner library for treatment models. Required.
 #' @param k Integer. Number of lags to include. Default `2`.
 #' @param inner_v Integer. Inner cross-validation folds for SuperLearner.
 #'   Default `10L`.
@@ -164,15 +160,9 @@ dr_from_prob <- function(p_mat, beta, bounds, denom_cap) {
 #' @param id Character. Subject identifier column name. Default `"id"`.
 #' @param time Character. Time column name. Default `"trial_time"`.
 #' @param bounds Numeric. Probability floor for clipping. Default `1e-5`.
-#' @param method Character. Estimation method: `"propensity"` (default) or
-#'   `"classification"`. See Details.
-#' @param dist Character. Distributional assumption for continuous treatment
-#'   under `method = "propensity"`: `"lognormal"` (default), `"twoPart"`, or
-#'   `"normal"`. Use `"twoPart"` when treatment has a point mass at zero (e.g.
-#'   diuretics, vasopressors): mean and variance models are fitted on A>0
-#'   observations only, and A=0 observations receive r=1 if the policy keeps
-#'   them at zero or r=0 if the policy shifts them to a positive dose.
-#'   Ignored for binary treatment and for `method = "classification"`.
+#' @param method Character. Estimation method: `"classification"` (default) or
+#'   `"propensity"`. See Details. `"propensity"` requires binary treatment;
+#'   use `"classification"` for continuous or categorical treatment.
 #' @param dr_sl Logical. When `method = "classification"`, use the
 #'   Wu-Benkeser metalearner in density-ratio space. Default `FALSE`.
 #' @param drop_small_cluster_splits Logical. Default `TRUE`.
@@ -188,12 +178,11 @@ dr_from_prob <- function(p_mat, beta, bounds, denom_cap) {
 #'       ratio) and `global_fold` per subject-time. Pass to [sdr()] or
 #'       [itmle()] as `weight_object`.}
 #'     \item{`sl_summary`}{SuperLearner learner weights per fold and time.}
-#'     \item{`density_calibration`}{Per-time calibration diagnostics. For
-#'       `method = "classification"`: AUC, Brier, calibration slope. For
-#'       `method = "propensity"` with continuous treatment: mean model MSE and
-#'       variance model MSE.}
-#'     \item{`settings`}{Named list of all call settings including `method`,
-#'       `dist`, and `is_binary`.}
+#'     \item{`density_calibration`}{Per-time calibration diagnostics (AUC,
+#'       Brier, calibration slope). Only populated for
+#'       `method = "classification"`; `NULL` for `method = "propensity"`.}
+#'     \item{`settings`}{Named list of all call settings including `method`
+#'       and `is_binary`.}
 #'   }
 #'
 #' @seealso [sdr()], [itmle()], [balance_check()], [weight_diagnostics()]
@@ -215,8 +204,7 @@ fit_g <- function(
     policy_spec_fun,
     id = "id", time = "trial_time",
     bounds = 1e-5,
-    method = "propensity",
-    dist   = "lognormal",
+    method = "classification",
     dr_sl  = FALSE,
     drop_small_cluster_splits = TRUE,
     parallel = FALSE,
@@ -229,7 +217,6 @@ fit_g <- function(
   `%||%` <- function(x, y) if (!is.null(x)) x else y
 
   method <- match.arg(method, c("propensity", "classification"))
-  dist   <- match.arg(dist,   c("lognormal", "twoPart", "normal"))
 
   is_propensity <- method == "propensity"
 
@@ -258,18 +245,18 @@ fit_g <- function(
 
   t_min <- DT[, .SD[1L], by = id][[time]] |> max()
 
-  # Detect binary treatment for propensity path
+  # Propensity path requires binary treatment
   is_binary_a <- if (is_propensity && length(a_names) == 1L) {
-    a_vals <- na.omit(unique(DT[[a_names[1L]]]))
-    all(a_vals %in% c(0, 1))
+    a_vals_det <- na.omit(unique(DT[[a_names[1L]]]))
+    all(a_vals_det %in% c(0, 1))
   } else {
     FALSE
   }
 
-  if (is_propensity && length(a_names) > 1L) {
+  if (is_propensity && !is_binary_a) {
     stop(
-      'method = "propensity" supports a single treatment variable only. ',
-      "Use method = \"classification\" for joint multi-treatment policies.",
+      'method = "propensity" requires binary treatment (values 0 and 1 only). ',
+      'Use method = "classification" for continuous or categorical treatment.',
       call. = FALSE
     )
   }
@@ -411,157 +398,49 @@ fit_g <- function(
         X_tr      <- as.data.frame(X_hist[rows_train_nat, , drop = FALSE])
         X_vl      <- as.data.frame(X_hist[idx_valid,      , drop = FALSE])
 
-        if (is_binary_a) {
-          # Binary: one binomial SL on P(A=1|W)
-          A_obs_all  <- as.numeric(stk$X_obs[, A_cols[1L]])
-          A_shft_all <- as.numeric(stk$X[seq_len(n_nat) + n_nat, A_cols[1L]])
+        # Binary: one binomial SL on P(A=1|W)
+        A_obs_all <- as.numeric(stk$X_obs[, A_cols[1L]])
 
-          sl_res <- sl_block_fit(
-            Y             = A_obs_all[rows_train_nat],
-            X             = X_tr,
-            family        = stats::binomial(),
-            sl_lib        = sl_g,
-            v_inner       = inner_v,
-            id_inner      = if (is.null(cl_fold)) id_nat else NULL,
-            cluster_inner = cl_fold,
-            seed_inner    = est_seed_for(seed, fold = kk, t = t, component = "g_prop", phase = "fit"),
-            seed_cv_rows  = est_seed_for(seed, fold = kk, t = t, component = "g_prop", phase = "cv_rows"),
-            seed_sl_fit   = est_seed_for(seed, fold = kk, t = t, component = "g_prop", phase = "sl_fit"),
-            method        = SuperLearner::method.NNLS,
-            sl_workers    = sl_workers
-          )
+        sl_res <- sl_block_fit(
+          Y             = A_obs_all[rows_train_nat],
+          X             = X_tr,
+          family        = stats::binomial(),
+          sl_lib        = sl_g,
+          v_inner       = inner_v,
+          id_inner      = if (is.null(cl_fold)) id_nat else NULL,
+          cluster_inner = cl_fold,
+          seed_inner    = est_seed_for(seed, fold = kk, t = t, component = "g_prop", phase = "fit"),
+          seed_cv_rows  = est_seed_for(seed, fold = kk, t = t, component = "g_prop", phase = "cv_rows"),
+          seed_sl_fit   = est_seed_for(seed, fold = kk, t = t, component = "g_prop", phase = "sl_fit"),
+          method        = SuperLearner::method.NNLS,
+          sl_workers    = sl_workers
+        )
 
-          p_hat <- pmin(1 - bounds, pmax(bounds,
-            as.numeric(sl_predict(sl_res$fit, newdata = X_vl))
-          ))
+        p_hat <- pmin(1 - bounds, pmax(bounds,
+          as.numeric(sl_predict(sl_res$fit, newdata = X_vl))
+        ))
 
-          a_obs_vl <- A_obs_all[idx_valid]
+        a_obs_vl <- A_obs_all[idx_valid]
 
-          # g*(A|W) via marginal policy distribution: P_d(A=1|W) = d1*p + d0*(1-p)
-          d1       <- d_at_1[idx_valid]
-          d0       <- d_at_0[idx_valid]
-          g_star_1 <- d1 * p_hat + d0 * (1 - p_hat)
-          g_star_0 <- 1 - g_star_1
-          g_obs    <- a_obs_vl * p_hat + (1 - a_obs_vl) * (1 - p_hat)
-          g_star   <- a_obs_vl * g_star_1 + (1 - a_obs_vl) * g_star_0
-          r        <- g_star / pmax(g_obs, bounds)
-          r[!is.finite(r)] <- 1
+        # g*(A|W) via marginal policy distribution: P_d(A=1|W) = d1*p + d0*(1-p)
+        d1       <- d_at_1[idx_valid]
+        d0       <- d_at_0[idx_valid]
+        g_star_1 <- d1 * p_hat + d0 * (1 - p_hat)
+        g_star_0 <- 1 - g_star_1
+        g_obs    <- a_obs_vl * p_hat + (1 - a_obs_vl) * (1 - p_hat)
+        g_star   <- a_obs_vl * g_star_1 + (1 - a_obs_vl) * g_star_0
+        r        <- g_star / pmax(g_obs, bounds)
+        r[!is.finite(r)] <- 1
 
-          sl_tab <- if (!is.null(sl_res$fit$coef)) data.table::data.table(
-            t = as.integer(t), outer_fold = as.integer(kk),
-            learner = names(sl_res$fit$coef),
-            weight  = as.numeric(sl_res$fit$coef),
-            cvRisk  = as.numeric(sl_res$fit$cvRisk)
-          ) else NULL
+        sl_tab <- if (!is.null(sl_res$fit$coef)) data.table::data.table(
+          t = as.integer(t), outer_fold = as.integer(kk),
+          learner = names(sl_res$fit$coef),
+          weight  = as.numeric(sl_res$fit$coef),
+          cvRisk  = as.numeric(sl_res$fit$cvRisk)
+        ) else NULL
 
-          rm(sl_res); gc(FALSE)
-          return(list(idx_valid = idx_valid, r = r, sl_tab = sl_tab, diag_tab = NULL))
-
-        } else {
-          # Continuous: mean model + variance model
-          a_obs_all  <- as.numeric(stk$X_obs[, A_cols[1L]])
-          a_shft_all <- as.numeric(stk$X[seq_len(n_nat) + n_nat, A_cols[1L]])
-
-          use_log     <- dist %in% c("lognormal", "twoPart")
-          use_twopart <- identical(dist, "twoPart")
-
-          # Two-part: fit only on A>0 training rows; A=0 handled analytically below.
-          # pi(W) cancels in the A>0 density ratio so no binary SL is needed.
-          if (use_twopart) {
-            pos_tr <- rows_train_nat[a_obs_all[rows_train_nat] > 0]
-            if (length(pos_tr) < 4L)
-              return(list(idx_valid = idx_valid, r = rep(1, length(idx_valid)),
-                          sl_tab = NULL, diag_tab = NULL))
-            id_fit   <- DT[[id]][stk$rows_idx][pos_tr]
-            cl_fit   <- if (!is.null(cl_t)) cl_t[pos_tr] else NULL
-            X_tr_fit <- as.data.frame(X_hist[pos_tr, , drop = FALSE])
-            y_tr_fit <- log(pmax(a_obs_all[pos_tr], .Machine$double.eps))
-          } else {
-            id_fit   <- id_nat
-            cl_fit   <- cl_fold
-            X_tr_fit <- X_tr
-            y_tr_fit <- if (use_log) log(pmax(a_obs_all[rows_train_nat], .Machine$double.eps))
-                        else a_obs_all[rows_train_nat]
-          }
-
-          # Mean model
-          fit_mean <- sl_block_fit(
-            Y             = y_tr_fit,
-            X             = X_tr_fit,
-            family        = stats::gaussian(),
-            sl_lib        = sl_g,
-            v_inner       = inner_v,
-            id_inner      = if (is.null(cl_fit)) id_fit else NULL,
-            cluster_inner = cl_fit,
-            seed_inner    = est_seed_for(seed, fold = kk, t = t, component = "g_mean", phase = "fit"),
-            seed_cv_rows  = est_seed_for(seed, fold = kk, t = t, component = "g_mean", phase = "cv_rows"),
-            seed_sl_fit   = est_seed_for(seed, fold = kk, t = t, component = "g_mean", phase = "sl_fit"),
-            method        = SuperLearner::method.NNLS,
-            sl_workers    = sl_workers
-          )
-
-          mu_tr <- as.numeric(sl_predict(fit_mean$fit, newdata = X_tr_fit))
-          mu_vl <- as.numeric(sl_predict(fit_mean$fit, newdata = as.data.frame(X_vl)))
-
-          # Variance model on squared residuals
-          resid_sq_tr <- (y_tr_fit - mu_tr)^2
-
-          fit_var <- sl_block_fit(
-            Y             = resid_sq_tr,
-            X             = X_tr_fit,
-            family        = stats::gaussian(),
-            sl_lib        = sl_g,
-            v_inner       = inner_v,
-            id_inner      = if (is.null(cl_fit)) id_fit else NULL,
-            cluster_inner = cl_fit,
-            seed_inner    = est_seed_for(seed, fold = kk, t = t, component = "g_var", phase = "fit"),
-            seed_cv_rows  = est_seed_for(seed, fold = kk, t = t, component = "g_var", phase = "cv_rows"),
-            seed_sl_fit   = est_seed_for(seed, fold = kk, t = t, component = "g_var", phase = "sl_fit"),
-            method        = SuperLearner::method.NNLS,
-            sl_workers    = sl_workers
-          )
-
-          sigma_vl <- sqrt(pmax(
-            as.numeric(sl_predict(fit_var$fit, newdata = as.data.frame(X_vl))),
-            1e-6
-          ))
-
-          a_obs_vl  <- a_obs_all[idx_valid]
-          a_shft_vl <- a_shft_all[idx_valid]
-
-          if (use_log) {
-            y_obs  <- log(pmax(a_obs_vl,  .Machine$double.eps))
-            y_shft <- log(pmax(a_shft_vl, .Machine$double.eps))
-            y_back <- 2 * y_obs - y_shft  # d^{-1}(a_obs) on log scale
-            r <- dnorm(y_back, mu_vl, sigma_vl) /
-                 pmax(dnorm(y_obs, mu_vl, sigma_vl), .Machine$double.eps)
-          } else {
-            a_back <- 2 * a_obs_vl - a_shft_vl  # d^{-1}(a_obs)
-            r <- dnorm(a_back, mu_vl, sigma_vl) /
-                 pmax(dnorm(a_obs_vl, mu_vl, sigma_vl), .Machine$double.eps)
-          }
-          r[!is.finite(r)] <- 1
-
-          # Two-part: A=0 obs get r=1 if policy keeps at 0, r=0 if shifted to positive
-          if (use_twopart) {
-            zero_vl <- a_obs_vl == 0
-            if (any(zero_vl)) r[zero_vl] <- as.numeric(a_shft_vl[zero_vl] == 0)
-          }
-
-          sl_tab <- data.table::rbindlist(list(
-            if (!is.null(fit_mean$fit$coef)) data.table::data.table(
-              t = as.integer(t), outer_fold = as.integer(kk), component = "mean",
-              learner = names(fit_mean$fit$coef), weight = as.numeric(fit_mean$fit$coef),
-              cvRisk  = as.numeric(fit_mean$fit$cvRisk)) else NULL,
-            if (!is.null(fit_var$fit$coef)) data.table::data.table(
-              t = as.integer(t), outer_fold = as.integer(kk), component = "variance",
-              learner = names(fit_var$fit$coef), weight = as.numeric(fit_var$fit$coef),
-              cvRisk  = as.numeric(fit_var$fit$cvRisk)) else NULL
-          ), use.names = TRUE, fill = TRUE)
-
-          rm(fit_mean, fit_var); gc(FALSE)
-          return(list(idx_valid = idx_valid, r = r, sl_tab = sl_tab, diag_tab = NULL))
-        }
+        rm(sl_res); gc(FALSE)
+        return(list(idx_valid = idx_valid, r = r, sl_tab = sl_tab, diag_tab = NULL))
       }
 
       # ---- classification path (original) ----
@@ -853,7 +732,6 @@ fit_g <- function(
       tmax       = tmax,
       k          = k,
       method     = method,
-      dist       = dist,
       is_binary  = is_binary_a,
       dr_sl      = dr_sl,
       bounds     = bounds,
