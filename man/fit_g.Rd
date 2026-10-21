@@ -35,7 +35,11 @@ fit_g(
 \arguments{
 \item{df}{A \code{data.frame} in long format (one row per subject per time point).}
 
-\item{a_names}{Character vector of treatment variable names.}
+\item{a_names}{Character vector of treatment variable names. Categorical
+treatments must be factors with explicitly declared levels; ordinal
+propensity estimation requires an ordered factor. Level order determines
+the continuation sequence, and the first level is the predictor reference.
+Numeric columns retain numeric coding for binary or continuous treatment.}
 
 \item{tmax}{Integer. Maximum follow-up time (number of time points).}
 
@@ -66,7 +70,11 @@ assignment.}
 \code{data.table} with shifted treatment values for time \code{t}. For binary
 treatment under \code{method = "propensity"}, the shifted value is interpreted
 as the target treatment probability (values in \eqn{[0,1]}) or a
-deterministic assignment (0 or 1).}
+deterministic assignment (0 or 1). For ordinal propensity estimation,
+receive an ordered factor and return deterministic category labels or a
+factor using its declared levels. Numeric outputs for a factor are matched
+to category labels, never interpreted as internal integer codes. The
+function is also called on hypothetical treatments at every declared level.}
 
 \item{id}{Character. Subject identifier column name. Default \code{"id"}.}
 
@@ -75,8 +83,9 @@ deterministic assignment (0 or 1).}
 \item{bounds}{Numeric. Probability floor for clipping. Default \code{1e-5}.}
 
 \item{method}{Character. Estimation method: \code{"classification"} (default) or
-\code{"propensity"}. See Details. \code{"propensity"} requires binary treatment;
-use \code{"classification"} for continuous or categorical treatment.}
+\code{"propensity"}. Propensity supports one numeric binary 0/1 treatment
+or one ordered factor. Use classification for unordered factors,
+continuous treatment, or multiple treatments.}
 
 \item{dr_sl}{Logical. When \code{method = "classification"}, use the
 Wu-Benkeser metalearner in density-ratio space. Default \code{FALSE}.}
@@ -99,12 +108,14 @@ A list of class \code{"g_fit"} with components:
 \item{\code{weights_dt}}{A \code{data.table} with \code{Rt_t} (instantaneous density
 ratio) and \code{global_fold} per subject-time. Pass to \code{\link[=sdr]{sdr()}} or
 \code{\link[=itmle]{itmle()}} as \code{weight_object}.}
-\item{\code{sl_summary}}{SuperLearner learner weights per fold and time.}
+\item{\code{sl_summary}}{SuperLearner learner weights per fold and time;
+ordinal models also include the continuation \code{threshold}.}
 \item{\code{density_calibration}}{Per-time calibration diagnostics (AUC,
 Brier, calibration slope). Only populated for
 \code{method = "classification"}; \code{NULL} for \code{method = "propensity"}.}
 \item{\code{settings}}{Named list of all call settings including \code{method}
-and \code{is_binary}.}
+and \code{is_binary}, plus factor \code{treatment_levels}, \code{treatment_ordered},
+\code{treatment_encoding}, and \code{propensity_model}.}
 }
 }
 \description{
@@ -122,18 +133,52 @@ rows and fits a binary classifier to distinguish the two worlds. The
 density ratio is recovered as the classifier odds ratio. Works for
 binary, continuous, categorical, and multi-treatment interventions.}
 \item{\code{"propensity"}}{Directly estimates the treatment mechanism
-\eqn{g(A|W)} and computes the density ratio analytically. Requires
-binary treatment (values 0 and 1 only). Fits a single binomial
-SuperLearner on the treatment indicator. Avoids the stacking
-class-imbalance bias when treatment prevalence is far from 50\\%.
-Supports stochastic interventions: when \code{policy_spec_fun} returns a
-probability in \eqn{[0,1]} the density ratio \eqn{g^*(A|W)/g(A|W)} is
-non-zero for all observations.}
+\eqn{g(A|H)} and computes the policy density ratio analytically.
+Supports one numeric binary treatment (0/1), or one ordinal treatment
+supplied as an ordered factor. Binary treatment uses one binomial
+SuperLearner; ordinal treatment uses a sequence of binomial
+SuperLearners to estimate continuation probabilities
+\eqn{P(A > a_j | A \ge a_j, H)}. The resulting dose probabilities
+are non-negative and sum to one without a proportional-odds assumption.
+Binary policies may return probabilities in \eqn{[0,1]}.
+Ordinal policies must return deterministic category labels or factors
+from the treatment's declared levels.}
 }
 
 Cross-fitting is used throughout: treatment models are trained on one fold
 and density ratios predicted on the held-out fold, so the same fold
 structure is inherited by the downstream estimator.
+
+For ordinal treatment, the policy is evaluated at every possible source
+dose, holding history fixed. Its induced probability is
+\deqn{g^*(a|h) = \sum_b I\{d(b,h)=a\} g(b|h).}
+Summing all preimages supports many-to-one policies such as dose caps and
+minimum-dose rules. The policy must depend only on the current treatment,
+time, and pre-treatment history; precomputed shifted-value columns cannot
+describe how the policy acts at hypothetical doses. Zero numerator
+probabilities produce exact zero ratios. \code{bounds} clips each continuation
+probability and floors the observed-dose denominator.
+
+Every declared ordinal dose must have training observations in each outer
+fold at each time where the policy changes treatment. Sparse upper-dose
+risk sets must also meet the usual SuperLearner sample-size and event
+requirements; fitting errors propagate rather than substituting unit ratios.
+
+Factor treatment columns are encoded internally as numeric reference
+indicators, omitting the first dose, whenever treatment is a predictor.
+The same fixed columns are used for current treatment, lagged treatment,
+policy-shifted prediction, and downstream transition, outcome, and targeting
+models. Levels absent from a fitting subset retain their indicator columns.
+Policies receive the original factor columns, with their levels and ordered
+status preserved after shifts. A numeric
+dose term in a GLM would otherwise impose equal changes in the linear
+predictor per dose unit; reference indicators allow separate dose effects.
+This encoding does not impose a monotone dose response.
+
+Factor levels and ordered status are saved in the \code{g_fit} settings.
+\code{\link[=sdr]{sdr()}} and \code{\link[=itmle]{itmle()}} check their input factor columns against this schema
+when given the complete object. \code{\link[=qreg]{qreg()}} infers the same coding directly
+from its input factor columns. There is no separate levels argument.
 }
 \references{
 Diaz I, Williams N, Hoffman KL, Schenck EJ (2021). Nonparametric Causal
