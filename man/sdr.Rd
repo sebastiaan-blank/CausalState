@@ -27,7 +27,7 @@ sdr(
   outcome_family = c("binomial", "gaussian"),
   y_bounds = NULL,
   bounds = 1e-05,
-  trim = 0.99,
+  trim = 0.999,
   absorb = list(),
   policy_spec_fun = function(D_block, t, a_names) NULL,
   k = 2,
@@ -48,7 +48,7 @@ sdr(
 \arguments{
 \item{df}{A \code{data.frame} in long format (one row per subject per time point).}
 
-\item{weight_object}{Output from \code{\link[=density_ratio]{density_ratio()}}, or a \code{data.frame}
+\item{weight_object}{Output from \code{\link[=fit_g]{fit_g()}}, or a \code{data.frame}
 containing at least columns for subject id, time, \code{Rt_t}
 (instantaneous density ratio), and \code{global_fold} (cross-fitting fold
 assignment).}
@@ -76,8 +76,12 @@ treatment).}
 \item{a_names}{Character vector of treatment variable names. Can contain
 one or more variables for joint multi-treatment policies (e.g.
 \code{c("A1", "A2")}). The \code{policy_spec_fun} must return shifted values for
-all variables in \code{a_names}, and \code{density_ratio()} must have been called
-with the same \code{a_names} to produce compatible weights.}
+all variables in \code{a_names}, and \code{fit_g()} must have been called
+with the same \code{a_names} to produce compatible weights. Categorical
+treatments must remain factors with the same declared levels and ordered
+status used in \code{\link[=fit_g]{fit_g()}}. Reference indicators are created automatically
+for current and lagged treatment and policy-shifted predictions. Policies
+receive the original factor columns. Numeric treatment remains numeric.}
 
 \item{no_lag_vars}{Character vector of variables in \code{tv_names} or \code{a_names}
 that should not be lagged (e.g. already-encoded temporal features).}
@@ -128,7 +132,7 @@ Default \code{1e-5}.}
 
 \item{trim}{Quantile used to cap instantaneous density ratios before they
 are assembled into the cumulative weight matrix.  Trimming is applied to
-the \strong{full} \code{weights_dt} (all time points computed by \code{\link[=density_ratio]{density_ratio()}})
+the \strong{full} \code{weights_dt} (all time points computed by \code{\link[=fit_g]{fit_g()}})
 before any subsetting to the current \code{tmax}.  Consequently the trim
 threshold is identical whether you call the estimator with \code{tmax = 2} or
 \code{tmax = 14}, making results directly comparable across horizons that share
@@ -294,7 +298,7 @@ pseudo-outcomes at the first time point.  The estimator is sequentially
 doubly robust (2^\eqn{K}-robust): consistent whenever, at each time point
 t, either the treatment model \eqn{g_t} or the outcome model \eqn{Q_t} is
 consistently estimated.  Requires pre-computed density ratio weights from
-\code{\link[=density_ratio]{density_ratio()}}.
+\code{\link[=fit_g]{fit_g()}}.
 }
 \section{Parallelism}{
 
@@ -342,7 +346,7 @@ counts, validation-side Q means). Post-hoc sanity checks.
 }
 The fit also carries \code{sl_summary} (per-(fold, t, component) SuperLearner
 coefficients) and \code{ic_df} (per-subject influence-curve values consumed
-by \code{\link[=contrast]{contrast()}}). Weight diagnostics live on the \code{\link[=density_ratio]{density_ratio()}} object
+by \code{\link[=contrast]{contrast()}}). Weight diagnostics live on the \code{\link[=fit_g]{fit_g()}} object
 itself -- see \code{\link[=weight_diagnostics]{weight_diagnostics()}}. A worked workflow is in
 \code{vignette("diagnostics")}.
 }
@@ -361,7 +365,7 @@ policy_bin <- function(D_block, t, a_names) {
   )
   out
 }
-wr <- density_ratio(
+wr <- fit_g(
   df = df, a_names = "A", tmax = 3L,
   baseline = c("age", "sex"), tv_names = c("L1", "L2"),
   sl_g = sl_lib, k = 1L, inner_v = 2L, v = 2L, seed = 1L,
@@ -385,7 +389,7 @@ policy_cont <- function(D_block, t, a_names) {
   out[[a_names[1]]] <- pmin(D_block[[a_names[1]]] + 0.2, 2.0)
   out
 }
-wr_c <- density_ratio(
+wr_c <- fit_g(
   df = df_c, a_names = "A", tmax = 3L,
   baseline = "age", tv_names = "L1",
   sl_g = sl_lib, k = 1L, inner_v = 2L, v = 2L, seed = 1L,
@@ -412,7 +416,7 @@ policy_multi <- function(D_block, t, a_names) {
   out[["A_c1"]] <- pmin(D_block[["A_c1"]] + 0.2, 2.0)
   out
 }
-wr_m <- density_ratio(
+wr_m <- fit_g(
   df = df_m, a_names = c("A_b1", "A_c1"), tmax = 3L,
   baseline = c("age", "sex"), tv_names = "L1",
   sl_g = sl_lib, k = 1L, inner_v = 2L, v = 2L, seed = 1L,
@@ -440,6 +444,6 @@ Luedtke AR, Sofrygin O, van der Laan MJ, Carone M (2017). Sequential
 Double Robustness in Right-Censored Longitudinal Models. arXiv:1705.02459.
 }
 \seealso{
-\code{\link[=density_ratio]{density_ratio()}}, \code{\link[=itmle]{itmle()}}, \code{\link[=contrast]{contrast()}}, \code{\link[=absorb_rule]{absorb_rule()}},
+\code{\link[=fit_g]{fit_g()}}, \code{\link[=itmle]{itmle()}}, \code{\link[=contrast]{contrast()}}, \code{\link[=absorb_rule]{absorb_rule()}},
 \code{\link[=weight_diagnostics]{weight_diagnostics()}}, \code{\link[=branch_cal_summary]{branch_cal_summary()}}
 }

@@ -30,7 +30,6 @@ export(qreg)
 # --- Exports: building blocks (advanced users) ----------------------------
 
 export(fit_g)
-export(density_ratio)
 export(balance_check)
 export(contrast)
 export(weight_diagnostics)
@@ -43,6 +42,7 @@ export(absorb_rule)
 export(sim_bin)
 export(sim_cont)
 export(sim_multi)
+export(sim_cat)
 
 # --- Exports: default targeting library vector ----------------------------
 

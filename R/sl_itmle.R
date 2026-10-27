@@ -260,6 +260,9 @@ SL.tgt.glmnet <- function(Y, X, newX, family, obsWeights, id,
                           alpha = 0.5, nfolds = 3L,
                           s_select = "lambda.min",
                           bounds = 1e-5, ...) {
+  if (!requireNamespace("glmnet", quietly = TRUE))
+    stop("Package 'glmnet' is required for SL.tgt.glmnet. Install with install.packages('glmnet').",
+         call. = FALSE)
   pcs <- extract_offset(X, newX)
 
   if (ncol(pcs$X) == 0L) {
@@ -351,6 +354,9 @@ SL.tgt.xgboost <- function(Y, X, newX, family, obsWeights, id,
                            max_delta_step = 0,
                            nthread = 1L, use_cuda = TRUE,
                            bounds = 1e-5, ...) {
+  if (!requireNamespace("xgboost", quietly = TRUE))
+    stop("Package 'xgboost' is required for SL.tgt.xgboost. Install with install.packages('xgboost').",
+         call. = FALSE)
   pcs <- extract_offset(X, newX)
 
   if (ncol(pcs$X) == 0L) {

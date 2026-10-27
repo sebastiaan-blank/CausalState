@@ -39,9 +39,8 @@ qreg(
   pool_g_death = FALSE,
   pool_q_exit = FALSE,
   pool_time = "spline",
-  weight_object = NULL,
   v = 5L,
-  trim = 0.99,
+  n_boot = 0L,
   verbose = TRUE
 )
 }
@@ -71,8 +70,12 @@ treatment).}
 \item{a_names}{Character vector of treatment variable names. Can contain
 one or more variables for joint multi-treatment policies (e.g.
 \code{c("A1", "A2")}). The \code{policy_spec_fun} must return shifted values for
-all variables in \code{a_names}, and \code{density_ratio()} must have been called
-with the same \code{a_names} to produce compatible weights.}
+all variables in \code{a_names}, and \code{fit_g()} must have been called
+with the same \code{a_names} to produce compatible weights. Categorical
+treatments must remain factors with the same declared levels and ordered
+status used in \code{\link[=fit_g]{fit_g()}}. Reference indicators are created automatically
+for current and lagged treatment and policy-shifted predictions. Policies
+receive the original factor columns. Numeric treatment remains numeric.}
 
 \item{no_lag_vars}{Character vector of variables in \code{tv_names} or \code{a_names}
 that should not be lagged (e.g. already-encoded temporal features).}
@@ -182,17 +185,14 @@ second to \code{pool_q_exit} -- for example,
 with a spline and the Q-exit pooled model with a dummy-coded time factor.
 Only relevant when \code{pool_g_death = TRUE} or \code{pool_q_exit = TRUE}.}
 
-\item{weight_object}{Optional. Output from \code{\link[=density_ratio]{density_ratio()}}.  If supplied,
-an EIF-based SE is computed in addition to the naive SE.  The fold
-structure is inherited from \code{weight_object} when provided; otherwise
-independent folds are created using \code{v} and \code{seed}.}
+\item{v}{Integer. Number of cross-fitting folds. Default \code{5L}.}
 
-\item{v}{Integer. Number of cross-fitting folds used when
-\code{weight_object = NULL}. Default \code{5L}.}
-
-\item{trim}{Quantile for capping density ratios before EIF-based SE
-computation (only used when \code{weight_object} is supplied).
-Default \code{0.99}.}
+\item{n_boot}{Integer. Number of bootstrap replicates for SE estimation.
+\code{0L} (default) returns only the naive SE (\eqn{s(\hat Q_1)/\sqrt{n}}).
+When \code{> 0}, subjects (or clusters when \code{cluster} is set) are
+resampled with replacement, the full Q-recursion is refit for each
+replicate, and \code{se = sd(psi_boot)}.  The bootstrap distribution is
+stored in \code{decomposition$boot_psi_dist}.}
 
 \item{verbose}{Logical. If \code{TRUE} (default), print per-fold and per-time
 progress messages during estimation.}
@@ -200,16 +200,18 @@ progress messages during estimation.}
 \value{
 A list with:
 \describe{
-\item{\code{estimate}}{Point estimate \eqn{\hat\Psi}.}
-\item{\code{se_naive}}{Naive SE (always present).}
-\item{\code{se_eif}}{EIF-based SE (\code{NULL} if no \code{weight_object}).}
-\item{\code{se}}{Best available SE: \code{se_eif} if available, else \code{se_naive}.}
+\item{\code{psi}}{Point estimate \eqn{\hat\Psi}.}
+\item{\code{se}}{Best available SE: bootstrap SE if \code{n_boot > 0},
+otherwise naive SE.}
 \item{\code{ci}}{95\% Wald CI using \code{se}.}
-\item{\code{psi_natural}}{Plug-in estimate under the natural course.}
-\item{\code{psi_shifted}}{Plug-in estimate under the MTP (= \code{estimate}).}
+\item{\code{Y_obs}}{Observed mean of \code{y} (natural-course reference).}
+\item{\code{decomposition$se_naive}}{Naive SE \eqn{s(\hat Q_1)/\sqrt{n}}.}
+\item{\code{decomposition$se_boot}}{Bootstrap SE (\code{NULL} if
+\code{n_boot = 0}).}
+\item{\code{decomposition$boot_psi_dist}}{Vector of per-replicate psi
+values (\code{NULL} if \code{n_boot = 0}).}
 \item{\code{sl_summary}}{\code{data.table} of SuperLearner learner weights per
 (fold, time-point, model component). Same structure as in \code{\link[=sdr]{sdr()}}.}
-\item{\code{fold_diag}}{\code{data.table} of per-fold, per-time-point diagnostics.}
 \item{\code{diagnostics$branch_cal}}{Per-fold, per-time branch calibration
 table: empirical mean targets vs. predictions for \code{g_remain}, \code{g_death},
 and \code{Q_remain}. Use this to check whether the Q-models are
@@ -395,5 +397,5 @@ res2$se
 
 }
 \seealso{
-\code{\link[=sdr]{sdr()}}, \code{\link[=itmle]{itmle()}}, \code{\link[=density_ratio]{density_ratio()}}
+\code{\link[=sdr]{sdr()}}, \code{\link[=itmle]{itmle()}}, \code{\link[=fit_g]{fit_g()}}
 }

@@ -2,12 +2,12 @@
 % Please edit documentation in R/helpers.R
 \name{weight_diagnostics}
 \alias{weight_diagnostics}
-\title{Per-time weight diagnostics for a density ratio object}
+\title{Per-time weight diagnostics for a fit_g object}
 \usage{
 weight_diagnostics(weight_object, trim = 1)
 }
 \arguments{
-\item{weight_object}{Output of \code{density_ratio()}.}
+\item{weight_object}{Output of \code{fit_g()}.}
 
 \item{trim}{Quantile used to cap \code{Rt_t} before computing summaries.
 Default \code{1} (no trimming) so the returned summaries reflect the raw
@@ -36,5 +36,5 @@ Call with different \code{trim} values to assess trim sensitivity before
 passing the \code{weight_object} to \code{sdr()} or \code{itmle()}.
 }
 \seealso{
-\code{\link[=density_ratio]{density_ratio()}}, \code{\link[=sdr]{sdr()}}, \code{\link[=itmle]{itmle()}}
+\code{\link[=fit_g]{fit_g()}}, \code{\link[=sdr]{sdr()}}, \code{\link[=itmle]{itmle()}}
 }

@@ -119,8 +119,8 @@ dr_args <- list(
   sl_g = sl_lib, k = 1L, inner_v = 3L, v = 3L, seed = 1L,
   id = "id", time = "time"
 )
-wr_nat <- do.call(density_ratio, c(dr_args, list(policy_spec_fun = policy_nat)))
-wr_sft <- do.call(density_ratio, c(dr_args, list(policy_spec_fun = policy_sft)))
+wr_nat <- do.call(fit_g, c(dr_args, list(policy_spec_fun = policy_nat)))
+wr_sft <- do.call(fit_g, c(dr_args, list(policy_spec_fun = policy_sft)))
 
 sdr_args <- list(
   df = df, tmax = 5L, id = "id", time = "time",

@@ -13,9 +13,10 @@ sim_cont(n = 2000L, tmax = 5L, seed = 1L, dose_shift = 0)
 
 \item{seed}{Integer seed.}
 
-\item{dose_shift}{Numeric dose increment applied to every time-step's
-observed \code{A}, capped at \code{2.0}. Used internally to generate Monte-Carlo
-truth. Leave at \code{0} for regular observed data.}
+\item{dose_shift}{Numeric dose increment applied to each time-step's \code{A},
+but only when \code{A > 0} (the zero-dose atom is left at zero). Used
+internally to generate Monte-Carlo truth. Leave at \code{0} for regular
+observed data.}
 }
 \value{
 A \code{data.frame} with columns

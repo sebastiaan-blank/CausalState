@@ -72,7 +72,7 @@ policy_bin <- function(D_block, t, a_names) {
   out
 }
 
-wr <- density_ratio(
+wr <- fit_g(
   df              = df,
   a_names         = "A",
   tmax            = 5L,
@@ -173,7 +173,7 @@ policy_nat <- function(D_block, t, a_names) {
   D_block[, ..a_names, drop = FALSE]
 }
 
-wr_nat <- density_ratio(
+wr_nat <- fit_g(
   df = df, a_names = "A", tmax = 5L,
   baseline = c("age", "sex"), tv_names = c("L1", "L2"),
   sl_g = sl_lib, k = 1L, inner_v = 3L, v = 3L, seed = 1L,
@@ -405,7 +405,7 @@ contrast(res, res_nat)
 
 ## Workflow summary
 
-1. `density_ratio()` → `weight_diagnostics()` + `policy_change_summary`
+1. `fit_g()` → `weight_diagnostics()` + `policy_change_summary`
    → pick `trim`, revise policy or `sl_g` if weights or shift look
    unreasonable.
 2. NAT-run `sdr()` (or `itmle()`, or `qreg()`) →

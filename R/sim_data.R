@@ -21,15 +21,25 @@
 #' @param apply_policy Logical. When `TRUE`, forces `A = 1` for subjects with
 #'   `L1 > 1.0` at each time-step -- used internally to generate Monte-Carlo
 #'   truth for accuracy tests. Leave at `FALSE` for regular observed data.
+#' @param outcome Character. Which outcome to generate:
+#'   - `"Y"` (default) — generic binary outcome.
+#'   - `"mort"` — in-ICU mortality: `Y = 1` at death, `Y = rbinom(post-discharge
+#'     death probability)` at discharge.
+#'   - `"daoh"` — days alive and out of hospital to day 30: `Y = 0` at death;
+#'     at discharge, `Y = max(0, 30 - t - ward_days)` if survived post-discharge,
+#'     else `0`. `outcome_family = "gaussian"` and `y_bounds = c(0, 30)` in
+#'     the estimator call.
 #'
 #' @return A `data.frame` with one row per subject-time. Columns:
 #'   `id`, `time`, `age`, `sex`, `L1`, `L2`, `A`, `alive`, `in_state`, `Y`.
 #'
-#' @seealso [sim_cont()], [sim_multi()], [sdr()], [itmle()]
+#' @seealso [sim_cont()], [sim_multi()], [sdr()], [itmle()], [absorb_rule()]
 #'
 #' @export
 sim_bin <- function(n = 2000L, tmax = 5L, seed = 1L,
-                    apply_policy = FALSE) {
+                    apply_policy = FALSE,
+                    outcome = c("Y", "mort", "daoh")) {
+  outcome <- match.arg(outcome)
   set.seed(seed)
   rows <- vector("list", n)
 
@@ -57,10 +67,26 @@ sim_bin <- function(n = 2000L, tmax = 5L, seed = 1L,
         alive <- 1L; in_state <- 1L
       }
 
-      py <- if (!alive)     stats::plogis(-3.0 + 0.1 * L1)
-            else if (!in_state) stats::plogis(1.5 + 0.4 * A - 0.1 * age / 10 + 0.2 * L1)
-            else            stats::plogis(-0.5 + 0.5 * A - 0.3 * L1 + 0.1 * L2)
-      Y <- stats::rbinom(1, 1, py)
+      if (outcome == "Y") {
+        py <- if (!alive)         stats::plogis(-3.0 + 0.1 * L1)
+              else if (!in_state) stats::plogis(1.5 + 0.4 * A - 0.1 * age / 10 + 0.2 * L1)
+              else                stats::plogis(-0.5 + 0.5 * A - 0.3 * L1 + 0.1 * L2)
+        Y <- stats::rbinom(1, 1, py)
+      } else if (outcome == "mort") {
+        Y <- if (!alive)         1L
+             else if (!in_state) stats::rbinom(1, 1, stats::plogis(-3.0 + 0.4 * L1 - 0.3 * A))
+             else                0L
+      } else { # daoh
+        if (!alive) {
+          Y <- 0.0
+        } else if (!in_state) {
+          died_post <- stats::rbinom(1, 1, stats::plogis(-3.0 + 0.4 * L1 - 0.3 * A))
+          ward_days <- stats::rpois(1, exp(1.0 + 0.2 * L1))
+          Y <- if (died_post) 0.0 else max(0.0, 30.0 - t - ward_days)
+        } else {
+          Y <- 0.0
+        }
+      }
 
       pat[[length(pat) + 1L]] <- data.frame(
         id = i, time = t,
@@ -91,9 +117,10 @@ sim_bin <- function(n = 2000L, tmax = 5L, seed = 1L,
 #' @param n Number of subjects.
 #' @param tmax Maximum follow-up.
 #' @param seed Integer seed.
-#' @param dose_shift Numeric dose increment applied to every time-step's
-#'   observed `A`, capped at `2.0`. Used internally to generate Monte-Carlo
-#'   truth. Leave at `0` for regular observed data.
+#' @param dose_shift Numeric dose increment applied to each time-step's `A`,
+#'   but only when `A > 0` (the zero-dose atom is left at zero). Used
+#'   internally to generate Monte-Carlo truth. Leave at `0` for regular
+#'   observed data.
 #'
 #' @return A `data.frame` with columns
 #'   `id`, `time`, `age`, `L1`, `A`, `alive`, `in_state`, `Y`.
@@ -112,7 +139,7 @@ sim_cont <- function(n = 2000L, tmax = 5L, seed = 1L, dose_shift = 0) {
 
     for (t in seq_len(tmax)) {
       A_nat <- pmax(0, stats::rnorm(1, 0.6 + 0.5 * L1, 0.3))
-      A     <- pmin(A_nat + dose_shift, 2.0)
+      A     <- if (dose_shift > 0 && A_nat > 0) A_nat + dose_shift else A_nat
 
       p_die <- stats::plogis(-4.5 + 0.5 * L1 - 0.08 * age / 10 - 0.5 * A)
       p_dc  <- stats::plogis(-2.0 + 0.5 * A  - 0.3 * L1)
@@ -165,7 +192,7 @@ sim_cont <- function(n = 2000L, tmax = 5L, seed = 1L, dose_shift = 0) {
 #' @param n_binary Number of binary treatments (>= 0).
 #' @param n_continuous Number of continuous treatments (>= 0).
 #' @param apply_policy Logical. When `TRUE`, forces every binary treatment to
-#'   `1` for subjects with `L1 > 1.0` and adds `+0.2` (capped at `2.0`) to
+#'   `1` for subjects with `L1 > 1.0` and adds `+0.2` (only when `A > 0`) to
 #'   every continuous treatment at each time-step -- used internally to
 #'   generate Monte-Carlo truth for accuracy tests. Leave at `FALSE` for
 #'   regular observed data.
@@ -213,7 +240,7 @@ sim_multi <- function(n = 2000L, tmax = 5L, seed = 1L,
       }
       for (j in seq_len(n_continuous)) {
         A_nat <- pmax(0, stats::rnorm(1, 0.4 + 0.3 * L1 - 0.1 * (j - 1), 0.3))
-        A_cont[j] <- if (apply_policy) pmin(A_nat + 0.2, 2.0) else A_nat
+        A_cont[j] <- if (apply_policy && A_nat > 0) A_nat + 0.2 else A_nat
       }
 
       eff_bin  <- if (n_binary     > 0L) sum(w_bin  * A_bin)  else 0
@@ -258,4 +285,80 @@ sim_multi <- function(n = 2000L, tmax = 5L, seed = 1L,
   }
 
   do.call(rbind, rows)
+}
+
+#' Simulated ICU panel with an ordinal categorical treatment
+#'
+#' Longitudinal ICU-style trajectories with a four-level ordinal dose
+#' (`A` in \{0, 1, 2, 3\}: none, low, medium, high) and competing exit events.
+#' Treatment is returned as an ordered factor for `fit_g(method = "propensity")`.
+#'
+#' The natural treatment is multinomial with probabilities that increase with
+#' the biomarker `L1` (sicker patients tend to receive higher doses). The
+#' policy mandates at least level 2 for patients with `L1 > 0.5`.
+#'
+#' @param n Number of subjects.
+#' @param tmax Maximum follow-up.
+#' @param seed Integer seed.
+#' @param apply_policy Logical. When `TRUE`, applies the policy
+#'   `A = max(A_nat, 2L)` for subjects with `L1 > 0.5` -- used to generate
+#'   Monte-Carlo truth. Leave at `FALSE` for regular observed data.
+#'
+#' @return A `data.frame` with columns
+#'   `id`, `time`, `age`, `L1`, `A` (ordered factor with levels 0, 1, 2, 3),
+#'   `alive`, `in_state`, `Y`.
+#'
+#' @seealso [sim_bin()], [sim_cont()], [fit_g()]
+#'
+#' @export
+sim_cat <- function(n = 2000L, tmax = 5L, seed = 1L, apply_policy = FALSE) {
+  set.seed(seed)
+  rows <- vector("list", n)
+
+  for (i in seq_len(n)) {
+    age <- round(stats::rnorm(1, 65, 10))
+    L1  <- stats::rnorm(1, 0, 1)
+    pat <- list()
+
+    for (t in seq_len(tmax)) {
+      lp  <- c(-0.5 - 0.8 * L1,
+                0.2 + 0.3 * L1,
+                0.8 + 0.5 * L1,
+                1.0 + 0.7 * L1)
+      p_A   <- exp(lp - max(lp)); p_A <- p_A / sum(p_A)
+      A_nat <- as.integer(sample.int(4L, 1L, prob = p_A) - 1L)
+      A     <- if (apply_policy && L1 > 0.5 && A_nat < 2L) 2L else A_nat
+
+      p_die <- stats::plogis(-4.5 + 0.5 * L1 - 0.08 * age / 10 - 0.4 * A)
+      p_dc  <- stats::plogis(-2.0 + 0.6 * A  - 0.3 * L1)
+      u     <- stats::runif(1)
+
+      if (u < p_die) {
+        alive <- 0L; in_state <- 0L
+      } else if (u < p_die + p_dc) {
+        alive <- 1L; in_state <- 0L
+      } else {
+        alive <- 1L; in_state <- 1L
+      }
+
+      py <- if (!alive) stats::plogis(-3.0 + 0.1 * L1)
+            else        stats::plogis(-0.5 + 0.7 * A - 0.4 * L1 - 0.05 * age / 10)
+      Y  <- stats::rbinom(1, 1, py)
+
+      pat[[length(pat) + 1L]] <- data.frame(
+        id = i, time = t, age = age, L1 = L1,
+        A = A, alive = alive, in_state = in_state, Y = Y
+      )
+
+      if (in_state == 0L) break
+      if (t < tmax)
+        L1 <- L1 + stats::rnorm(1, -0.3 * A, 0.4)
+    }
+
+    rows[[i]] <- do.call(rbind, pat)
+  }
+
+  out <- do.call(rbind, rows)
+  out$A <- factor(out$A, levels = 0:3, ordered = TRUE)
+  out
 }

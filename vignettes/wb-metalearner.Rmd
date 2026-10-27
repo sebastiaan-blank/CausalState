@@ -13,7 +13,7 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE, purl = FALS
 
 ## Overview
 
-By default, `density_ratio()` estimates each instantaneous density ratio
+By default, `fit_g()` estimates each instantaneous density ratio
 r_t(h, a) = dP~(A_t = a | H_t = h) / dP(A_t = a | H_t = h) via a binary
 classification approach: a SuperLearner is trained to distinguish natural-course
 from shifted-course observations, and the ratio is recovered as
@@ -109,10 +109,10 @@ analogue to clip against.
 Clipping in the WB pathway is instead handled by `dr_floor` inside
 `method.WB_dr()`.  The `dr_floor` value is set when the metalearner is
 constructed; to use a non-default floor, pass a custom `method.WB_dr()` call
-via the `method` argument of `density_ratio()`:
+via the `method` argument of `fit_g()`:
 
 ```{r wb-call}
-wr <- density_ratio(
+wr <- fit_g(
   ...,
   dr_sl  = TRUE
 )
@@ -200,7 +200,7 @@ library(SuperLearner)
 # Assume sl_g_dr is a character vector of DR-returning wrapper names
 # registered in the current R session.
 
-wr_wb <- density_ratio(
+wr_wb <- fit_g(
   df              = patient_data,
   a_names         = "A",
   tmax            = 7L,

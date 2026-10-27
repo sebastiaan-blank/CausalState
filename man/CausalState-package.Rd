@@ -42,7 +42,7 @@ collapse to \code{mean(Y)} and therefore provides a genuine calibration check on
 the Q models after fluctuation.
 }
 
-\section{Density ratio estimation - \code{\link[=density_ratio]{density_ratio()}}}{
+\section{Density ratio estimation - \code{\link[=fit_g]{fit_g()}}}{
 
 Estimates the density ratios needed by both estimators via a flexible
 classification-based approach.  An alternative metalearner based on
@@ -69,9 +69,11 @@ subset -- those subjects who leave the state at each time point.}
 the terminal time point)}{Expected outcome conditional on remaining in
 state.  This is the component propagated backward through the
 Q-recursion.}
-\item{\code{Q_exit} (\code{sl_y})}{Expected outcome conditional on exiting.  In
-most applications this is not estimated but instead fixed to a constant
-for each exit type (death, discharge) via \code{\link[=absorb_rule]{absorb_rule()}}.}
+\item{\code{Q_exit} (\code{sl_y})}{Expected outcome conditional on exiting.  The
+death branch is typically fixed to a known constant (e.g. \code{1} for
+mortality, \code{0} for days-alive outcomes) via \code{\link[=absorb_rule]{absorb_rule()}}.  The
+discharge branch is often stochastic (post-discharge death,
+readmission, ward days) and should be modelled by \code{sl_y}.}
 }
 
 \strong{Probabilistic mixture.}  The backward Q-recursion assembles the expected
@@ -139,7 +141,7 @@ column.
 }
 
 \references{
-Diaz I, Williams N, Hoffman KL, Schenck EJ (2021). Nonparametric Causal
+Diaz I, Williams N, Hoffman KL, Schenck EJ (2023). Nonparametric Causal
 Effects Based on Longitudinal Modified Treatment Policies. \emph{JASA}
 118(542):846-857. doi:10.1080/01621459.2021.1955691.
 

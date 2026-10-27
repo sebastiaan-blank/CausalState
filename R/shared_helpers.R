@@ -509,7 +509,8 @@ build_density_ratios <- function(weights_dt, id, time, ids, tmax, row_index = NU
     }
   }
 
-  bad <- !is.finite(dens) | dens <= 0
+  # Zero is valid when the policy assigns no mass to an observed dose.
+  bad <- !is.finite(dens) | dens < 0
   dens[bad] <- NA_real_
 
   if (!is.null(row_index)) {
@@ -563,7 +564,7 @@ make_design <- function(D, rows, cols) {
 
   out <- D[rows, ..cols]
   data.table::setDF(out)  # by reference; avoids as.data.frame copy
-  out
+  encode_treatment_design(out, attr(D, "cs_treatment_levels"))
 }
 
 
@@ -658,11 +659,14 @@ apply_absorb_branch <- function(q_vec, D_block, t, branch, scale_info, absorb_ru
 #'   two as unevaluated expressions via [base::substitute()]).
 #'
 #' @examples
-#' # Force outcome to 0 for patients who die at any time
+#' # Mortality outcome: fix Y = 1 for in-ICU death; discharge branch is modelled
+#' absorb_rule(alive == 0, value = 1, branch = "death")
+#'
+#' # Days alive and out of hospital (DAOH-30): fix Y = 0 for in-ICU death
 #' absorb_rule(alive == 0, value = 0, branch = "death")
 #'
-#' # Force outcome to 1 for discharged patients when t >= 5
-#' absorb_rule(in_state == 0 & t >= 5, value = 1, branch = "dc")
+#' # ICU-free days (known at discharge if post-discharge outcomes ignored)
+#' absorb_rule(in_state == 0, value = 30 - t, branch = "dc")
 #'
 #' @export
 absorb_rule <- function(cond, value, branch = c("any", "death", "dc")) {
@@ -811,12 +815,13 @@ rep_const <- function(p, n) rep(as.numeric(p), n)
 patch_shifted_design <- function(X_nat, D_shifted_tt, rows, a_names, tt, k, t_min) {
   X_shf <- X_nat
   
-  affected <- intersect(a_names, names(X_nat))
-  
-  if (length(affected)) {
-    for (nm in affected) {
-      X_shf[[nm]] <- D_shifted_tt[[nm]][rows]
-    }
+  # Rebuild current-dose indicators after the policy has modified raw treatment.
+  # History predictors retain their observed values.
+  raw_cols <- intersect(a_names, names(D_shifted_tt))
+  if (length(raw_cols) && length(rows)) {
+    shifted <- as.data.frame(D_shifted_tt[rows, ..raw_cols])
+    shifted <- encode_treatment_design(shifted, attr(D_shifted_tt, "cs_treatment_levels"))
+    for (nm in intersect(names(shifted), names(X_nat))) X_shf[[nm]] <- shifted[[nm]]
   }
   
   X_shf
@@ -869,46 +874,14 @@ overwrite_policy_history_for_Q <- function(
   if (!length(rows_tt)) return(DT)
   
   block <- DT[rows_tt]
-  spec  <- policy_spec_fun(block, t, a_names)
-  if (is.null(spec) || !length(spec)) return(DT)
-  
-  ensure_double <- function(DT, a, vals) {
-    if (is.integer(DT[[a]]) && is.double(vals))
+  observed <- as.data.frame(block[, ..a_names])
+  shifted <- g_shift_values(observed, policy_spec_fun(block, t, a_names), t)
+  for (a in a_names) {
+    vals <- shifted[[a]]
+    if (!is.factor(DT[[a]]) && is.integer(DT[[a]]) && is.double(vals))
       data.table::set(DT, j = a, value = as.double(DT[[a]]))
+    data.table::set(DT, i = rows_tt, j = a, value = vals)
   }
-
-  if (is.data.frame(spec)) {
-    for (a in intersect(a_names, names(spec))) {
-      vals <- suppressWarnings(as.numeric(spec[[a]]))
-      ensure_double(DT, a, vals)
-      DT[rows_tt, (a) := vals]
-    }
-  } else {
-    for (a in intersect(names(spec), a_names)) {
-      s <- spec[[a]]
-      if (is.atomic(s) && is.numeric(s)) {
-        vals <- if (length(s) == 1L) rep(as.numeric(s), nrow(block)) else as.numeric(s)
-        ensure_double(DT, a, vals)
-        DT[rows_tt, (a) := vals]
-      } else if (is.list(s)) {
-        m <- if (!is.null(s$idx) && length(s$idx) == nrow(block)) as.logical(s$idx) else rep(TRUE, nrow(block))
-        m[is.na(m)] <- FALSE
-        if (!any(m)) next
-        val_any <- if (!is.null(s$value)) s$value else if (!is.null(s$mean)) s$mean else s$setto
-        vals <- if (length(val_any) == 1L) rep(as.numeric(val_any), nrow(block)) else as.numeric(val_any)
-        ensure_double(DT, a, vals)
-        idx  <- rows_tt[which(m)]
-        DT[idx, (a) := vals[m]]
-      }
-    }
-  }
-
-  for (a in intersect(a_names, names(DT))) {
-    if (any(!is.finite(DT[[a]][rows_tt])))
-      stop(sprintf("policy_spec_fun returned non-finite value(s) for '%s' at t=%d", a, t),
-           call. = FALSE)
-  }
-
   DT
 }
 

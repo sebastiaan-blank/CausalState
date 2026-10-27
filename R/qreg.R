@@ -73,7 +73,7 @@ make_subject_folds_qreg <- function(ids, v, cluster_by_id, seed) {
 #'   still be sufficient events across the pooled structure.  All built-in
 #'   examples use a minimum of 2,000 subjects.
 #'
-#' @seealso [sdr()], [itmle()], [density_ratio()]
+#' @seealso [sdr()], [itmle()], [fit_g()]
 #'
 #' @examples
 #' \donttest{
@@ -303,6 +303,8 @@ qreg <- function(
     no_lag_vars = no_lag_vars
   )
   D <- hist_out$DT
+  treatment_spec <- resolve_treatment_levels(D, a_names)
+  data.table::setattr(D, "cs_treatment_levels", treatment_spec)
 
   scale_info <- scale_y(D, y, outcome_family, y_bounds, bounds)
   is_binom   <- scale_info$is_binom
@@ -1012,6 +1014,9 @@ qreg <- function(
     settings = list(
       n              = length(ids),
       outcome_family = outcome_family,
+      treatment_levels = treatment_spec,
+      treatment_ordered = factor_treatment_ordered(D, treatment_spec),
+      treatment_encoding = if (length(treatment_spec)) "reference" else NULL,
       pool_g_death   = pool_g_death,
       pool_q_exit    = pool_q_exit,
       pool_time      = pool_time,

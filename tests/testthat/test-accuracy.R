@@ -7,7 +7,7 @@ skip_on_cran()
 
 # End-to-end accuracy tests against known Monte Carlo truths.
 #
-# Three synthetic DGPs with competing events (death / discharge):
+# Four synthetic DGPs with competing events (death / discharge):
 #
 #   1. Binary treatment (A ∈ {0,1}).
 #      Policy: threshold rule — A → max(A, I(L1 > 1)).
@@ -17,6 +17,9 @@ skip_on_cran()
 #
 #   3. Two treatments: binary A1 ∈ {0,1} and continuous A2 ≥ 0.
 #      Policy: threshold rule on A1; additive shift on A2.
+#
+#   4. Categorical treatment (A ∈ {0,1,2,3}).
+#      Policy: escalate to dose ≥ 2 when L1 > 0.5 (minimum-dose rule).
 #
 # For each DGP, E[Y(d)] is obtained by simulating n = 50,000 subjects under
 # the policy (Monte Carlo error < 0.002 for all scenarios).
@@ -51,60 +54,6 @@ check_accuracy <- function(res, truth, label) {
 # L2: binary covariate.
 # Policy: threshold rule — d(A, H) = max(A, I(L1 > 1)), always 0L or 1L.
 
-sim_bin <- function(n = 2000L, tmax = 5L, seed = 1L,
-                    apply_policy = FALSE) {
-  set.seed(seed)
-  rows <- vector("list", n)
-
-  for (i in seq_len(n)) {
-    age <- round(rnorm(1, 65, 10))
-    sex <- rbinom(1, 1, 0.5)
-    L1  <- rnorm(1, 0, 1)
-    L2  <- rbinom(1, 1, 0.4)
-    pat <- list()
-
-    for (t in seq_len(tmax)) {
-      p_A   <- plogis(0.5 * L1 - 0.3 + 0.2 * sex)
-      A_nat <- rbinom(1, 1, p_A)
-      A     <- if (apply_policy && L1 > 1.0) 1L else A_nat
-
-      p_die <- plogis(-4.0 + 0.3 * L1 - 0.1 * age / 10)
-      p_dc  <- plogis(-2.5 + 0.8 * A  - 0.2 * L2)
-      u     <- runif(1)
-
-      if (u < p_die) {
-        alive <- 0L; in_state <- 0L
-      } else if (u < p_die + p_dc) {
-        alive <- 1L; in_state <- 0L
-      } else {
-        alive <- 1L; in_state <- 1L
-      }
-
-      py <- if (!alive)     plogis(-3.0 + 0.1 * L1)
-            else if (!in_state) plogis(1.5 + 0.4 * A - 0.1 * age / 10 + 0.2 * L1)
-            else            plogis(-0.5 + 0.5 * A - 0.3 * L1 + 0.1 * L2)
-      Y <- rbinom(1, 1, py)
-
-      pat[[length(pat) + 1L]] <- data.frame(
-        id = i, time = t,
-        age = age, sex = sex,
-        L1 = L1, L2 = L2,
-        A = A, alive = alive, in_state = in_state, Y = Y
-      )
-
-      if (in_state == 0L) break
-      if (t < tmax) {
-        L1 <- L1 + rnorm(1, -0.2 * A, 0.3)
-        L2 <- rbinom(1, 1, plogis(0.5 * L2 + 0.3 * A - 0.5))
-      }
-    }
-
-    rows[[i]] <- do.call(rbind, pat)
-  }
-
-  do.call(rbind, rows)
-}
-
 # Policy: mandate bundle for all patients with L1 > 1.0.
 # Returns 0L or 1L — binary, no fractional treatment values.
 policy_bin <- function(D_block, t, a_names) {
@@ -118,12 +67,12 @@ df_mc_bin   <- sim_bin(n = 50000L, tmax = 5L, seed = 77L, apply_policy = TRUE)
 last_bin    <- df_mc_bin[!duplicated(df_mc_bin$id, fromLast = TRUE), ]
 truth_bin   <- mean(last_bin$Y)
 rm(df_mc_bin, last_bin)
-message(sprintf("[accuracy] truth_bin (n=500k): E[Y(d)] = %.4f", truth_bin))
+message(sprintf("[accuracy] truth_bin (n=50k): E[Y(d)] = %.4f", truth_bin))
 
 df_est_bin <- sim_bin(n = 2000L, tmax = 5L, seed = 42L)
 obs_mean_bin <- mean(df_est_bin[!duplicated(df_est_bin$id, fromLast = TRUE), "Y"])
 
-wr_bin <- density_ratio(
+wr_bin <- fit_g(
   df              = df_est_bin,
   a_names         = "A",
   tmax            = 5L,
@@ -256,55 +205,10 @@ test_that("qreg [binary A]: natural-course plug-in close to observed mean", {
 
 DOSE_SHIFT <- 0.3
 
-sim_cont <- function(n = 2000L, tmax = 5L, seed = 1L, dose_shift = 0) {
-  set.seed(seed)
-  rows <- vector("list", n)
-
-  for (i in seq_len(n)) {
-    age <- round(rnorm(1, 65, 10))
-    L1  <- rnorm(1, 0, 1)
-    pat <- list()
-
-    for (t in seq_len(tmax)) {
-      A_nat <- pmax(0, rnorm(1, 0.6 + 0.5 * L1, 0.3))
-      A     <- pmin(A_nat + dose_shift, 2.0)
-
-      p_die <- plogis(-4.5 + 0.5 * L1 - 0.08 * age / 10 - 0.5 * A)
-      p_dc  <- plogis(-2.0 + 0.5 * A  - 0.3 * L1)
-      u     <- runif(1)
-
-      if (u < p_die) {
-        alive <- 0L; in_state <- 0L
-      } else if (u < p_die + p_dc) {
-        alive <- 1L; in_state <- 0L
-      } else {
-        alive <- 1L; in_state <- 1L
-      }
-
-      py <- if (!alive)     plogis(-3.0 + 0.1 * L1)
-            else            plogis(0.5  + 0.9 * A  - 0.4 * L1 - 0.05 * age / 10)
-      Y <- rbinom(1, 1, py)
-
-      pat[[length(pat) + 1L]] <- data.frame(
-        id = i, time = t,
-        age = age, L1 = L1,
-        A = A, alive = alive, in_state = in_state, Y = Y
-      )
-
-      if (in_state == 0L) break
-      if (t < tmax)
-        L1 <- L1 + rnorm(1, -0.4 * A, 0.4)
-    }
-
-    rows[[i]] <- do.call(rbind, pat)
-  }
-
-  do.call(rbind, rows)
-}
-
 policy_cont <- function(D_block, t, a_names) {
   out <- D_block[, ..a_names, drop = FALSE]
-  out[[a_names[1]]] <- pmin(D_block[[a_names[1]]] + DOSE_SHIFT, 2.0)
+  a   <- D_block[[a_names[1]]]
+  out[[a_names[1]]] <- ifelse(a > 0, a + DOSE_SHIFT, 0)
   out
 }
 
@@ -312,11 +216,11 @@ df_mc_cont  <- sim_cont(n = 50000L, tmax = 5L, seed = 77L, dose_shift = DOSE_SHI
 last_cont   <- df_mc_cont[!duplicated(df_mc_cont$id, fromLast = TRUE), ]
 truth_cont  <- mean(last_cont$Y)
 rm(df_mc_cont, last_cont)
-message(sprintf("[accuracy] truth_cont (n=500k): E[Y(d)] = %.4f", truth_cont))
+message(sprintf("[accuracy] truth_cont (n=50k): E[Y(d)] = %.4f", truth_cont))
 
 df_est_cont <- sim_cont(n = 2000L, tmax = 5L, seed = 42L)
 
-wr_cont <- density_ratio(
+wr_cont <- fit_g(
   df              = df_est_cont,
   a_names         = "A",
   tmax            = 5L,
@@ -548,11 +452,11 @@ df_mc_two  <- sim_two(n = 50000L, tmax = 5L, seed = 77L, apply_policy = TRUE)
 last_two   <- df_mc_two[!duplicated(df_mc_two$id, fromLast = TRUE), ]
 truth_two  <- mean(last_two$Y)
 rm(df_mc_two, last_two)
-message(sprintf("[accuracy] truth_two (n=500k): E[Y(d)] = %.4f", truth_two))
+message(sprintf("[accuracy] truth_two (n=50k): E[Y(d)] = %.4f", truth_two))
 
 df_est_two <- sim_two(n = 2000L, tmax = 5L, seed = 42L)
 
-wr_two <- density_ratio(
+wr_two <- fit_g(
   df              = df_est_two,
   a_names         = c("A1", "A2"),
   tmax            = 5L,
@@ -628,4 +532,111 @@ test_that("itmle [binary + continuous A]: estimate within 3 SE of MC truth", {
     policy_spec_fun  = policy_two
   )
   check_accuracy(res, truth_two, "itmle [binary + continuous A]")
+})
+
+# ══════════════════════════════════════════════════════════════════════════════
+# DGP 4 — Categorical treatment (A ∈ {0,1,2,3})
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# L1: continuous covariate (higher = worse prognosis; drives dose selection).
+# A ∈ {0,1,2,3}: ordinal dose level (softmax natural treatment model).
+# Policy: escalate to dose ≥ 2 for patients with L1 > 0.5.
+#   d(A, H) = max(A, 2L) when L1 > 0.5, else A unchanged.
+# Ordinal propensity: sum natural dose probabilities over all policy preimages.
+
+policy_cat <- function(D_block, t, a_names) {
+  out <- D_block[, ..a_names, drop = FALSE]
+  a   <- D_block[[a_names[1]]]
+  l1  <- D_block[["L1"]]
+  rank <- as.integer(a)
+  rank[l1 > 0.5] <- pmax(rank[l1 > 0.5], 3L)
+  out[[a_names[1]]] <- factor(levels(a)[rank], levels = levels(a), ordered = TRUE)
+  out
+}
+
+df_mc_cat  <- sim_cat(n = 50000L, tmax = 5L, seed = 77L, apply_policy = TRUE)
+last_cat   <- df_mc_cat[!duplicated(df_mc_cat$id, fromLast = TRUE), ]
+truth_cat  <- mean(last_cat$Y)
+rm(df_mc_cat, last_cat)
+message(sprintf("[accuracy] truth_cat (n=50k): E[Y(d)] = %.4f", truth_cat))
+
+df_est_cat <- sim_cat(n = 2000L, tmax = 5L, seed = 42L)
+
+wr_cat <- fit_g(
+  df              = df_est_cat,
+  a_names         = "A",
+  tmax            = 5L,
+  baseline        = "age",
+  tv_names        = "L1",
+  sl_g            = sl_fast,
+  method          = "propensity",
+  k               = 1L,
+  inner_v         = 2L,
+  v               = 2L,
+  seed            = 1L,
+  id              = "id",
+  time            = "time",
+  parallel        = FALSE,
+  policy_spec_fun = policy_cat
+)
+
+# ── sdr [categorical A] ───────────────────────────────────────────────────────
+
+test_that("sdr [categorical A]: estimate within 3 SE of MC truth", {
+  res <- sdr(
+    df              = df_est_cat,
+    weight_object   = wr_cat,
+    tmax            = 5L,
+    id              = "id",
+    time            = "time",
+    alive           = "alive",
+    in_state        = "in_state",
+    y               = "Y",
+    baseline        = "age",
+    tv_names        = "L1",
+    a_names         = "A",
+    sl_remain       = sl_fast,
+    sl_death        = sl_fast,
+    sl_recursive    = sl_fast,
+    sl_y            = sl_fast,
+    outcome_family  = "binomial",
+    k               = 1L,
+    inner_v         = 2L,
+    parallel        = FALSE,
+    seed            = 1L,
+    policy_spec_fun = policy_cat
+  )
+  check_accuracy(res, truth_cat, "sdr [categorical A]")
+})
+
+# ── itmle [categorical A] ─────────────────────────────────────────────────────
+
+test_that("itmle [categorical A]: estimate within 3 SE of MC truth", {
+  res <- itmle(
+    df               = df_est_cat,
+    weight_object    = wr_cat,
+    tmax             = 5L,
+    id               = "id",
+    time             = "time",
+    alive            = "alive",
+    in_state         = "in_state",
+    y                = "Y",
+    baseline         = "age",
+    tv_names         = "L1",
+    a_names          = "A",
+    sl_remain        = sl_fast,
+    sl_death         = sl_fast,
+    sl_recursive     = sl_fast,
+    sl_y             = sl_fast,
+    sl_tmle          = sl_tgt_glm,
+    outcome_family   = "binomial",
+    k                = 1L,
+    inner_v          = 2L,
+    v_target_itmle   = 2L,
+    v_sl_inner_itmle = 2L,
+    parallel         = FALSE,
+    seed             = 1L,
+    policy_spec_fun  = policy_cat
+  )
+  check_accuracy(res, truth_cat, "itmle [categorical A]")
 })

@@ -37,10 +37,9 @@ The estimators apply when:
 - Interest is in the **mean counterfactual outcome** under the MTP,
   estimated from observational or trial data.
 
-The practical limit on follow-up length is the number of patients still
-in the active state at each time point: as patients exit, the risk set
-shrinks and model fits become unstable. Cumulative density-ratio products
-also compound across time, so both considerations favour shorter episodes.
+The package is designed for **medium-horizon** episodes of 5–10 time
+points. Beyond roughly ten points, cumulative density-ratio products
+tend to collapse positivity regardless of estimator choice.
 
 ## Estimators
 
@@ -60,13 +59,34 @@ included as a weight-independent sensitivity check.
 
 ## Workflow
 
-    density_ratio()  ->  sdr() / itmle() / qreg()
+    fit_g()  ->  sdr() / itmle() / qreg()
 
-`density_ratio()` must run first. It fits per-time-point treatment
-classification models, computes the instantaneous density ratios r_t =
-dP~(A_t\|H_t) / dP(A_t\|H_t), and packages them with fold assignments
-that the downstream estimators inherit. Running it once and passing the
-result to multiple estimators is the intended pattern.
+`fit_g()` runs first for SDR and iTMLE. It fits treatment models at each
+time point (classification by default), computes the instantaneous
+density ratios r_t = dP~(A_t\|H_t) / dP(A_t\|H_t), and packages them
+with fold assignments that the downstream estimators inherit. Running it
+once and passing the result to multiple estimators is the intended
+pattern.
+
+Categorical treatment is declared in the data as a factor. For ordinal
+treatment, set the dose order explicitly:
+
+``` r
+patient_data$A <- factor(patient_data$A, levels = 0:3, ordered = TRUE)
+```
+
+`fit_g(method = "propensity", ...)` then estimates the ordinal dose
+probabilities using sequential binomial SuperLearners from `sl_g`.
+Classification remains the default and also supports ordinary factors.
+
+CausalState reads the factor levels automatically and gives every
+learner the same numeric reference indicators for treatment and its
+history, including after policy shifts. GLMs can estimate separate
+category effects. Policies receive the original factor column, with
+levels and ordering preserved. The levels and ordered status are saved
+in the `fit_g()` result and checked by `sdr()` and `itmle()`. `qreg()`
+reads its input factors directly. There is no separate levels argument;
+numeric binary and continuous treatments retain numeric coding.
 
 ## Quick example
 
@@ -75,17 +95,18 @@ library(CausalState)
 library(SuperLearner)
 
 # --- 1. Define the policy -------------------------------------------------
-# Soft upward shift: nudge treatment probability up by 0.3, capped at 1
-policy_up <- function(D_block, t, a_names) {
+# Threshold policy: treat everyone with L1 > 1.0
+policy_bin <- function(D_block, t, a_names) {
   out <- D_block[, ..a_names, drop = FALSE]
-  out[[a_names[1]]] <- pmin(D_block[[a_names[1]]] + 0.3, 1)
+  out[[a_names[1]]] <- pmax(D_block[[a_names[1]]],
+                             as.integer(D_block[["L1"]] > 1.0))
   out
 }
 
 # --- 2. Density ratios ----------------------------------------------------
 sl_lib <- c("SL.mean", "SL.glm")   # replace with richer library in practice
 
-wr <- density_ratio(
+wr <- fit_g(
   df              = patient_data,   # long-format data frame
   a_names         = "A",
   tmax            = 7L,
@@ -98,7 +119,7 @@ wr <- density_ratio(
   seed            = 1L,
   id              = "id",
   time            = "time",
-  policy_spec_fun = policy_up
+  policy_spec_fun = policy_bin
 )
 
 # --- 3a. SDR estimate -----------------------------------------------------
@@ -117,7 +138,7 @@ res_sdr <- sdr(
   outcome_family  = "binomial",
   k               = 5L, inner_v = 5L,
   seed            = 1L,
-  policy_spec_fun = policy_up
+  policy_spec_fun = policy_bin
 )
 
 cat(sprintf("SDR:   psi = %.3f  SE = %.3f  95%% CI [%.3f, %.3f]\n",
@@ -140,7 +161,7 @@ res_itmle <- itmle(
   outcome_family  = "binomial",
   k               = 5L, inner_v = 5L,
   seed            = 1L,
-  policy_spec_fun = policy_up
+  policy_spec_fun = policy_bin
 )
 
 cat(sprintf("iTMLE: psi = %.3f  SE = %.3f  95%% CI [%.3f, %.3f]\n",
@@ -153,9 +174,10 @@ ctr$RD; ctr$ci_RD
 
 ## Key design choices
 
-**Separate learner stacks per regression.** Each regression component
-(g, Q at each time point, the terminal outcome) accepts its own
-SuperLearner library, allowing independent tuning across the pipeline.
+**Asymmetric g/Q regularisation.** Treatment models (g) are tuned
+sharper for accurate density-ratio discrimination; outcome models (Q)
+are more heavily regularised to suppress recursion noise. This asymmetry
+is the primary tuning lever.
 
 **Uniform clipping.** Every SL prediction across the entire pipeline (g
 and Q models at every time point) is clipped to \[bounds, 1-bounds\]
@@ -163,8 +185,8 @@ using the same `bounds` parameter (default 1e-5). The only exception is
 the Wu-Benkeser direct density-ratio metalearner, which clips in
 density-ratio space via `dr_floor` – see `vignette("wb-metalearner")`.
 
-**Weight reuse.** `density_ratio()` is designed to be run once and
-shared across `sdr()`, `itmle()`, and `qreg()`. Trimming is applied
+**Weight reuse.** `fit_g()` is designed to be run once and shared across
+`sdr()`, `itmle()`, and competing-event variants. Trimming is applied
 globally at consumption time, so all estimators that share a weight
 object operate on identically trimmed weights and produce directly
 comparable estimates.
@@ -186,42 +208,27 @@ remotes::install_github("sebastiaan-blank/CausalState")
 
 See `vignette("getting-started")` for a complete worked example with a
 simulated ICU dataset, including data structure, policy definition,
-SuperLearner library choices, and diagnostics.
+SuperLearner library choices, diagnostics, and a competing-event
+analysis.
 
 ## Citation
 
     Blank S (2026). CausalState: SDR and iTMLE for State-Aware Longitudinal
-    Modified Treatment Policies. R package version 0.9.0.
+    Modified Treatment Policies. R package version 0.10.2.
     https://github.com/sebastiaan-blank/CausalState
 
 ## References
 
-Diaz I, Williams N, Hoffman KL, Schenck EJ (2021). Nonparametric Causal
+Diaz I, Williams N, Hoffman KL, Schenck EJ (2023). Nonparametric Causal
 Effects Based on Longitudinal Modified Treatment Policies. *JASA*
-118(542):846-857. doi:10.1080/01621459.2021.1955691.
+118(542):846-857.
 
 Luedtke AR, Sofrygin O, van der Laan MJ, Carone M (2017). Sequential
 Double Robustness in Right-Censored Longitudinal Models.
 arXiv:1705.02459.
 
-Rotnitzky A, Robins J, Babino L (2017). On the multiply robust estimation
-of the mean of the g-functional. arXiv:1705.08582.
-
-Wu C, Benkeser D (2024). Nonparametric Efficient Estimation of Marginal
-Structural Models using Targeted Machine Learning. arXiv:2408.10847.
-
 Williams NT, Diaz I (2023). lmtp: An R package for estimating the causal
 effects of modified treatment policies. *Observational Studies*.
-
-Bang H, Robins JM (2005). Doubly robust estimation in missing data and
-causal inference models. *Biometrics* 61(4):962-973.
-
-Haneuse S, Rotnitzky A (2013). Estimation of the effect of interventions
-that modify the received treatment. *Statistics in Medicine*
-32(30):5260-5277.
-
-Diaz Munoz I, van der Laan MJ (2012). Population intervention causal
-effects based on stochastic interventions. *Biometrics* 68(2):541-549.
 
 ## License
 

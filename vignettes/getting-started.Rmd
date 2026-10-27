@@ -42,10 +42,10 @@ included as a sensitivity check when density-ratio weights are extreme.
 The workflow is always:
 
 ```
-density_ratio()  →  sdr() / itmle() / qreg()
+fit_g()  →  sdr() / itmle() / qreg()
 ```
 
-`density_ratio()` must be run first; all downstream estimators inherit its
+`fit_g()` must be run first; all downstream estimators inherit its
 fold structure and weights.
 
 ---
@@ -62,7 +62,7 @@ subject carries their transition outcome.
 | `time` | integer 1, 2, … | Time index |
 | `alive` | 0 / 1 | 1 = alive at end of period |
 | `in_state` | 0 / 1 | 1 = still in active state (e.g. ICU) |
-| treatment | numeric | One or more treatment variables (`a_names`) |
+| treatment | numeric or factor | Numeric binary/continuous; factor categorical; ordered factor ordinal (`a_names`) |
 | outcome | numeric | Outcome variable (`y`) |
 | covariates | numeric | Baseline and time-varying covariates |
 
@@ -72,48 +72,11 @@ discharge, `alive = 0` for death). Subjects still in the active state at
 
 ### Simulated example data
 
-The DGP below generates a simple ICU panel with binary treatment and a binary
-outcome. Copy it directly or adapt it for your own simulation studies.
+`sim_bin()` generates an ICU panel with binary treatment and competing exit
+events (death vs discharge). The same DGP is used in the package accuracy tests.
 
 ```{r sim-panel}
-sim_panel <- function(n = 500L, tmax = 4L, seed = 42L) {
-  set.seed(seed)
-  rows <- vector("list", n)
-  for (i in seq_len(n)) {
-    age <- round(rnorm(1, 65, 10))
-    sex <- rbinom(1, 1, 0.5)
-    L1  <- rnorm(1, 0, 1)
-    L2  <- rbinom(1, 1, 0.4)
-    pat <- list()
-    for (t in seq_len(tmax)) {
-      A     <- rbinom(1, 1, plogis(0.3 * L1 - 0.4 + 0.2 * sex))
-      p_die <- plogis(-4.0 + 0.3 * L1 - 0.1 * age / 10)
-      p_dc  <- plogis(-2.5 + 0.5 * A  - 0.2 * L2)
-      u     <- runif(1)
-      if      (u < p_die)        { alive <- 0L; in_state <- 0L }
-      else if (u < p_die + p_dc) { alive <- 1L; in_state <- 0L }
-      else                       { alive <- 1L; in_state <- 1L }
-      py <- if (!alive)      plogis(-3.0 + 0.1 * L1)
-            else if (!in_state) plogis(1.5 + 0.2 * L1 - 0.1 * age / 10 + 0.3 * A)
-            else             plogis(-0.5 + 0.4 * A - 0.2 * L1 + 0.1 * L2)
-      Y <- rbinom(1, 1, py)
-      pat[[length(pat) + 1L]] <- data.frame(
-        id = i, time = t, age = age, sex = sex,
-        alive = alive, in_state = in_state,
-        L1 = L1, L2 = L2, A = A, Y = Y
-      )
-      if (in_state == 0L) break
-      if (t < tmax) {
-        L1 <- L1 + rnorm(1, -0.1 * A, 0.3)
-        L2 <- rbinom(1, 1, plogis(0.5 * L2 + 0.3 * A - 0.5))
-      }
-    }
-    rows[[i]] <- do.call(rbind, pat)
-  }
-  do.call(rbind, rows)
-}
-
-df <- sim_panel(n = 2000L, tmax = 5L, seed = 1L)
+df <- sim_bin(n = 2000L, tmax = 5L, seed = 1L)
 head(df)
 ```
 
@@ -122,13 +85,15 @@ head(df)
 ## Step 1 — Define a policy
 
 A policy is a function `(D_block, t, a_names)` that returns a `data.table`
-with the shifted treatment values for all subjects at time `t`. Here we apply
-a soft upward shift: increase treatment probability by 0.3, capped at 1.
+with the shifted treatment values for all subjects at time `t`. Here we use a
+threshold rule: treat everyone with biomarker `L1 > 1.0` (mandate bundle if
+not already on it).
 
 ```{r policy}
-policy_up <- function(D_block, t, a_names) {
+policy_bin <- function(D_block, t, a_names) {
   out <- D_block[, ..a_names, drop = FALSE]
-  out[[a_names[1]]] <- pmin(D_block[[a_names[1]]] + 0.3, 1)
+  out[[a_names[1]]] <- pmax(D_block[[a_names[1]]],
+                             as.integer(D_block[["L1"]] > 1.0))
   out
 }
 ```
@@ -137,16 +102,19 @@ policy_up <- function(D_block, t, a_names) {
 
 ## Step 2 — Density ratios
 
-`density_ratio()` fits per-time-point treatment models and returns the
+`fit_g()` fits per-time-point treatment models and returns the
 instantaneous ratio $r_t = d\tilde{P}(A_t \mid H_t) / dP(A_t \mid H_t)$
-comparing the MTP to the natural course.
+comparing the MTP to the natural course.  The default `method = "classification"`
+stacks natural and shifted rows and recovers the ratio as classifier odds; use
+`method = "propensity"` for a single binary (0/1) or ordered-factor treatment
+when you prefer a direct propensity-score formulation.
 
 ```{r density-ratio}
 # For real analyses replace with a richer library:
 # e.g. c("SL.glm", "SL.earth", "SL.xgboost", "SL.dbarts")
 sl_lib <- c("SL.mean", "SL.glm")
 
-wr <- density_ratio(
+wr <- fit_g(
   df              = df,
   a_names         = "A",
   tmax            = 5L,
@@ -159,7 +127,7 @@ wr <- density_ratio(
   seed            = 1L,
   id              = "id",
   time            = "time",
-  policy_spec_fun = policy_up
+  policy_spec_fun = policy_bin
 )
 ```
 
@@ -169,7 +137,7 @@ wr <- density_ratio(
 
 **Bypass for identical natural and shifted treatment.** At any time point
 where the policy produces no shift for any subject (natural treatment =
-shifted treatment in every row), `density_ratio()` skips model fitting
+shifted treatment in every row), `fit_g()` skips model fitting
 entirely and fills $r_t = 1$ for all subjects at that time. This covers
 policies with a finite intervention window: time points outside the window
 are filled with 1 automatically.
@@ -178,7 +146,7 @@ are filled with 1 automatically.
 
 **Intervention window shorter than `tmax`.** A common pattern is an MTP
 that intervenes only during times 1 to $x < \texttt{tmax}$ (e.g. treatment
-is feasible only in the first few ICU days). `density_ratio()` is called
+is feasible only in the first few ICU days). `fit_g()` is called
 with this `tmax`, fits models only where the shift is non-trivial, and fills
 $r_t = 1$ outside the intervention window. The downstream estimators
 `sdr()` and `itmle()` are still called with the full `tmax`:
@@ -212,7 +180,7 @@ minimises a density-ratio loss directly on the simplex.
 **This requires custom SuperLearner wrappers that return density ratios
 directly, not class probabilities.** The package does not export such wrappers
 because the right design choices (learner type, regularisation, bandwidth) are
-analysis-specific. The `density_ratio()` help page documents the interface a
+analysis-specific. The `fit_g()` help page documents the interface a
 custom wrapper must satisfy.
 
 ---
@@ -240,21 +208,20 @@ res_sdr <- sdr(
   k               = 1L,
   inner_v         = 5L,
   seed            = 1L,
-  policy_spec_fun = policy_up
+  policy_spec_fun = policy_bin
 )
 
 cat(sprintf(
-  "SDR  psi = %.3f  (natural = %.3f)  RD = %.3f  SE = %.3f  95%% CI [%.3f, %.3f]\n",
-  res_sdr$psi, res_sdr$psi_nat, res_sdr$rd, res_sdr$se,
-  res_sdr$psi - 1.96 * res_sdr$se,
-  res_sdr$psi + 1.96 * res_sdr$se
+  "SDR  psi = %.3f  (natural = %.3f)  SE = %.3f  95%% CI [%.3f, %.3f]\n",
+  res_sdr$psi, res_sdr$decomposition$psi_plugin_nat, res_sdr$se,
+  res_sdr$ci[1], res_sdr$ci[2]
 ))
 ```
 
-The return list contains `psi` (point estimate under MTP), `psi_nat` /
-`psi_shf` (plug-in estimates under natural course and MTP), `rd` (risk
-difference `psi_shf − psi_nat`), `se` (from the efficient influence curve),
-`ic` (per-subject influence curve values), `sl_summary`, and `fold_diag`.
+The return list contains `psi` (point estimate under MTP), `se` (from the
+efficient influence curve), `ci`, `ic_df` (per-subject IC values),
+`predictions` (`$natural`, `$shifted` Q-matrix), `decomposition`
+(`$psi_plugin_nat`, `$psi_plugin_shf`), and `diagnostics`.
 
 ---
 
@@ -299,15 +266,14 @@ res_itmle <- itmle(
 )
 
 cat(sprintf(
-  "iTMLE  psi = %.3f  SE = %.3f  95%% CI [%.3f, %.3f]  targeting gap = %.2e\n",
+  "iTMLE  psi = %.3f  SE = %.3f  95%% CI [%.3f, %.3f]\n",
   res_itmle$psi, res_itmle$se,
-  res_itmle$ci[1], res_itmle$ci[2],
-  res_itmle$targeting_gap
+  res_itmle$ci[1], res_itmle$ci[2]
 ))
 ```
 
-`targeting_gap` (mean EIF after targeting) should be near zero; a large value
-indicates the targeting step did not converge.
+`diagnostics$target_cal` tracks the mean EIF and fluctuation parameter per
+targeting iteration; values near zero confirm the targeting step converged.
 
 ---
 
@@ -330,7 +296,6 @@ underestimates uncertainty).
 ```{r qreg}
 res_qreg <- qreg(
   df              = df,
-  weight_object   = wr,
   tmax            = 5L,
   id              = "id",
   time            = "time",
@@ -348,12 +313,12 @@ res_qreg <- qreg(
   k               = 1L,
   inner_v         = 5L,
   seed            = 1L,
-  policy_spec_fun = policy_up
+  policy_spec_fun = policy_bin
 )
 
 cat(sprintf(
-  "qreg  estimate = %.3f  SE (naive) = %.3f  SE (EIF) = %.3f\n",
-  res_qreg$estimate, res_qreg$se_naive, res_qreg$se_eif
+  "qreg  estimate = %.3f  SE (naive) = %.3f\n",
+  res_qreg$psi, res_qreg$decomposition$se_naive
 ))
 ```
 
@@ -363,23 +328,23 @@ cat(sprintf(
 
 All estimators return diagnostic objects alongside the point estimate.
 
-### SuperLearner weights — `sl_summary`
+### SuperLearner weights — `diagnostics$sl_summary`
 
 A `data.table` of ensemble weights per fold, time point, and model component
 (`g_remain`, `g_death_exit`, `Q_exit`, `Q_rem`). Check that no single learner
 dominates unexpectedly and that weights are stable across folds.
 
 ```{r sl-summary}
-head(res_sdr$sl_summary)
+head(res_sdr$diagnostics$sl_summary)
 ```
 
-### Per-fold summaries — `fold_diag`
+### Per-fold summaries — `diagnostics$recursion_diag`
 
 Counts and mean Q predictions per fold and time point. Useful for spotting
 time points with very few at-risk subjects, which can destabilise model fits.
 
 ```{r fold-diag}
-res_sdr$fold_diag
+res_sdr$diagnostics$recursion_diag
 ```
 
 ### Branch calibration — `diagnostics$branch_cal` (SDR / qreg)
@@ -392,15 +357,14 @@ training–validation gap signals overfitting.
 head(res_sdr$diagnostics$branch_cal)
 ```
 
-### Targeting diagnostics — `target_diag`, `targeting_gap` (iTMLE only)
+### Targeting diagnostics — `diagnostics$target_cal` (iTMLE only)
 
-`target_diag` tracks the mean EIF and the fluctuation parameter $\epsilon$
-across targeting iterations. `targeting_gap` summarises convergence — values
-near zero confirm the targeting step has solved the efficient score equation.
+Tracks the mean EIF and the fluctuation parameter $\epsilon$ across targeting
+iterations. Values near zero confirm the targeting step has solved the
+efficient score equation.
 
 ```{r target-diag}
-res_itmle$targeting_gap
-head(res_itmle$target_diag)
+head(res_itmle$diagnostics$target_cal)
 ```
 
 ### Density-ratio ESS
@@ -412,6 +376,228 @@ practical failure mode of density-ratio-based estimators and will inflate
 standard errors even when the point estimate looks stable.
 
 ---
+
+## Exit states and absorption
+
+Patients leave the active state at every time point — in ICU cohorts typically
+50–80% before the treatment window ends. Treating exit as censoring targets a
+counterfactual world without discharge and cannot form composite outcomes that
+combine death and discharge. `CausalState` treats each exit as a branch in the
+backward recursion; `absorb_rule()` fixes the outcome in branches where it is
+known rather than estimating it with `sl_y`.
+
+This is the feature that distinguishes `CausalState` from `lmtp`: exit
+outcomes can be deterministic (known at exit time) or stochastic (modelled),
+per branch and per use case.
+
+### Mortality (binary outcome)
+
+In-ICU death fixes the outcome to 1. Discharge is stochastic — patients may
+die post-discharge — so the discharge branch is modelled by `sl_y`.
+
+```{r absorb-mort}
+df_mort <- sim_bin(n = 2000L, tmax = 5L, seed = 1L, outcome = "mort")
+
+res_mort <- sdr(
+  df              = df_mort,
+  weight_object   = wr,       # fit_g() run with the same df
+  tmax            = 5L,
+  id = "id", time = "time", alive = "alive", in_state = "in_state",
+  y               = "Y",
+  baseline        = c("age", "sex"),
+  tv_names        = c("L1", "L2"),
+  a_names         = "A",
+  sl_remain       = sl_lib, sl_death = sl_lib,
+  sl_recursive    = sl_lib, sl_y    = sl_lib,
+  outcome_family  = "binomial",
+  k = 1L, inner_v = 5L, seed = 1L,
+  policy_spec_fun = policy_bin,
+  absorb          = list(
+    absorb_rule(alive == 0, value = 1, branch = "death")
+  )
+)
+```
+
+### Days alive and out of hospital to day 30 (DAOH-30)
+
+In-ICU death gives 0 days. Discharge is stochastic (post-discharge death
+or prolonged ward stay reduce days). Use `outcome_family = "gaussian"` and
+`y_bounds = c(0, 30)` so the internal `[0,1]` scaling uses the correct range.
+
+```{r absorb-daoh}
+df_daoh <- sim_bin(n = 2000L, tmax = 5L, seed = 1L, outcome = "daoh")
+
+res_daoh <- sdr(
+  df              = df_daoh,
+  weight_object   = wr,
+  tmax            = 5L,
+  id = "id", time = "time", alive = "alive", in_state = "in_state",
+  y               = "Y",
+  baseline        = c("age", "sex"),
+  tv_names        = c("L1", "L2"),
+  a_names         = "A",
+  sl_remain       = sl_lib, sl_death = sl_lib,
+  sl_recursive    = sl_lib, sl_y    = sl_lib,
+  outcome_family  = "gaussian",
+  y_bounds        = c(0, 30),
+  k = 1L, inner_v = 5L, seed = 1L,
+  policy_spec_fun = policy_bin,
+  absorb          = list(
+    absorb_rule(alive == 0, value = 0, branch = "death")
+  )
+)
+```
+
+### ICU-free days (deterministic discharge branch)
+
+If post-discharge outcomes are excluded by design, the discharge outcome is
+known exactly: `30 - t` days. Both branches can be absorbed, leaving `sl_y`
+unused.
+
+```{r absorb-icufd}
+res_icufd <- sdr(
+  ...,
+  y_bounds        = c(0, 30),
+  outcome_family  = "gaussian",
+  absorb          = list(
+    absorb_rule(alive == 0,    value = 0,      branch = "death"),
+    absorb_rule(in_state == 0, value = 30 - t, branch = "dc")
+  )
+)
+```
+
+For the penalised definition where post-discharge death counts as 0 days,
+remove the `"dc"` rule and let `sl_y` model the discharge branch.
+
+---
+
+## Categorical (ordinal) treatment
+
+Categorical treatments must be supplied as **factors**. Use an **ordered
+factor** for ordinal treatment, declaring its level order explicitly.
+There is no separate `treatment_levels` argument.
+
+`sim_cat()` returns a panel with an ordered four-level treatment:
+0 = none, 1 = low, 2 = medium, 3 = high.
+
+```{r sim-cat}
+df_cat <- sim_cat(n = 2000L, tmax = 5L, seed = 1L)
+levels(df_cat$A)
+is.ordered(df_cat$A)
+```
+
+For your own data, declare the treatment before fitting:
+
+```{r factor-treatment, eval=FALSE}
+patient_data$A <- factor(patient_data$A, levels = 0:3, ordered = TRUE)
+# Named categories work as well:
+patient_data$A <- factor(
+  patient_data$A, levels = c("none", "low", "medium", "high"), ordered = TRUE
+)
+```
+
+Numeric columns retain numeric coding; CausalState does not guess whether
+an integer-valued treatment is categorical. Use ordinary factors for
+unordered categories with classification density-ratio estimation.
+
+Policies receive the factor column itself. The following policy escalates
+patients with high acuity (`L1 > 0.5`) to at least the third dose level.
+The category indices are used only to implement the declared order;
+returned values use the original category labels:
+
+```{r policy-cat}
+policy_cat <- function(D_block, t, a_names) {
+  out <- D_block[, ..a_names, drop = FALSE]
+  a <- D_block[[a_names[1]]]
+  rank <- as.integer(a)
+  eligible <- D_block[["L1"]] > 0.5
+  rank[eligible] <- pmax(rank[eligible], 3L)
+  out[[a_names[1]]] <- factor(
+    levels(a)[rank], levels = levels(a), ordered = is.ordered(a)
+  )
+  out
+}
+```
+
+A policy can also return category labels, for example `list(A = "2")`
+for a fixed assignment to the level labelled `"2"`. CausalState restores
+the input factor's complete level set and ordered status. Unknown
+categories are rejected. Numeric outputs for a factor are matched to
+the actual category labels; they are never treated as internal factor codes.
+
+Use `method = "propensity"` for direct ordinal propensity estimation:
+
+```{r fit-g-cat}
+wr_cat <- fit_g(
+  df = df_cat, a_names = "A", tmax = 5L,
+  baseline = "age", tv_names = "L1",
+  sl_g = sl_lib, method = "propensity",
+  k = 1L, inner_v = 5L, v = 5L, seed = 1L,
+  id = "id", time = "time", policy_spec_fun = policy_cat
+)
+```
+
+The treatment model fits binomial SuperLearners for
+\(P(A > a_j \mid A \ge a_j,H)\), using the declared factor order.
+These continuation probabilities give a coherent probability for each dose
+without a proportional-odds assumption.
+
+The policy distribution sums all source categories that map to a
+destination:
+\(g^*(a\mid h) = \sum_b I\{d(b,h)=a\}g(b\mid h)\).
+For an eligible patient, the minimum-dose rule gives dose 2 probability
+`g(0|H) + g(1|H) + g(2|H)`; doses 0 and 1 have zero policy probability.
+Many-to-one rules work directly, with no inverse policy required.
+
+Ordinal propensity supports one ordered factor and deterministic
+category assignments. The policy must depend on current treatment and
+pre-treatment history and must also work at hypothetical category values.
+Each declared category needs training observations in every outer fold;
+upper-dose risk sets must meet the learners' sample-size and event
+requirements. Numeric binary 0/1 propensity keeps its existing stochastic
+policy interface.
+
+To compare methods, refit the same factor data with
+`method = "classification"`. Neither method is uniformly preferable:
+classification models the policy ratio directly; ordinal propensity
+models the category distribution and applies the policy mapping exactly.
+
+Every learner receives the same numeric reference indicators for factor
+treatments: three columns for four levels, with the first level as
+reference. The same coding applies to current and lagged treatment,
+transition and Q models, and iTMLE targeting history. Policy application
+rebuilds current-category indicators and preserves observed history.
+Unused factor levels retain their indicator columns in fitting subsets.
+
+This permits separate category effects in GLMs without requiring equal
+increments per dose unit. It does not impose a monotone response or
+automatically add treatment-history interactions. Custom wrappers receive
+already encoded treatment predictors; other categorical covariates remain
+the wrappers' responsibility.
+
+Factor levels and ordered status are recorded in
+`wr_cat$settings$treatment_levels` and `wr_cat$settings$treatment_ordered`.
+Pass the complete `wr_cat` object to `sdr()` or `itmle()`, together with
+the same factor data, to check this schema automatically. `qreg()` infers
+its coding directly from its input factors. No downstream levels argument
+is needed, including when passing only a weights table.
+
+For multiple treatments with classification, make each categorical
+treatment a factor and leave continuous treatments numeric.
+
+```{r sdr-cat}
+res_sdr_cat <- sdr(
+  df = df_cat, weight_object = wr_cat, tmax = 5L,
+  id = "id", time = "time", alive = "alive", in_state = "in_state", y = "Y",
+  baseline = "age", tv_names = "L1", a_names = "A",
+  sl_remain = sl_lib, sl_death = sl_lib,
+  sl_recursive = sl_lib, sl_y = sl_lib,
+  outcome_family = "binomial", k = 1L, inner_v = 5L,
+  parallel = FALSE, seed = 1L, policy_spec_fun = policy_cat
+)
+res_sdr_cat$psi
+res_sdr_cat$se
+```
 
 ## Parallelism
 
@@ -425,7 +611,7 @@ on a single core out of the box.
    fold runs in a separate forked process.
 2. **Within-fold regression** (`reg_workers`): per-time-point regression
    tasks within each fold are distributed across worker processes.
-3. **Time-point level in `density_ratio()`** (`parallel_t = TRUE`,
+3. **Time-point level in `fit_g()`** (`parallel_t = TRUE`,
    `t_workers`): time points are parallelised independently of fold workers.
 
 Because forking is used, **this does not work on Windows**. On Linux and
@@ -462,7 +648,7 @@ Double Robustness in Right-Censored Longitudinal Models. arXiv:1705.02459.
 Rotnitzky A, Robins J, Babino L (2017). On the Multiply Robust Estimation of
 the Mean of the G-Functional. arXiv:1705.08582.
 
-Díaz I, Williams N, Hoffman KL, Schenck EJ (2021). Nonparametric Causal
+Díaz I, Williams N, Hoffman KL, Schenck EJ (2023). Nonparametric Causal
 Effects Based on Longitudinal Modified Treatment Policies. *JASA*
 118(542):846–857.
 

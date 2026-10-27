@@ -25,7 +25,7 @@ sim_multi(
 \item{n_continuous}{Number of continuous treatments (>= 0).}
 
 \item{apply_policy}{Logical. When \code{TRUE}, forces every binary treatment to
-\code{1} for subjects with \code{L1 > 1.0} and adds \code{+0.2} (capped at \code{2.0}) to
+\code{1} for subjects with \code{L1 > 1.0} and adds \code{+0.2} (only when \code{A > 0}) to
 every continuous treatment at each time-step -- used internally to
 generate Monte-Carlo truth for accuracy tests. Leave at \code{FALSE} for
 regular observed data.}

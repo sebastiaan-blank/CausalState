@@ -29,10 +29,13 @@ specific absorbing state. Pass one or more rules to the \code{absorb} argument
 of \code{\link[=sdr]{sdr()}} or \code{\link[=itmle]{itmle()}}.
 }
 \examples{
-# Force outcome to 0 for patients who die at any time
+# Mortality outcome: fix Y = 1 for in-ICU death; discharge branch is modelled
+absorb_rule(alive == 0, value = 1, branch = "death")
+
+# Days alive and out of hospital (DAOH-30): fix Y = 0 for in-ICU death
 absorb_rule(alive == 0, value = 0, branch = "death")
 
-# Force outcome to 1 for discharged patients when t >= 5
-absorb_rule(in_state == 0 & t >= 5, value = 1, branch = "dc")
+# ICU-free days (known at discharge if post-discharge outcomes ignored)
+absorb_rule(in_state == 0, value = 30 - t, branch = "dc")
 
 }

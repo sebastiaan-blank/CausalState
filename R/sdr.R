@@ -10,10 +10,10 @@
 #' doubly robust (2^\eqn{K}-robust): consistent whenever, at each time point
 #' t, either the treatment model \eqn{g_t} or the outcome model \eqn{Q_t} is
 #' consistently estimated.  Requires pre-computed density ratio weights from
-#' [density_ratio()].
+#' [fit_g()].
 #'
 #' @param df A `data.frame` in long format (one row per subject per time point).
-#' @param weight_object Output from [density_ratio()], or a `data.frame`
+#' @param weight_object Output from [fit_g()], or a `data.frame`
 #'   containing at least columns for subject id, time, `Rt_t`
 #'   (instantaneous density ratio), and `global_fold` (cross-fitting fold
 #'   assignment).
@@ -32,8 +32,12 @@
 #' @param a_names Character vector of treatment variable names. Can contain
 #'   one or more variables for joint multi-treatment policies (e.g.
 #'   `c("A1", "A2")`). The `policy_spec_fun` must return shifted values for
-#'   all variables in `a_names`, and `density_ratio()` must have been called
-#'   with the same `a_names` to produce compatible weights.
+#'   all variables in `a_names`, and `fit_g()` must have been called
+#'   with the same `a_names` to produce compatible weights. Categorical
+#'   treatments must remain factors with the same declared levels and ordered
+#'   status used in [fit_g()]. Reference indicators are created automatically
+#'   for current and lagged treatment and policy-shifted predictions. Policies
+#'   receive the original factor columns. Numeric treatment remains numeric.
 #' @param no_lag_vars Character vector of variables in `tv_names` or `a_names`
 #'   that should not be lagged (e.g. already-encoded temporal features).
 #' @param policy_names Character vector of column names holding the shifted
@@ -72,7 +76,7 @@
 #'   Default `1e-5`.
 #' @param trim Quantile used to cap instantaneous density ratios before they
 #'   are assembled into the cumulative weight matrix.  Trimming is applied to
-#'   the **full** `weights_dt` (all time points computed by [density_ratio()])
+#'   the **full** `weights_dt` (all time points computed by [fit_g()])
 #'   before any subsetting to the current `tmax`.  Consequently the trim
 #'   threshold is identical whether you call the estimator with `tmax = 2` or
 #'   `tmax = 14`, making results directly comparable across horizons that share
@@ -259,11 +263,11 @@
 #'   }
 #'   The fit also carries `sl_summary` (per-(fold, t, component) SuperLearner
 #'   coefficients) and `ic_df` (per-subject influence-curve values consumed
-#'   by [contrast()]). Weight diagnostics live on the [density_ratio()] object
+#'   by [contrast()]). Weight diagnostics live on the [fit_g()] object
 #'   itself -- see [weight_diagnostics()]. A worked workflow is in
 #'   `vignette("diagnostics")`.
 #'
-#' @seealso [density_ratio()], [itmle()], [contrast()], [absorb_rule()],
+#' @seealso [fit_g()], [itmle()], [contrast()], [absorb_rule()],
 #'   [weight_diagnostics()], [branch_cal_summary()]
 #'
 #' @examples
@@ -280,7 +284,7 @@
 #'   )
 #'   out
 #' }
-#' wr <- density_ratio(
+#' wr <- fit_g(
 #'   df = df, a_names = "A", tmax = 3L,
 #'   baseline = c("age", "sex"), tv_names = c("L1", "L2"),
 #'   sl_g = sl_lib, k = 1L, inner_v = 2L, v = 2L, seed = 1L,
@@ -304,7 +308,7 @@
 #'   out[[a_names[1]]] <- pmin(D_block[[a_names[1]]] + 0.2, 2.0)
 #'   out
 #' }
-#' wr_c <- density_ratio(
+#' wr_c <- fit_g(
 #'   df = df_c, a_names = "A", tmax = 3L,
 #'   baseline = "age", tv_names = "L1",
 #'   sl_g = sl_lib, k = 1L, inner_v = 2L, v = 2L, seed = 1L,
@@ -331,7 +335,7 @@
 #'   out[["A_c1"]] <- pmin(D_block[["A_c1"]] + 0.2, 2.0)
 #'   out
 #' }
-#' wr_m <- density_ratio(
+#' wr_m <- fit_g(
 #'   df = df_m, a_names = c("A_b1", "A_c1"), tmax = 3L,
 #'   baseline = c("age", "sex"), tv_names = "L1",
 #'   sl_g = sl_lib, k = 1L, inner_v = 2L, v = 2L, seed = 1L,
@@ -441,6 +445,8 @@ sdr <- function(
     no_lag_vars   = no_lag_vars
   )
   D <- hist_out$DT
+  treatment_spec <- resolve_treatment_levels(D, a_names, weight_object)
+  data.table::setattr(D, "cs_treatment_levels", treatment_spec)
   
   scale_info <- scale_y(D, y, outcome_family, y_bounds, bounds)
   is_binom   <- scale_info$is_binom
@@ -462,7 +468,7 @@ sdr <- function(
   w_tmax <- max(as.integer(weights_dt[[time]]), na.rm = TRUE)
   if (w_tmax < tmax) {
     stop(sprintf(
-      "weight_object covers time points up to %d but tmax = %d. Re-run density_ratio() with tmax >= %d.",
+      "weight_object covers time points up to %d but tmax = %d. Re-run fit_g() with tmax >= %d.",
       w_tmax, tmax, tmax
     ), call. = FALSE)
   }
@@ -1376,6 +1382,9 @@ sdr <- function(
       pool_time      = pool_time,
       trim           = trim,
       outcome_family = outcome_family,
+      treatment_levels = treatment_spec,
+      treatment_ordered = factor_treatment_ordered(D, treatment_spec),
+      treatment_encoding = if (length(treatment_spec)) "reference" else NULL,
       variable_info  = list(
         id           = id,
         time         = time,

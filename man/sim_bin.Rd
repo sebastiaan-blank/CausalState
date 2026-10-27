@@ -4,7 +4,13 @@
 \alias{sim_bin}
 \title{Simulated ICU panel with a single binary treatment}
 \usage{
-sim_bin(n = 2000L, tmax = 5L, seed = 1L, apply_policy = FALSE)
+sim_bin(
+  n = 2000L,
+  tmax = 5L,
+  seed = 1L,
+  apply_policy = FALSE,
+  outcome = c("Y", "mort", "daoh")
+)
 }
 \arguments{
 \item{n}{Number of subjects.}
@@ -16,6 +22,16 @@ sim_bin(n = 2000L, tmax = 5L, seed = 1L, apply_policy = FALSE)
 \item{apply_policy}{Logical. When \code{TRUE}, forces \code{A = 1} for subjects with
 \code{L1 > 1.0} at each time-step -- used internally to generate Monte-Carlo
 truth for accuracy tests. Leave at \code{FALSE} for regular observed data.}
+
+\item{outcome}{Character. Which outcome to generate:
+\itemize{
+\item \code{"Y"} (default) — generic binary outcome.
+\item \code{"mort"} — in-ICU mortality: \code{Y = 1} at death, \verb{Y = rbinom(post-discharge death probability)} at discharge.
+\item \code{"daoh"} — days alive and out of hospital to day 30: \code{Y = 0} at death;
+at discharge, \code{Y = max(0, 30 - t - ward_days)} if survived post-discharge,
+else \code{0}. \code{outcome_family = "gaussian"} and \code{y_bounds = c(0, 30)} in
+the estimator call.
+}}
 }
 \value{
 A \code{data.frame} with one row per subject-time. Columns:
@@ -27,5 +43,5 @@ treatment (\code{A}), competing exit events (death vs discharge), and a binary
 outcome (\code{Y}). Intended for vignettes, examples, and quick smoke tests.
 }
 \seealso{
-\code{\link[=sim_cont]{sim_cont()}}, \code{\link[=sim_multi]{sim_multi()}}, \code{\link[=sdr]{sdr()}}, \code{\link[=itmle]{itmle()}}
+\code{\link[=sim_cont]{sim_cont()}}, \code{\link[=sim_multi]{sim_multi()}}, \code{\link[=sdr]{sdr()}}, \code{\link[=itmle]{itmle()}}, \code{\link[=absorb_rule]{absorb_rule()}}
 }

@@ -1,7 +1,7 @@
 Package: CausalState
 Type: Package
 Title: Causal Inference in a Longitudinal Transitioning State Environment
-Version: 0.10.2
+Version: 0.11.0
 Authors@R: person(given = "Sebastiaan",
     family = "Blank",
     role = c("aut", "cre", "cph"),
@@ -29,8 +29,6 @@ Imports:
     data.table (>= 1.14.0),
     SuperLearner,
     origami,
-    glmnet,
-    xgboost,
     dplyr,
     tidyr,
     rlang,
@@ -44,6 +42,8 @@ Suggests:
     ggplot2,
     scales,
     stringr,
+    glmnet,
+    xgboost,
     hal9001,
     dbarts,
     mgcv,

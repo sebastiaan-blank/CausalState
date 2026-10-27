@@ -93,7 +93,7 @@ policy_up <- function(D_block, t, a_names) {
 sl_fast        <- c("SL.mean", "SL.glm")
 sl_tmle_simple <- c("SL.tgt.empty", "SL.tgt.intercept")
 
-wr_smoke <- density_ratio(
+wr_smoke <- fit_g(
   df              = df_smoke,
   a_names         = "A",
   tmax            = 3L,
@@ -110,9 +110,9 @@ wr_smoke <- density_ratio(
   policy_spec_fun = policy_up
 )
 
-# ── density_ratio ─────────────────────────────────────────────────────────
+# ── fit_g ─────────────────────────────────────────────────────────────────
 
-test_that("density_ratio returns valid weights", {
+test_that("fit_g returns valid weights", {
   wdt <- wr_smoke$weights_dt
   expect_s3_class(wdt, "data.frame")
   expect_gt(nrow(wdt), 0L)

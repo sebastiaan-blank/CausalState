@@ -1,3 +1,36 @@
+# CausalState 0.11.0
+
+## Bug fixes
+
+* `itmle()`: the inner fluctuation design at math-time `t` was missing `A_t`,
+  violating the Luedtke et al. (2017, Alg. 4) score equation
+  `w * (Y - Q_t(H_t, A_t))`. `itmle_make_cols()` now includes `A_u` for
+  `u = 1..t` (previously `u = 1..t-1`), matching the `tv_names` loop.
+  Point estimates from `itmle()` under non-trivial MTPs will change.
+
+## New features
+
+* Categorical treatment is now declared by factor columns in the input data.
+  Ordinal propensity estimation requires an ordered factor and uses its
+  declared level order. Numeric binary 0/1 and continuous treatments retain
+  their existing coding. No estimator has a separate `treatment_levels`
+  argument; factor levels and ordered status are saved as `fit_g()` metadata
+  and checked by SDR and iTMLE.
+* Factor treatment and treatment history use fixed numeric reference
+  indicators in treatment, transition, outcome, and iTMLE targeting models.
+  Policies receive factor columns, and policy application preserves their
+  labels, levels, and ordering. This permits separate GLM category effects.
+* Ordinal density ratios sum natural probabilities over every policy
+  preimage, including many-to-one dose caps and minimum-dose rules.
+* Preserve exact zero density ratios when SDR and iTMLE assemble weights.
+  Zero policy probability was previously treated as invalid and replaced
+  with one.
+* `sim_cat()` returns a panel with an ordered four-level treatment for use
+  with `fit_g(method = "propensity")`.
+* `balance_check()` computes unweighted and IPW-weighted standardised mean
+  differences (or correlations for continuous treatment) at each time point
+  to assess covariate balance after `fit_g()`.
+
 # CausalState 0.10.2
 
 ## Bug fixes

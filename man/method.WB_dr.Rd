@@ -35,5 +35,5 @@ Wu and Benkeser (2021). Improved inference for vaccine-induced immune
 responses via shape-constrained methods.
 }
 \seealso{
-\code{\link{density_ratio}}
+\code{\link{fit_g}}
 }

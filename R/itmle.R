@@ -1,20 +1,19 @@
 itmle_make_cols <- function(t, baseline, tv_names, a_names, all_names) {
   cols <- intersect(baseline, all_names)
-  
+
   if (t <= 0L) {
     return(unique(cols))
   }
-  
+
   for (u in seq_len(t)) {
     cols <- c(cols, intersect(paste0(tv_names, "_t", u), all_names))
   }
-  
-  if (t > 1L) {
-    for (u in seq_len(t - 1L)) {
-      cols <- c(cols, intersect(paste0(a_names, "_t", u), all_names))
-    }
+  # Include A_u through u = t: the inner fluctuation at math-time t conditions
+  # on (H_t, A_t), so A_t must be in the design (Luedtke et al. 2017, Alg. 4).
+  for (u in seq_len(t)) {
+    cols <- c(cols, intersect(paste0(a_names, "_t", u), all_names))
   }
-  
+
   unique(cols)
 }
 
@@ -462,8 +461,8 @@ itmle_inner_target <- function(
         all_names = names(D_wide)
       )
 
-      H_t_tr <- D_wide[row_pos_tr, ..cols_t]
-      H_t_vl <- D_wide[row_pos_vl, ..cols_t]
+      H_t_tr <- make_design(D_wide, row_pos_tr, cols_t)
+      H_t_vl <- make_design(D_wide, row_pos_vl, cols_t)
 
       weight_tr <- itmle_weight(density_ratios_tr, t = t - 1L, s = s)
 
@@ -633,7 +632,7 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #' without restricting the fluctuation to a finite-dimensional parametric
 #' submodel.  The algorithm follows Luedtke et al. (2017, Section 5 and Appendix 12):
 #' Section 5 introduces the infinite-dimensional fluctuation, Appendix 12
-#' the cross-validated variant used here to prevent overfitting of Q estimates.  Density-ratio weights from [density_ratio()] adapt the
+#' the cross-validated variant used here to prevent overfitting of Q estimates.  Density-ratio weights from [fit_g()] adapt the
 #' estimator to general MTPs following the framework of Diaz et al. (2021).
 #' The estimator is sequentially doubly robust (2^\eqn{K}-robust): consistent
 #' whenever, at each time point t, either the treatment model \eqn{g_t} or the
@@ -761,10 +760,10 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #'   `sl_summary` (per-(fold, t, component) SuperLearner coefficients for the
 #'   g/Q models) and `ic_df` (per-subject influence-curve values consumed by
 #'   [contrast()]) are also attached. Weight diagnostics live on the
-#'   [density_ratio()] object itself -- see [weight_diagnostics()]. A worked
+#'   [fit_g()] object itself -- see [weight_diagnostics()]. A worked
 #'   workflow is in `vignette("diagnostics")`.
 #'
-#' @seealso [density_ratio()], [sdr()], [contrast()], [absorb_rule()],
+#' @seealso [fit_g()], [sdr()], [contrast()], [absorb_rule()],
 #'   [sl_itmle], [weight_diagnostics()], [branch_cal_summary()]
 #'
 #' @examples
@@ -782,7 +781,7 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #'   )
 #'   out
 #' }
-#' wr <- density_ratio(
+#' wr <- fit_g(
 #'   df = df, a_names = "A", tmax = 3L,
 #'   baseline = c("age", "sex"), tv_names = c("L1", "L2"),
 #'   sl_g = sl_lib, k = 1L, inner_v = 3L, v = 3L, seed = 1L,
@@ -806,7 +805,7 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #'   out[[a_names[1]]] <- pmin(D_block[[a_names[1]]] + 0.2, 2.0)
 #'   out
 #' }
-#' wr_c <- density_ratio(
+#' wr_c <- fit_g(
 #'   df = df_c, a_names = "A", tmax = 3L,
 #'   baseline = "age", tv_names = "L1",
 #'   sl_g = sl_lib, k = 1L, inner_v = 3L, v = 3L, seed = 1L,
@@ -833,7 +832,7 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #'   out[["A_c1"]] <- pmin(D_block[["A_c1"]] + 0.2, 2.0)
 #'   out
 #' }
-#' wr_m <- density_ratio(
+#' wr_m <- fit_g(
 #'   df = df_m, a_names = c("A_b1", "A_c1"), tmax = 3L,
 #'   baseline = c("age", "sex"), tv_names = "L1",
 #'   sl_g = sl_lib, k = 1L, inner_v = 2L, v = 2L, seed = 1L,
@@ -961,6 +960,9 @@ itmle <- function(
     no_lag_vars   = no_lag_vars
   )
   D <- hist_out$DT
+  treatment_spec <- resolve_treatment_levels(D, a_names, weight_object)
+  data.table::setattr(D, "cs_treatment_levels", treatment_spec)
+  data.table::setattr(D_wide, "cs_treatment_levels", treatment_spec)
   
   scale_info <- scale_y(D, y, outcome_family, y_bounds, bounds)
   is_binom   <- scale_info$is_binom
@@ -982,7 +984,7 @@ itmle <- function(
   w_tmax <- max(as.integer(weights_dt[[time]]), na.rm = TRUE)
   if (w_tmax < tmax) {
     stop(sprintf(
-      "weight_object covers time points up to %d but tmax = %d. Re-run density_ratio() with tmax >= %d.",
+      "weight_object covers time points up to %d but tmax = %d. Re-run fit_g() with tmax >= %d.",
       w_tmax, tmax, tmax
     ), call. = FALSE)
   }
@@ -1971,6 +1973,9 @@ itmle <- function(
       pool_time      = pool_time,
       trim           = trim,
       outcome_family = outcome_family,
+      treatment_levels = treatment_spec,
+      treatment_ordered = factor_treatment_ordered(D, treatment_spec),
+      treatment_encoding = if (length(treatment_spec)) "reference" else NULL,
       variable_info  = list(
         id           = id,
         time         = time,

@@ -46,38 +46,11 @@ build_stack <- function(
   }
 
   A_obs <- as.data.frame(DT[at_risk, ..a_names, with = FALSE])
-  A_obs[] <- lapply(A_obs, function(z) suppressWarnings(as.numeric(z)))
 
   block_t <- DT[rows_t]
   spec    <- policy_spec_fun(block_t, t, a_names)
 
-  A_shift <- A_obs
-  if (!is.null(spec) && length(spec)) {
-    if (is.data.frame(spec)) {
-      for (a in intersect(names(spec), a_names)) {
-        A_shift[[a]] <- suppressWarnings(as.numeric(spec[[a]]))
-      }
-    } else {
-      for (a in intersect(names(spec), a_names)) {
-        s <- spec[[a]]
-        if (is.atomic(s) && is.numeric(s)) {
-          A_shift[[a]] <- if (length(s) == 1L) rep(as.numeric(s), nrow(A_obs)) else as.numeric(s)
-        } else if (is.list(s)) {
-          m <- if (!is.null(s$idx) && length(s$idx) == nrow(A_obs)) as.logical(s$idx) else rep(TRUE, nrow(A_obs))
-          m[is.na(m)] <- FALSE
-          if (!any(m)) next
-          val_any <- if (!is.null(s$value)) s$value else if (!is.null(s$mean)) s$mean else s$setto
-          vals <- if (length(val_any) == 1L) rep(as.numeric(val_any), nrow(A_obs)) else as.numeric(val_any)
-          A_shift[[a]][m] <- vals[m]
-        }
-      }
-    }
-    for (a in names(A_shift)) {
-      if (any(!is.finite(A_shift[[a]])))
-        stop(sprintf("policy_spec_fun returned non-finite value(s) for '%s' at t=%d", a, t),
-             call. = FALSE)
-    }
-  }
+  A_shift <- g_shift_values(A_obs, spec, t)
 
   X_obs   <- cbind(X_hist, A_obs)
   X_shift <- cbind(X_hist, A_shift)
@@ -123,21 +96,59 @@ dr_from_prob <- function(p_mat, beta, bounds, denom_cap) {
 #'     density ratio is recovered as the classifier odds ratio. Works for
 #'     binary, continuous, categorical, and multi-treatment interventions.}
 #'   \item{`"propensity"`}{Directly estimates the treatment mechanism
-#'     \eqn{g(A|W)} and computes the density ratio analytically. Requires
-#'     binary treatment (values 0 and 1 only). Fits a single binomial
-#'     SuperLearner on the treatment indicator. Avoids the stacking
-#'     class-imbalance bias when treatment prevalence is far from 50\%.
-#'     Supports stochastic interventions: when `policy_spec_fun` returns a
-#'     probability in \eqn{[0,1]} the density ratio \eqn{g^*(A|W)/g(A|W)} is
-#'     non-zero for all observations.}
+#'     \eqn{g(A|H)} and computes the policy density ratio analytically.
+#'     Supports one numeric binary treatment (0/1), or one ordinal treatment
+#'     supplied as an ordered factor. Binary treatment uses one binomial
+#'     SuperLearner; ordinal treatment uses a sequence of binomial
+#'     SuperLearners to estimate continuation probabilities
+#'     \eqn{P(A > a_j | A \ge a_j, H)}. The resulting dose probabilities
+#'     are non-negative and sum to one without a proportional-odds assumption.
+#'     Binary policies may return probabilities in \eqn{[0,1]}.
+#'     Ordinal policies must return deterministic category labels or factors
+#'     from the treatment's declared levels.}
 #' }
 #'
 #' Cross-fitting is used throughout: treatment models are trained on one fold
 #' and density ratios predicted on the held-out fold, so the same fold
 #' structure is inherited by the downstream estimator.
 #'
+#' For ordinal treatment, the policy is evaluated at every possible source
+#' dose, holding history fixed. Its induced probability is
+#' \deqn{g^*(a|h) = \sum_b I\{d(b,h)=a\} g(b|h).}
+#' Summing all preimages supports many-to-one policies such as dose caps and
+#' minimum-dose rules. The policy must depend only on the current treatment,
+#' time, and pre-treatment history; precomputed shifted-value columns cannot
+#' describe how the policy acts at hypothetical doses. Zero numerator
+#' probabilities produce exact zero ratios. `bounds` clips each continuation
+#' probability and floors the observed-dose denominator.
+#'
+#' Every declared ordinal dose must have training observations in each outer
+#' fold at each time where the policy changes treatment. Sparse upper-dose
+#' risk sets must also meet the usual SuperLearner sample-size and event
+#' requirements; fitting errors propagate rather than substituting unit ratios.
+#'
+#' Factor treatment columns are encoded internally as numeric reference
+#' indicators, omitting the first dose, whenever treatment is a predictor.
+#' The same fixed columns are used for current treatment, lagged treatment,
+#' policy-shifted prediction, and downstream transition, outcome, and targeting
+#' models. Levels absent from a fitting subset retain their indicator columns.
+#' Policies receive the original factor columns, with their levels and ordered
+#' status preserved after shifts. A numeric
+#' dose term in a GLM would otherwise impose equal changes in the linear
+#' predictor per dose unit; reference indicators allow separate dose effects.
+#' This encoding does not impose a monotone dose response.
+#'
+#' Factor levels and ordered status are saved in the `g_fit` settings.
+#' [sdr()] and [itmle()] check their input factor columns against this schema
+#' when given the complete object. [qreg()] infers the same coding directly
+#' from its input factor columns. There is no separate levels argument.
+#'
 #' @param df A `data.frame` in long format (one row per subject per time point).
-#' @param a_names Character vector of treatment variable names.
+#' @param a_names Character vector of treatment variable names. Categorical
+#'   treatments must be factors with explicitly declared levels; ordinal
+#'   propensity estimation requires an ordered factor. Level order determines
+#'   the continuation sequence, and the first level is the predictor reference.
+#'   Numeric columns retain numeric coding for binary or continuous treatment.
 #' @param tmax Integer. Maximum follow-up time (number of time points).
 #' @param baseline Character vector of baseline covariate names.
 #' @param tv_names Character vector of time-varying covariate names.
@@ -156,13 +167,18 @@ dr_from_prob <- function(p_mat, beta, bounds, denom_cap) {
 #'   `data.table` with shifted treatment values for time `t`. For binary
 #'   treatment under `method = "propensity"`, the shifted value is interpreted
 #'   as the target treatment probability (values in \eqn{[0,1]}) or a
-#'   deterministic assignment (0 or 1).
+#'   deterministic assignment (0 or 1). For ordinal propensity estimation,
+#'   receive an ordered factor and return deterministic category labels or a
+#'   factor using its declared levels. Numeric outputs for a factor are matched
+#'   to category labels, never interpreted as internal integer codes. The
+#'   function is also called on hypothetical treatments at every declared level.
 #' @param id Character. Subject identifier column name. Default `"id"`.
 #' @param time Character. Time column name. Default `"trial_time"`.
 #' @param bounds Numeric. Probability floor for clipping. Default `1e-5`.
 #' @param method Character. Estimation method: `"classification"` (default) or
-#'   `"propensity"`. See Details. `"propensity"` requires binary treatment;
-#'   use `"classification"` for continuous or categorical treatment.
+#'   `"propensity"`. Propensity supports one numeric binary 0/1 treatment
+#'   or one ordered factor. Use classification for unordered factors,
+#'   continuous treatment, or multiple treatments.
 #' @param dr_sl Logical. When `method = "classification"`, use the
 #'   Wu-Benkeser metalearner in density-ratio space. Default `FALSE`.
 #' @param drop_small_cluster_splits Logical. Default `TRUE`.
@@ -177,12 +193,14 @@ dr_from_prob <- function(p_mat, beta, bounds, denom_cap) {
 #'     \item{`weights_dt`}{A `data.table` with `Rt_t` (instantaneous density
 #'       ratio) and `global_fold` per subject-time. Pass to [sdr()] or
 #'       [itmle()] as `weight_object`.}
-#'     \item{`sl_summary`}{SuperLearner learner weights per fold and time.}
+#'     \item{`sl_summary`}{SuperLearner learner weights per fold and time;
+#'       ordinal models also include the continuation `threshold`.}
 #'     \item{`density_calibration`}{Per-time calibration diagnostics (AUC,
 #'       Brier, calibration slope). Only populated for
 #'       `method = "classification"`; `NULL` for `method = "propensity"`.}
 #'     \item{`settings`}{Named list of all call settings including `method`
-#'       and `is_binary`.}
+#'       and `is_binary`, plus factor `treatment_levels`, `treatment_ordered`,
+#'       `treatment_encoding`, and `propensity_model`.}
 #'   }
 #'
 #' @seealso [sdr()], [itmle()], [balance_check()], [weight_diagnostics()]
@@ -245,21 +263,25 @@ fit_g <- function(
 
   t_min <- DT[, .SD[1L], by = id][[time]] |> max()
 
-  # Propensity path requires binary treatment
-  is_binary_a <- if (is_propensity && length(a_names) == 1L) {
-    a_vals_det <- na.omit(unique(DT[[a_names[1L]]]))
-    all(a_vals_det %in% c(0, 1))
-  } else {
-    FALSE
-  }
+  # Explicit support controls treatment coding without guessing from unique values.
+  treatment_spec <- factor_treatment_levels(DT, a_names)
+  ordinal_levels <- if (length(a_names) == 1L) treatment_spec[[a_names[1L]]] else NULL
+  learner_design <- function(X) encode_treatment_design(X, treatment_spec)
 
-  if (is_propensity && !is_binary_a) {
+  is_binary_a <- is_propensity && length(a_names) == 1L &&
+    !is.factor(DT[[a_names[1L]]]) && all(na.omit(DT[[a_names[1L]]]) %in% c(0, 1))
+  is_ordinal_a <- is_propensity && length(a_names) == 1L && is.ordered(DT[[a_names[1L]]])
+
+  if (is_propensity && !is_binary_a && !is_ordinal_a) {
     stop(
-      'method = "propensity" requires binary treatment (values 0 and 1 only). ',
-      'Use method = "classification" for continuous or categorical treatment.',
+      'method = "propensity" requires a single numeric binary treatment (0/1) ',
+      'or an ordered factor. Declare ordinal treatment with factor(..., ordered = TRUE); ',
+      'use method = "classification" for unordered factors or other treatments.',
       call. = FALSE
     )
   }
+  if (is_propensity && (length(bounds) != 1L || !is.finite(bounds) || bounds <= 0 || bounds >= 0.5))
+    stop("bounds must be a finite number strictly between 0 and 0.5.", call. = FALSE)
 
   hist_out <- prepare_history_lags(
     DT          = DT,
@@ -300,17 +322,9 @@ fit_g <- function(
     rows_idx <- stk$rows_idx
     A_cols   <- intersect(a_names, names(stk$X_obs))
     A_shft_t <- stk$X[seq_len(n_nat) + n_nat, A_cols, drop = FALSE]
-    no_shift <- all(stk$X_obs[, A_cols, drop = FALSE] == A_shft_t, na.rm = TRUE)
-
-    changed <- rowSums(
-      abs(as.matrix(stk$X_obs[, A_cols, drop = FALSE]) -
-            as.matrix(A_shft_t[, A_cols, drop = FALSE])),
-      na.rm = TRUE
-    ) > 0
-
-    A_nat_mat <- as.matrix(stk$X_obs[, A_cols, drop = FALSE])
-    A_shf_mat <- as.matrix(A_shft_t[, A_cols, drop = FALSE])
-    A_delta   <- A_shf_mat - A_nat_mat
+    changed <- Reduce(`|`, lapply(A_cols, function(a) stk$X_obs[[a]] != A_shft_t[[a]]),
+                      init = rep(FALSE, n_nat))
+    no_shift <- !any(changed)
 
     change_row <- data.table::data.table(
       t           = as.integer(t),
@@ -321,10 +335,12 @@ fit_g <- function(
 
     if (length(A_cols) <= 3L) {
       for (ac in A_cols) {
-        change_row[[paste0("mean_A_pre_",    ac)]] <- mean(A_nat_mat[, ac], na.rm = TRUE)
-        change_row[[paste0("mean_A_post_",   ac)]] <- mean(A_shf_mat[, ac], na.rm = TRUE)
+        # Means and numeric dose differences have no meaning for category labels.
+        if (is.factor(stk$X_obs[[ac]])) next
+        change_row[[paste0("mean_A_pre_",    ac)]] <- mean(stk$X_obs[[ac]], na.rm = TRUE)
+        change_row[[paste0("mean_A_post_",   ac)]] <- mean(A_shft_t[[ac]], na.rm = TRUE)
         if (any(changed)) {
-          d <- A_delta[changed, ac]
+          d <- A_shft_t[[ac]][changed] - stk$X_obs[[ac]][changed]
           change_row[[paste0("mean_A_delta_",   ac)]] <- mean(d, na.rm = TRUE)
           change_row[[paste0("median_A_delta_", ac)]] <- median(d, na.rm = TRUE)
           change_row[[paste0("q05_A_delta_",    ac)]] <- as.numeric(stats::quantile(d, 0.05, na.rm = TRUE))
@@ -335,6 +351,14 @@ fit_g <- function(
       change_row[, `:=`(mean_A_pre = NA_real_, mean_A_post = NA_real_,
                         mean_A_delta = NA_real_, median_A_delta = NA_real_,
                         q05_A_delta  = NA_real_, q95_A_delta    = NA_real_)]
+    }
+
+    policy_map <- NULL
+    if (is_ordinal_a) {
+      policy_map <- ordinal_policy_map(DT[rows_idx], t, a_names[1L],
+                                       ordinal_levels, policy_spec_fun)
+      # Check identity on every possible dose, not only observed assignments.
+      no_shift <- all(policy_map == rep(seq_along(ordinal_levels), each = n_nat))
     }
 
     if (no_shift) {
@@ -379,6 +403,9 @@ fit_g <- function(
       idx_train <- which(fvec_t != kk)
 
       if (length(idx_valid) == 0L || length(idx_train) < 2L) {
+        if (is_ordinal_a && length(idx_valid))
+          stop(sprintf("Ordinal propensity at t=%d, fold=%d: fewer than two training observations.",
+                       t, kk), call. = FALSE)
         return(list(idx_valid = idx_valid, r = rep(1, length(idx_valid)),
                     sl_tab = NULL, diag_tab = NULL))
       }
@@ -394,12 +421,29 @@ fit_g <- function(
       # ---- propensity path ----
       if (is_propensity) {
         hist_cols <- setdiff(names(stk$X_obs), A_cols)
-        X_hist    <- stk$X_obs[, hist_cols, drop = FALSE]
+        X_hist    <- learner_design(stk$X_obs[, hist_cols, drop = FALSE])
         X_tr      <- as.data.frame(X_hist[rows_train_nat, , drop = FALSE])
         X_vl      <- as.data.frame(X_hist[idx_valid,      , drop = FALSE])
 
+        A_obs_all <- if (is_ordinal_a) as.integer(stk$X_obs[[A_cols[1L]]]) else
+          as.numeric(stk$X_obs[[A_cols[1L]]])
+
+        if (is_ordinal_a) {
+          ordinal_fit <- ordinal_propensity_fit(
+            A = A_obs_all[rows_train_nat], X = X_tr, newX = X_vl,
+            levels = ordinal_levels, sl_g = sl_g, inner_v = inner_v,
+            ids = id_nat, cluster = cl_fold, seed = seed, fold = kk, t = t,
+            bounds = bounds, sl_workers = sl_workers
+          )
+          r <- ordinal_policy_ratio(
+            ordinal_fit$prob, policy_map[idx_valid, , drop = FALSE],
+            A_obs_all[idx_valid], bounds
+          )
+          return(list(idx_valid = idx_valid, r = r,
+                      sl_tab = ordinal_fit$sl_tab, diag_tab = NULL))
+        }
+
         # Binary: one binomial SL on P(A=1|W)
-        A_obs_all <- as.numeric(stk$X_obs[, A_cols[1L]])
 
         sl_res <- sl_block_fit(
           Y             = A_obs_all[rows_train_nat],
@@ -445,7 +489,7 @@ fit_g <- function(
 
       # ---- classification path (original) ----
       Y_train <- stk$S[rows_train]
-      X_train <- stk$X[rows_train, , drop = FALSE]
+      X_train <- learner_design(stk$X[rows_train, , drop = FALSE])
 
       cluster_inner <- if (!is.null(cl_t)) {
         c(cl_t[rows_train_nat], cl_t[rows_train_nat])
@@ -480,7 +524,7 @@ fit_g <- function(
         )
       } else NULL
 
-      newdata_obs <- as.data.frame(stk$X_obs[idx_valid, , drop = FALSE])
+      newdata_obs <- learner_design(stk$X_obs[idx_valid, , drop = FALSE])
 
       rows_valid_nat   <- idx_valid
       rows_valid_shift <- idx_valid + n_nat
@@ -488,7 +532,7 @@ fit_g <- function(
 
       pred_cal <- as.numeric(sl_predict(
         fit,
-        newdata = as.data.frame(stk$X[rows_valid_stack, , drop = FALSE])
+        newdata = learner_design(stk$X[rows_valid_stack, , drop = FALSE])
       ))
 
       diag_tab <- data.table::data.table(
@@ -733,6 +777,10 @@ fit_g <- function(
       k          = k,
       method     = method,
       is_binary  = is_binary_a,
+      treatment_levels = treatment_spec,
+      treatment_ordered = factor_treatment_ordered(DT, treatment_spec),
+      treatment_encoding = if (length(treatment_spec)) "reference" else NULL,
+      propensity_model = if (is_ordinal_a) "continuation_ratio" else if (is_propensity) "binary" else NULL,
       dr_sl      = dr_sl,
       bounds     = bounds,
       v          = v,
