@@ -203,7 +203,7 @@ dr_from_prob <- function(p_mat, beta, bounds, denom_cap) {
 #'       `treatment_encoding`, and `propensity_model`.}
 #'   }
 #'
-#' @seealso [sdr()], [itmle()], [balance_check()], [weight_diagnostics()]
+#' @seealso [sdr()], [itmle()], [weight_diagnostics()]
 #'
 #' @references
 #' Diaz I, Williams N, Hoffman KL, Schenck EJ (2021). Nonparametric Causal

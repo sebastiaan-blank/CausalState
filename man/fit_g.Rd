@@ -186,5 +186,5 @@ Effects Based on Longitudinal Modified Treatment Policies. \emph{JASA}
 118(542):846-857.
 }
 \seealso{
-\code{\link[=sdr]{sdr()}}, \code{\link[=itmle]{itmle()}}, \code{\link[=balance_check]{balance_check()}}, \code{\link[=weight_diagnostics]{weight_diagnostics()}}
+\code{\link[=sdr]{sdr()}}, \code{\link[=itmle]{itmle()}}, \code{\link[=weight_diagnostics]{weight_diagnostics()}}
 }
