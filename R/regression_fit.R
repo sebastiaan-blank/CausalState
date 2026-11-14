@@ -1,3 +1,38 @@
+cs_fits_path <- function(fits_dir, f_idx, tt, component) {
+  if (is.null(tt)) {
+    file.path(fits_dir, sprintf("fold%d_%s.rds", f_idx, component))
+  } else {
+    file.path(fits_dir, sprintf("fold%d_t%d_%s.rds", f_idx, tt, component))
+  }
+}
+
+cs_fits_save_meta <- function(fits_dir, tmax, n, folds) {
+  meta <- list(
+    tmax    = tmax,
+    n       = n,
+    fold_tr = lapply(folds, function(f) sort(f$training_set))
+  )
+  saveRDS(meta, file.path(fits_dir, "fold_structure.rds"))
+}
+
+cs_fits_check_meta <- function(fits_dir, tmax, n, folds) {
+  path <- file.path(fits_dir, "fold_structure.rds")
+  if (!file.exists(path))
+    stop(sprintf(
+      "fits_dir '%s' has no fold_structure.rds — run with fits='save' first.",
+      fits_dir), call. = FALSE)
+  meta <- readRDS(path)
+  if (!identical(meta$tmax, tmax) || !identical(meta$n, n))
+    stop(sprintf(
+      "Fold structure mismatch: saved tmax=%d/n=%d, current tmax=%d/n=%d.",
+      meta$tmax, meta$n, tmax, n), call. = FALSE)
+  curr <- lapply(folds, function(f) sort(f$training_set))
+  if (!identical(meta$fold_tr, curr))
+    stop(paste0("Fold training assignments differ from fold_structure.rds. ",
+                "Ensure the same weight_object and seed are used."), call. = FALSE)
+  invisible(TRUE)
+}
+
 fit_pooled_g_death_exit <- function(
     D,
     tr_ids,
@@ -396,7 +431,10 @@ fit_transition_regressions <- function(
 
   parallel = FALSE,
   reg_workers = NULL,
-  sl_workers = NULL
+  sl_workers = NULL,
+  prefit_rem   = NULL,
+  prefit_dex   = NULL,
+  prefit_qexit = NULL
 ) {
   fit_g_remain_one <- function() {
     p_rem_const <- NA_real_
@@ -409,6 +447,10 @@ fit_transition_regressions <- function(
       p_rem_const <- scale_info$clip(chkR$p)
       p_rem_nat <- rep_const(p_rem_const, n_ar)
       p_rem_shf <- rep_const(p_rem_const, n_ar)
+    } else if (!is.null(prefit_rem)) {
+      fit_rem   <- prefit_rem
+      p_rem_nat <- scale_info$clip(sl_predict(fit_rem, X_nat_tr_haz))
+      p_rem_shf <- scale_info$clip(sl_predict(fit_rem, X_shf_tr_haz))
     } else {
       sl_rem <- sl_block_fit(
         Y = R_tr,
@@ -487,6 +529,10 @@ fit_transition_regressions <- function(
         p_dex_const <- scale_info$clip(chkDex$p)
         p_dex_nat <- rep_const(p_dex_const, n_ar)
         p_dex_shf <- rep_const(p_dex_const, n_ar)
+      } else if (!is.null(prefit_dex)) {
+        fit_dex   <- prefit_dex
+        p_dex_nat <- scale_info$clip(sl_predict(fit_dex, X_nat_tr_haz))
+        p_dex_shf <- scale_info$clip(sl_predict(fit_dex, X_shf_tr_haz))
       } else {
         sl_dex <- sl_block_fit(
           Y = D_tr[exit_idx],
@@ -584,24 +630,29 @@ fit_transition_regressions <- function(
       cn_qexit  <- cn_qexit_pool
 
     } else if (length(exit_idx) >= 2L) {
-      X_exit <- X_nat_tr_base[exit_idx, , drop = FALSE]
-      X_exit$exit_status <- as.numeric(D_tr[exit_idx])
-      Y_exit <- Y_init_ar[exit_idx]
+      if (!is.null(prefit_qexit)) {
+        fit_qexit <- prefit_qexit$fit
+        cn_qexit  <- prefit_qexit$cn
+      } else {
+        X_exit <- X_nat_tr_base[exit_idx, , drop = FALSE]
+        X_exit$exit_status <- as.numeric(D_tr[exit_idx])
+        Y_exit <- Y_init_ar[exit_idx]
 
-      sl_qexit <- sl_block_fit(
-        Y = Y_exit,
-        X = X_exit,
-        family = if (is_binom) stats::binomial() else stats::gaussian(),
-        sl_lib = sl_y,
-        v_inner = max(2L, min(as.integer(inner_v), length(exit_idx))),
-        cluster_inner = cl_exit_ar,
-        seed_inner = est_seed_for(seed, f_idx, tt, "Q_exit", "fit"),
-        seed_cv_rows = est_seed_for(seed, f_idx, tt, "Q_exit", "cv_rows"),
-        seed_sl_fit = est_seed_for(seed, f_idx, tt, "Q_exit", "sl_fit"),
-        sl_workers = sl_workers
-      )
-      fit_qexit <- sl_qexit$fit
-      cn_qexit <- colnames(X_exit)
+        sl_qexit <- sl_block_fit(
+          Y = Y_exit,
+          X = X_exit,
+          family = if (is_binom) stats::binomial() else stats::gaussian(),
+          sl_lib = sl_y,
+          v_inner = max(2L, min(as.integer(inner_v), length(exit_idx))),
+          cluster_inner = cl_exit_ar,
+          seed_inner = est_seed_for(seed, f_idx, tt, "Q_exit", "fit"),
+          seed_cv_rows = est_seed_for(seed, f_idx, tt, "Q_exit", "cv_rows"),
+          seed_sl_fit = est_seed_for(seed, f_idx, tt, "Q_exit", "sl_fit"),
+          sl_workers = sl_workers
+        )
+        fit_qexit <- sl_qexit$fit
+        cn_qexit  <- colnames(X_exit)
+      }
 
       X_nat_d <- X_nat_tr_base; X_nat_d$exit_status <- 1
       X_nat_c <- X_nat_tr_base; X_nat_c$exit_status <- 0

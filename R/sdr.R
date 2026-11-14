@@ -386,10 +386,19 @@ sdr <- function(
     pool_g_death = FALSE,
     pool_q_exit  = FALSE,
     pool_time    = "spline",
-    verbose      = TRUE
+    verbose      = TRUE,
+    fits         = NULL,
+    fits_dir     = NULL
 ) {
   stopifnot(requireNamespace("data.table", quietly = TRUE))
   stopifnot(requireNamespace("SuperLearner", quietly = TRUE))
+
+  if (!is.null(fits) && !fits %in% c("save", "load"))
+    stop('`fits` must be NULL, "save", or "load".', call. = FALSE)
+  if (!is.null(fits) && is.null(fits_dir))
+    stop('`fits_dir` must be provided when `fits` is set.', call. = FALSE)
+  if (identical(fits, "load") && !dir.exists(fits_dir))
+    stop(sprintf('fits_dir "%s" does not exist.', fits_dir), call. = FALSE)
 
   pool_time_basis <- make_pool_time_basis_list(pool_time, tmax, pool_g_death, pool_q_exit)
 
@@ -528,7 +537,14 @@ sdr <- function(
   pred_shf_all[, tmax + 1L] <- Y_init
   
   sl_chunks <- list()
-  
+
+  if (identical(fits, "save")) {
+    dir.create(fits_dir, showWarnings = FALSE, recursive = TRUE)
+    cs_fits_save_meta(fits_dir, tmax, N, folds)
+  } else if (identical(fits, "load")) {
+    cs_fits_check_meta(fits_dir, tmax, N, folds)
+  }
+
   fold_worker <- function(f_idx) {
     
     is_binom <- scale_info$is_binom
@@ -582,7 +598,16 @@ sdr <- function(
     run_both_pooled <- isTRUE(pool_g_death) && isTRUE(pool_q_exit) &&
                        isTRUE(parallel) && isTRUE(reg_workers > 1L)
 
-    if (run_both_pooled) {
+    if (identical(fits, "load")) {
+      pooled_dex <- if (isTRUE(pool_g_death)) {
+        p <- readRDS(cs_fits_path(fits_dir, f_idx, NULL, "dex_pooled"))
+        list(fit = p$fit, sl = NULL, cols = p$cn, cols_pool = p$cols, Y = p$Y)
+      } else NULL
+      pooled_qex <- if (isTRUE(pool_q_exit)) {
+        p <- readRDS(cs_fits_path(fits_dir, f_idx, NULL, "qexit_pooled"))
+        list(fit = p$fit, sl = NULL, cols = p$cn, cols_pool = p$cols, Y = p$Y)
+      } else NULL
+    } else if (run_both_pooled) {
       pool_res   <- par_lapply(
         X        = list(g_death = .fit_pool_g, q_exit = .fit_pool_q),
         FUN      = function(f) f(),
@@ -658,6 +683,16 @@ sdr <- function(
         t_min            = t_min,
         scale_info       = scale_info
       )
+      if (identical(fits, "save")) {
+        if (pooled_dex_used)
+          saveRDS(list(fit = fit_dex_pooled, cn = cn_pool,
+                       cols = cols_pool, Y = all_Y_pool),
+                  cs_fits_path(fits_dir, f_idx, NULL, "dex_pooled"))
+        if (pooled_qexit_used)
+          saveRDS(list(fit = fit_qexit_pooled, cn = cn_qexit_pool,
+                       cols = cols_pool_qexit, Y = all_Y_qexit_pool),
+                  cs_fits_path(fits_dir, f_idx, NULL, "qexit_pooled"))
+      }
       sl_dex_pooled   <- slim_sl(sl_dex_pooled)
       sl_qexit_pooled <- slim_sl(sl_qexit_pooled)
       rm(fit_dex_pooled, fit_qexit_pooled)
@@ -740,6 +775,13 @@ sdr <- function(
         ), cn_base_tr)
       } else NULL
 
+      .prefit_rem   <- if (identical(fits, "load"))
+        readRDS(cs_fits_path(fits_dir, f_idx, tt, "grem")) else NULL
+      .prefit_dex   <- if (identical(fits, "load") && !isTRUE(pool_g_death))
+        readRDS(cs_fits_path(fits_dir, f_idx, tt, "dex")) else NULL
+      .prefit_qexit <- if (identical(fits, "load") && !isTRUE(pool_q_exit))
+        readRDS(cs_fits_path(fits_dir, f_idx, tt, "qexit")) else NULL
+
       reg_res <- fit_transition_regressions(
         X_nat_tr_base = X_nat_tr_base,
         X_shf_tr_base = X_shf_tr_base,
@@ -790,8 +832,12 @@ sdr <- function(
         f_idx            = f_idx,
         parallel         = parallel,
         reg_workers      = reg_workers,
-        sl_workers       = sl_workers
+        sl_workers       = sl_workers,
+        prefit_rem       = .prefit_rem,
+        prefit_dex       = .prefit_dex,
+        prefit_qexit     = .prefit_qexit
       )
+      rm(.prefit_rem, .prefit_dex, .prefit_qexit); gc(FALSE)
 
       r_rem  <- reg_res$g_remain
       r_dex  <- reg_res$g_death_exit
@@ -881,6 +927,15 @@ sdr <- function(
 
       meta <- sl_meta(sl_qrem,  f_idx, tt, "Q_rem",        length(rem_idx),  n_val_tt)
       if (!is.null(meta)) sl_chunks_here[[length(sl_chunks_here) + 1L]] <- meta
+
+      if (identical(fits, "save")) {
+        saveRDS(fit_rem, cs_fits_path(fits_dir, f_idx, tt, "grem"))
+        if (!isTRUE(pool_g_death))
+          saveRDS(fit_dex, cs_fits_path(fits_dir, f_idx, tt, "dex"))
+        if (!isTRUE(pool_q_exit))
+          saveRDS(list(fit = fit_qexit, cn = cn_qexit),
+                  cs_fits_path(fits_dir, f_idx, tt, "qexit"))
+      }
 
       rm(fit_rem, fit_dex, fit_qexit, fit_qrem); gc(FALSE)
 
