@@ -45,7 +45,9 @@ itmle(
   pool_g_death = FALSE,
   pool_q_exit = FALSE,
   pool_time = "spline",
-  verbose = TRUE
+  verbose = TRUE,
+  fits = NULL,
+  fits_dir = NULL
 )
 }
 \arguments{
@@ -217,6 +219,12 @@ Only relevant when \code{pool_g_death = TRUE} or \code{pool_q_exit = TRUE}.}
 
 \item{verbose}{Logical. If \code{TRUE} (default), print per-fold and per-time
 progress messages during estimation.}
+
+\item{fits}{See \code{\link[=sdr]{sdr()}} for full documentation.  \code{fits = "save"} /
+\code{"load"} saves and reloads the \code{g_remain}, \code{g_death_exit}, and \code{Q_exit}
+fits; the iTMLE targeting step always runs in full.}
+
+\item{fits_dir}{See \code{\link[=sdr]{sdr()}}.}
 }
 \value{
 A named list with the same structure as \code{\link[=sdr]{sdr()}}, except where

@@ -42,7 +42,9 @@ sdr(
   pool_g_death = FALSE,
   pool_q_exit = FALSE,
   pool_time = "spline",
-  verbose = TRUE
+  verbose = TRUE,
+  fits = NULL,
+  fits_dir = NULL
 )
 }
 \arguments{
@@ -204,6 +206,29 @@ Only relevant when \code{pool_g_death = TRUE} or \code{pool_q_exit = TRUE}.}
 
 \item{verbose}{Logical. If \code{TRUE} (default), print per-fold and per-time
 progress messages during estimation.}
+
+\item{fits}{Character scalar or \code{NULL} (default). Controls saving and
+loading of the three policy-invariant component fits (\code{g_remain},
+\code{g_death_exit}, \code{Q_exit}) to avoid refitting them when evaluating
+multiple policies on the same data.
+\describe{
+\item{\code{NULL}}{Normal run; nothing is saved or loaded.}
+\item{\code{"save"}}{Fit all components and write \code{g_remain},
+\code{g_death_exit}, and \code{Q_exit} fits to \code{fits_dir} after each
+\verb{(fold, time)} step, before the existing memory cleanup.  Overwrites
+any files already present.}
+\item{\code{"load"}}{Load \code{g_remain}, \code{g_death_exit}, and \code{Q_exit} fits
+from \code{fits_dir}; only \code{Q_rem} is refitted.  The fold structure is
+validated against \code{fold_structure.rds} saved during the \code{"save"} run
+and an error is raised on mismatch.}
+}
+Requires \code{fits_dir} when non-\code{NULL}.  Peak memory is identical to a
+normal run in both modes.}
+
+\item{fits_dir}{Character scalar or \code{NULL} (default). Path to a directory
+used for reading or writing component fits when \code{fits} is non-\code{NULL}.
+Created automatically on \code{fits = "save"}.  Must exist on
+\code{fits = "load"}.}
 }
 \value{
 A named list. Top-level elements:
