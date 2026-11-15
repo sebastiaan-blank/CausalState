@@ -1059,11 +1059,13 @@ itmle <- function(
   
   sl_chunks <- list()
 
+  .reuse_qexit <- TRUE
   if (identical(fits, "save")) {
     dir.create(fits_dir, showWarnings = FALSE, recursive = TRUE)
-    cs_fits_save_meta(fits_dir, tmax, N, folds)
+    cs_fits_save_meta(fits_dir, tmax, N, folds, y, pool_g_death, pool_q_exit)
   } else if (identical(fits, "load")) {
-    cs_fits_check_meta(fits_dir, tmax, N, folds)
+    .meta <- cs_fits_check_meta(fits_dir, tmax, N, folds, y, pool_g_death, pool_q_exit)
+    .reuse_qexit <- .meta$reuse_qexit
   }
 
   fold_worker <- function(f_idx) {
@@ -1129,8 +1131,12 @@ itmle <- function(
         list(fit = p$fit, sl = NULL, cols = p$cn, cols_pool = p$cols, Y = p$Y)
       } else NULL
       pooled_qex <- if (isTRUE(pool_q_exit)) {
-        p <- readRDS(cs_fits_path(fits_dir, f_idx, NULL, "qexit_pooled"))
-        list(fit = p$fit, sl = NULL, cols = p$cn, cols_pool = p$cols, Y = p$Y)
+        if (.reuse_qexit) {
+          p <- readRDS(cs_fits_path(fits_dir, f_idx, NULL, "qexit_pooled"))
+          list(fit = p$fit, sl = NULL, cols = p$cn, cols_pool = p$cols, Y = p$Y)
+        } else {
+          .fit_pool_q()
+        }
       } else NULL
     } else if (run_both_pooled) {
       pool_res   <- par_lapply(
@@ -1304,7 +1310,7 @@ itmle <- function(
         readRDS(cs_fits_path(fits_dir, f_idx, tt, "grem")) else NULL
       .prefit_dex   <- if (identical(fits, "load") && !isTRUE(pool_g_death))
         readRDS(cs_fits_path(fits_dir, f_idx, tt, "dex")) else NULL
-      .prefit_qexit <- if (identical(fits, "load") && !isTRUE(pool_q_exit))
+      .prefit_qexit <- if (identical(fits, "load") && !isTRUE(pool_q_exit) && .reuse_qexit)
         readRDS(cs_fits_path(fits_dir, f_idx, tt, "qexit")) else NULL
 
       reg_res <- fit_transition_regressions(

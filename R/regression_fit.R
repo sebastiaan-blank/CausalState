@@ -6,16 +6,19 @@ cs_fits_path <- function(fits_dir, f_idx, tt, component) {
   }
 }
 
-cs_fits_save_meta <- function(fits_dir, tmax, n, folds) {
+cs_fits_save_meta <- function(fits_dir, tmax, n, folds, y, pool_g_death, pool_q_exit) {
   meta <- list(
-    tmax    = tmax,
-    n       = n,
-    fold_tr = lapply(folds, function(f) sort(f$training_set))
+    tmax         = tmax,
+    n            = n,
+    fold_tr      = lapply(folds, function(f) sort(f$training_set)),
+    y            = y,
+    pool_g_death = isTRUE(pool_g_death),
+    pool_q_exit  = isTRUE(pool_q_exit)
   )
   saveRDS(meta, file.path(fits_dir, "fold_structure.rds"))
 }
 
-cs_fits_check_meta <- function(fits_dir, tmax, n, folds) {
+cs_fits_check_meta <- function(fits_dir, tmax, n, folds, y, pool_g_death, pool_q_exit) {
   path <- file.path(fits_dir, "fold_structure.rds")
   if (!file.exists(path))
     stop(sprintf(
@@ -30,7 +33,20 @@ cs_fits_check_meta <- function(fits_dir, tmax, n, folds) {
   if (!identical(meta$fold_tr, curr))
     stop(paste0("Fold training assignments differ from fold_structure.rds. ",
                 "Ensure the same weight_object and seed are used."), call. = FALSE)
-  invisible(TRUE)
+  if (!identical(meta$pool_g_death, isTRUE(pool_g_death)))
+    stop(sprintf(
+      "pool_g_death mismatch: saved %s, current %s.",
+      meta$pool_g_death, isTRUE(pool_g_death)), call. = FALSE)
+  if (!identical(meta$pool_q_exit, isTRUE(pool_q_exit)))
+    stop(sprintf(
+      "pool_q_exit mismatch: saved %s, current %s.",
+      meta$pool_q_exit, isTRUE(pool_q_exit)), call. = FALSE)
+  reuse_qexit <- identical(meta$y, y)
+  if (!reuse_qexit)
+    message(sprintf(
+      "fits='load': outcome y='%s' differs from saved y='%s' — Q_exit will be refitted.",
+      y, meta$y))
+  list(reuse_qexit = reuse_qexit)
 }
 
 fit_pooled_g_death_exit <- function(
