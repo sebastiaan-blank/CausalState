@@ -222,7 +222,8 @@ progress messages during estimation.}
 
 \item{fits}{See \code{\link[=sdr]{sdr()}} for full documentation.  \code{fits = "save"} /
 \code{"load"} saves and reloads the \code{g_remain}, \code{g_death_exit}, and \code{Q_exit}
-fits; the iTMLE targeting step always runs in full.}
+fits; the iTMLE targeting step always runs in full.  Outcome and pooling
+checks apply identically to \code{\link[=sdr]{sdr()}}.}
 
 \item{fits_dir}{See \code{\link[=sdr]{sdr()}}.}
 }

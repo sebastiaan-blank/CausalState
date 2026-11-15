@@ -659,7 +659,8 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #'   targeting SuperLearner. Default `10L`.
 #' @param fits See [sdr()] for full documentation.  `fits = "save"` /
 #'   `"load"` saves and reloads the `g_remain`, `g_death_exit`, and `Q_exit`
-#'   fits; the iTMLE targeting step always runs in full.
+#'   fits; the iTMLE targeting step always runs in full.  Outcome and pooling
+#'   checks apply identically to [sdr()].
 #' @param fits_dir See [sdr()].
 #'
 #' @return A named list with the same structure as [sdr()], except where

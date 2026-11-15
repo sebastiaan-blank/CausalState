@@ -208,19 +208,21 @@ Only relevant when \code{pool_g_death = TRUE} or \code{pool_q_exit = TRUE}.}
 progress messages during estimation.}
 
 \item{fits}{Character scalar or \code{NULL} (default). Controls saving and
-loading of the three policy-invariant component fits (\code{g_remain},
-\code{g_death_exit}, \code{Q_exit}) to avoid refitting them when evaluating
-multiple policies on the same data.
+loading of component fits to avoid refitting when evaluating multiple
+policies on the same data.
 \describe{
 \item{\code{NULL}}{Normal run; nothing is saved or loaded.}
 \item{\code{"save"}}{Fit all components and write \code{g_remain},
 \code{g_death_exit}, and \code{Q_exit} fits to \code{fits_dir} after each
 \verb{(fold, time)} step, before the existing memory cleanup.  Overwrites
-any files already present.}
+any files already present.  Also writes \code{fold_structure.rds}
+recording fold assignments, outcome name, and pooling settings.}
 \item{\code{"load"}}{Load \code{g_remain}, \code{g_death_exit}, and \code{Q_exit} fits
-from \code{fits_dir}; only \code{Q_rem} is refitted.  The fold structure is
-validated against \code{fold_structure.rds} saved during the \code{"save"} run
-and an error is raised on mismatch.}
+from \code{fits_dir}; only \code{Q_rem} is refitted.  Mismatched fold
+assignments or pooling settings (\code{pool_g_death}, \code{pool_q_exit})
+raise an error.  If the outcome variable \code{y} differs from the saved
+run, a message is emitted and \code{Q_exit} is refitted while \code{g_remain}
+and \code{g_death_exit} are still reused.}
 }
 Requires \code{fits_dir} when non-\code{NULL}.  Peak memory is identical to a
 normal run in both modes.}

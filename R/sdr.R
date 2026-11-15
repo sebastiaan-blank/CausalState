@@ -142,19 +142,21 @@
 #' @param verbose Logical. If `TRUE` (default), print per-fold and per-time
 #'   progress messages during estimation.
 #' @param fits Character scalar or `NULL` (default). Controls saving and
-#'   loading of the three policy-invariant component fits (`g_remain`,
-#'   `g_death_exit`, `Q_exit`) to avoid refitting them when evaluating
-#'   multiple policies on the same data.
+#'   loading of component fits to avoid refitting when evaluating multiple
+#'   policies on the same data.
 #'   \describe{
 #'     \item{`NULL`}{Normal run; nothing is saved or loaded.}
 #'     \item{`"save"`}{Fit all components and write `g_remain`,
 #'       `g_death_exit`, and `Q_exit` fits to `fits_dir` after each
 #'       `(fold, time)` step, before the existing memory cleanup.  Overwrites
-#'       any files already present.}
+#'       any files already present.  Also writes `fold_structure.rds`
+#'       recording fold assignments, outcome name, and pooling settings.}
 #'     \item{`"load"`}{Load `g_remain`, `g_death_exit`, and `Q_exit` fits
-#'       from `fits_dir`; only `Q_rem` is refitted.  The fold structure is
-#'       validated against `fold_structure.rds` saved during the `"save"` run
-#'       and an error is raised on mismatch.}
+#'       from `fits_dir`; only `Q_rem` is refitted.  Mismatched fold
+#'       assignments or pooling settings (`pool_g_death`, `pool_q_exit`)
+#'       raise an error.  If the outcome variable `y` differs from the saved
+#'       run, a message is emitted and `Q_exit` is refitted while `g_remain`
+#'       and `g_death_exit` are still reused.}
 #'   }
 #'   Requires `fits_dir` when non-`NULL`.  Peak memory is identical to a
 #'   normal run in both modes.
