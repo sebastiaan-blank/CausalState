@@ -1561,17 +1561,16 @@ sdr <- function(
 
 
 eif <- function(density_ratios, shifted, natural, time, time_horizon) {
-  N   <- nrow(density_ratios)
-  out <- as.numeric(shifted[, time])
-  w   <- if (time > 1L) {
-    apply(density_ratios[, seq_len(time - 1L), drop = FALSE], 1L, prod)
-  } else {
-    rep(1.0, N)
-  }
-  for (t in seq(time, time_horizon)) {
-    w   <- w * as.numeric(density_ratios[, t])
-    out <- out + w * (as.numeric(shifted[, t + 1L]) - as.numeric(natural[, t]))
-  }
-  out
+  if (missing(time_horizon)) time_horizon <- ncol(density_ratios)
+  if (missing(time)) time <- 1L
+
+  res <- shifted[, (time + 1):(time_horizon + 1), drop = FALSE] -
+    natural[,  time:time_horizon,                 drop = FALSE]
+
+  zz <- density_ratios[, time:time_horizon, drop = FALSE]
+  w  <- t(apply(zz, 1L, cumprod))
+  if (ncol(w) > ncol(zz)) w <- t(w)
+
+  rowSums(w * res, na.rm = TRUE) + shifted[, time]
 }
 
