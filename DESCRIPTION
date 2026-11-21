@@ -7,6 +7,8 @@ Authors@R: person(given = "Sebastiaan",
     role = c("aut", "cre", "cph"),
     email = "sebastiaan.blank@mail.com",
     comment = c(ORCID = "0000-0001-9115-2138"))
+Author: Sebastiaan Blank [aut, cre, cph] (<https://orcid.org/0000-0001-9115-2138>)
+Maintainer: Sebastiaan Blank <sebastiaan.blank@mail.com>
 Description: Implements Sequential Doubly Robust (SDR) and infinite-dimensional
     Targeted Maximum Likelihood (iTMLE) estimators for longitudinal modified treatment
     policies in settings with transitioning states, such as ICU, ward, or

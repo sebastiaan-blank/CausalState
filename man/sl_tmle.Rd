@@ -9,7 +9,7 @@ A character vector of SuperLearner learner names.
 }
 \value{
 A character vector of SuperLearner learner name strings to be passed to
-the \code{sl_target} argument of \code{\link{itmle}}.
+the \code{sl_tmle} argument of \code{\link{itmle}}.
 }
 \description{
 A character vector naming the default library of learners used in the
@@ -19,7 +19,7 @@ required for cross-validated TMLE as a data column (the
 \dQuote{offset-as-column} convention) and clip internal probability
 predictions at \code{1e-5}.
 
-Pass this vector to the \code{sl_target} argument of \code{\link{itmle}}
+Pass this vector to the \code{sl_tmle} argument of \code{\link{itmle}}
 or construct your own library from the \code{SL.tmle_*} wrappers exported
 by this package.
 }

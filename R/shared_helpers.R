@@ -819,7 +819,7 @@ patch_shifted_design <- function(X_nat, D_shifted_tt, rows, a_names, tt, k, t_mi
   # History predictors retain their observed values.
   raw_cols <- intersect(a_names, names(D_shifted_tt))
   if (length(raw_cols) && length(rows)) {
-    shifted <- as.data.frame(D_shifted_tt[rows, ..raw_cols])
+    shifted <- as.data.frame(D_shifted_tt[rows, raw_cols, with = FALSE])
     shifted <- encode_treatment_design(shifted, attr(D_shifted_tt, "cs_treatment_levels"))
     for (nm in intersect(names(shifted), names(X_nat))) X_shf[[nm]] <- shifted[[nm]]
   }

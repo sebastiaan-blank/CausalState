@@ -172,8 +172,8 @@ dr_from_prob <- function(p_mat, beta, bounds, denom_cap) {
 #'   factor using its declared levels. Numeric outputs for a factor are matched
 #'   to category labels, never interpreted as internal integer codes. The
 #'   function is also called on hypothetical treatments at every declared level.
-#' @param id Character. Subject identifier column name. Default `"id"`.
-#' @param time Character. Time column name. Default `"trial_time"`.
+#' @param id Character. Subject identifier column name.
+#' @param time Character. Time column name.
 #' @param bounds Numeric. Probability floor for clipping. Default `1e-5`.
 #' @param method Character. Estimation method: `"classification"` (default) or
 #'   `"propensity"`. Propensity supports one numeric binary 0/1 treatment
@@ -220,7 +220,7 @@ fit_g <- function(
     cluster = NULL, v = 5L,
     seed = 1L,
     policy_spec_fun,
-    id = "id", time = "trial_time",
+    id, time,
     bounds = 1e-5,
     method = "classification",
     dr_sl  = FALSE,

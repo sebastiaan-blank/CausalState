@@ -22,7 +22,7 @@ cs_fits_check_meta <- function(fits_dir, tmax, n, folds, y, pool_g_death, pool_q
   path <- file.path(fits_dir, "fold_structure.rds")
   if (!file.exists(path))
     stop(sprintf(
-      "fits_dir '%s' has no fold_structure.rds — run with fits='save' first.",
+      "fits_dir '%s' has no fold_structure.rds - run with fits='save' first.",
       fits_dir), call. = FALSE)
   meta <- readRDS(path)
   if (!identical(meta$tmax, tmax) || !identical(meta$n, n))
@@ -33,18 +33,24 @@ cs_fits_check_meta <- function(fits_dir, tmax, n, folds, y, pool_g_death, pool_q
   if (!identical(meta$fold_tr, curr))
     stop(paste0("Fold training assignments differ from fold_structure.rds. ",
                 "Ensure the same weight_object and seed are used."), call. = FALSE)
-  if (!identical(meta$pool_g_death, isTRUE(pool_g_death)))
-    stop(sprintf(
-      "pool_g_death mismatch: saved %s, current %s.",
-      meta$pool_g_death, isTRUE(pool_g_death)), call. = FALSE)
-  if (!identical(meta$pool_q_exit, isTRUE(pool_q_exit)))
-    stop(sprintf(
-      "pool_q_exit mismatch: saved %s, current %s.",
-      meta$pool_q_exit, isTRUE(pool_q_exit)), call. = FALSE)
-  reuse_qexit <- identical(meta$y, y)
-  if (!reuse_qexit)
+  old_format <- is.null(meta$pool_g_death) && is.null(meta$pool_q_exit) && is.null(meta$y)
+  if (old_format) {
+    message("fits='load': fold_structure.rds is from an older format (pool and outcome fields missing). ",
+            "Re-save with fits='save' to enable full validation. Proceeding without pool/outcome checks.")
+  } else {
+    if (!identical(meta$pool_g_death, isTRUE(pool_g_death)))
+      stop(sprintf(
+        "pool_g_death mismatch: saved %s, current %s.",
+        meta$pool_g_death, isTRUE(pool_g_death)), call. = FALSE)
+    if (!identical(meta$pool_q_exit, isTRUE(pool_q_exit)))
+      stop(sprintf(
+        "pool_q_exit mismatch: saved %s, current %s.",
+        meta$pool_q_exit, isTRUE(pool_q_exit)), call. = FALSE)
+  }
+  reuse_qexit <- if (old_format) TRUE else identical(meta$y, y)
+  if (!old_format && !reuse_qexit)
     message(sprintf(
-      "fits='load': outcome y='%s' differs from saved y='%s' — Q_exit will be refitted.",
+      "fits='load': outcome y='%s' differs from saved y='%s' - Q_exit will be refitted.",
       y, meta$y))
   list(reuse_qexit = reuse_qexit)
 }
@@ -312,6 +318,28 @@ slim_sl <- function(sl_res) {
   )
 }
 
+# Strips a SuperLearner fit to the minimum needed for predict(): keeps fitLibrary,
+# coef, and the descriptor fields - drops CV fold fits, training predictions, Z, etc.
+slim_predictable_sl <- function(fit) {
+  if (is.null(fit)) return(NULL)
+  if (inherits(fit, "sdr_const_fit") || (is.list(fit) && !is.null(fit$const)))
+    return(fit)
+  if (!inherits(fit, "SuperLearner")) return(fit)
+  out <- list(
+    fitLibrary   = fit$fitLibrary,
+    coef         = fit$coef,
+    libraryNames = fit$libraryNames,
+    SL.library   = fit$SL.library,
+    family       = fit$family,
+    varNames     = fit$varNames,
+    whichScreen  = fit$whichScreen,
+    control      = fit$control,
+    method       = fit$method
+  )
+  class(out) <- "SuperLearner"
+  out
+}
+
 build_pooled_pred_cache <- function(
   tmax, tr_ids, vl_ids, row_index,
   D, D_shifted,
@@ -464,9 +492,9 @@ fit_transition_regressions <- function(
       p_rem_nat <- rep_const(p_rem_const, n_ar)
       p_rem_shf <- rep_const(p_rem_const, n_ar)
     } else if (!is.null(prefit_rem)) {
-      fit_rem   <- prefit_rem
-      p_rem_nat <- scale_info$clip(sl_predict(fit_rem, X_nat_tr_haz))
-      p_rem_shf <- scale_info$clip(sl_predict(fit_rem, X_shf_tr_haz))
+      fit_rem     <- prefit_rem
+      p_rem_nat   <- scale_info$clip(sl_predict(fit_rem, X_nat_tr_haz))
+      p_rem_shf   <- scale_info$clip(sl_predict(fit_rem, X_shf_tr_haz))
     } else {
       sl_rem <- sl_block_fit(
         Y = R_tr,
@@ -649,6 +677,21 @@ fit_transition_regressions <- function(
       if (!is.null(prefit_qexit)) {
         fit_qexit <- prefit_qexit$fit
         cn_qexit  <- prefit_qexit$cn
+
+        X_nat_d <- X_nat_tr_base; X_nat_d$exit_status <- 1
+        X_nat_c <- X_nat_tr_base; X_nat_c$exit_status <- 0
+        X_shf_d <- X_shf_tr_base; X_shf_d$exit_status <- 1
+        X_shf_c <- X_shf_tr_base; X_shf_c$exit_status <- 0
+
+        X_nat_d <- align_cols(X_nat_d, cn_qexit)
+        X_nat_c <- align_cols(X_nat_c, cn_qexit)
+        X_shf_d <- align_cols(X_shf_d, cn_qexit)
+        X_shf_c <- align_cols(X_shf_c, cn_qexit)
+
+        q_death_nat <- scale_info$clip(sl_predict(fit_qexit, X_nat_d))
+        q_dc_nat    <- scale_info$clip(sl_predict(fit_qexit, X_nat_c))
+        q_death_shf <- scale_info$clip(sl_predict(fit_qexit, X_shf_d))
+        q_dc_shf    <- scale_info$clip(sl_predict(fit_qexit, X_shf_c))
       } else {
         X_exit <- X_nat_tr_base[exit_idx, , drop = FALSE]
         X_exit$exit_status <- as.numeric(D_tr[exit_idx])
@@ -668,22 +711,22 @@ fit_transition_regressions <- function(
         )
         fit_qexit <- sl_qexit$fit
         cn_qexit  <- colnames(X_exit)
+
+        X_nat_d <- X_nat_tr_base; X_nat_d$exit_status <- 1
+        X_nat_c <- X_nat_tr_base; X_nat_c$exit_status <- 0
+        X_shf_d <- X_shf_tr_base; X_shf_d$exit_status <- 1
+        X_shf_c <- X_shf_tr_base; X_shf_c$exit_status <- 0
+
+        X_nat_d <- align_cols(X_nat_d, cn_qexit)
+        X_nat_c <- align_cols(X_nat_c, cn_qexit)
+        X_shf_d <- align_cols(X_shf_d, cn_qexit)
+        X_shf_c <- align_cols(X_shf_c, cn_qexit)
+
+        q_death_nat <- scale_info$clip(sl_predict(fit_qexit, X_nat_d))
+        q_dc_nat    <- scale_info$clip(sl_predict(fit_qexit, X_nat_c))
+        q_death_shf <- scale_info$clip(sl_predict(fit_qexit, X_shf_d))
+        q_dc_shf    <- scale_info$clip(sl_predict(fit_qexit, X_shf_c))
       }
-
-      X_nat_d <- X_nat_tr_base; X_nat_d$exit_status <- 1
-      X_nat_c <- X_nat_tr_base; X_nat_c$exit_status <- 0
-      X_shf_d <- X_shf_tr_base; X_shf_d$exit_status <- 1
-      X_shf_c <- X_shf_tr_base; X_shf_c$exit_status <- 0
-
-      X_nat_d <- align_cols(X_nat_d, cn_qexit)
-      X_nat_c <- align_cols(X_nat_c, cn_qexit)
-      X_shf_d <- align_cols(X_shf_d, cn_qexit)
-      X_shf_c <- align_cols(X_shf_c, cn_qexit)
-
-      q_death_nat <- scale_info$clip(sl_predict(fit_qexit, X_nat_d))
-      q_dc_nat    <- scale_info$clip(sl_predict(fit_qexit, X_nat_c))
-      q_death_shf <- scale_info$clip(sl_predict(fit_qexit, X_shf_d))
-      q_dc_shf    <- scale_info$clip(sl_predict(fit_qexit, X_shf_c))
     }
 
     list(

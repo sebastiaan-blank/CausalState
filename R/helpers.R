@@ -368,10 +368,13 @@ print.CausalState_contrast <- function(x, digits = 3L, ...) {
 #' Per-time weight diagnostics for a fit_g object
 #'
 #' Summarises the instantaneous density ratios and their cumulative products at
-#' each time step, restricted to subjects at risk at that time.  This matches
-#' how the weights enter the SDR and iTMLE corrections: the EIF term at time t
-#' uses the product of ratios from t=1 through t, and only at-risk subjects
-#' contribute non-zero correction terms.
+#' each time step.  Instantaneous stats (\code{Rt_*}) are restricted to
+#' subjects at risk at time \code{t}.  Cumulative stats (\code{cum_*}) cover
+#' the full cohort: subjects who exited before \code{t} retain their
+#' last observed cumulative product (the missing ratios are treated as 1).
+#' This is intentional -- restricting to at-risk subjects would hide early
+#' exit of high-weight subjects, which is precisely the pathology the
+#' cumulative summaries are meant to detect.
 #'
 #' Call with different \code{trim} values to assess trim sensitivity before
 #' passing the \code{weight_object} to \code{sdr()} or \code{itmle()}.
@@ -384,11 +387,13 @@ print.CausalState_contrast <- function(x, digits = 3L, ...) {
 #'   to \code{sdr()}/\code{itmle()}.
 #'
 #' @return A \code{data.table} with one row per time step and columns:
-#'   \code{t}, \code{n_risk};
+#'   \code{t}, \code{n_risk} (subjects at risk at \code{t});
 #'   instantaneous ratio stats (\code{Rt_mean}, \code{Rt_median},
-#'   \code{Rt_p05}, \code{Rt_p95}, \code{Rt_max}, \code{Rt_ess});
+#'   \code{Rt_p05}, \code{Rt_p95}, \code{Rt_max}, \code{Rt_ess}) -- at-risk
+#'   subjects only;
 #'   cumulative product stats (\code{cum_mean}, \code{cum_median},
-#'   \code{cum_p05}, \code{cum_p95}, \code{cum_max}, \code{cum_ess}).
+#'   \code{cum_p05}, \code{cum_p95}, \code{cum_max}, \code{cum_ess}) -- full
+#'   cohort, with exited subjects' products frozen at their last observed value.
 #'   ESS uses the Kish approximation: \eqn{(\sum w)^2 / \sum w^2}.
 #'
 #' @seealso [fit_g()], [sdr()], [itmle()]
@@ -408,8 +413,8 @@ weight_diagnostics <- function(weight_object, trim = 1) {
     WW[, Rt_t := pmin(Rt_t, trim_val)]
   }
 
-  WW[, .__id   := as.character(get(id))]
-  WW[, .__time := as.integer(get(time))]
+  data.table::set(WW, j = ".__id",   value = as.character(WW[[id]]))
+  data.table::set(WW, j = ".__time", value = as.integer(WW[[time]]))
   WW <- WW[.__time >= 1L & .__time <= tmax]
   WW <- WW[, .(Rt_t = data.table::first(Rt_t)), by = .(.__id, .__time)]
 
@@ -509,6 +514,9 @@ branch_cal_summary <- function(fit) {
                           slope_vl_col,
                           brier_vl_col  = NULL, auc_vl_col  = NULL,
                           rmse_vl_col   = NULL, cor_vl_col  = NULL) {
+    required <- c(n_tr_col, n_vl_col, tgt_tr_col, pred_tr_col,
+                  tgt_vl_col, pred_vl_col, slope_vl_col)
+    if (!all(required %in% names(bc))) return(NULL)
     bc[, {
       w_vl <- get(n_vl_col)
       data.table::data.table(
@@ -564,6 +572,10 @@ branch_cal_summary <- function(fit) {
       cor_vl_col   = if (!qexit_binary) "qexit_vl_cor"   else NULL)
   )
 
+  parts <- Filter(Negate(is.null), parts)
+  if (length(parts) == 0L)
+    stop("branch_cal_summary: no recognised branch columns found in branch_cal.",
+         call. = FALSE)
   out <- data.table::rbindlist(parts, use.names = TRUE, fill = TRUE)
   out$branch <- factor(out$branch, levels = c("g_remain", "g_death", "q_rem", "q_exit"))
   data.table::setorderv(out, c("t", "branch"))

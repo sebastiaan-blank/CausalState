@@ -14,7 +14,7 @@
 \alias{SL.tmle_glmnet_enet}
 \alias{SL.tmle_glmnet_lasso}
 \alias{SL.tmle_xgb_d1}
-\alias{SL.tmle_xgb_d3}
+\alias{SL.tmle_xgb_d2}
 \alias{SL.tmle_xgb_d6}
 \title{Custom SuperLearner wrappers for the iTMLE targeting step}
 \usage{
@@ -52,7 +52,7 @@ SL.tgt.xgboost(
   colsample_bytree = 0.8,
   max_delta_step = 0,
   nthread = 1L,
-  use_cuda = TRUE,
+  use_cuda = FALSE,
   bounds = 1e-05,
   ...
 )
@@ -71,7 +71,7 @@ SL.tmle_glmnet_lasso(Y, X, newX, family, obsWeights, id, ...)
 
 SL.tmle_xgb_d1(Y, X, newX, family, obsWeights, id, ...)
 
-SL.tmle_xgb_d3(Y, X, newX, family, obsWeights, id, ...)
+SL.tmle_xgb_d2(Y, X, newX, family, obsWeights, id, ...)
 
 SL.tmle_xgb_d6(Y, X, newX, family, obsWeights, id, ...)
 }
@@ -127,8 +127,9 @@ Default \code{0}. (\code{SL.tgt.xgboost} only.)}
 \item{nthread}{Integer. Number of threads for XGBoost. Default \code{1L}.
 (\code{SL.tgt.xgboost} only.)}
 
-\item{use_cuda}{Logical. Use CUDA GPU acceleration in XGBoost if available.
-Default \code{TRUE}. (\code{SL.tgt.xgboost} only.)}
+\item{use_cuda}{Logical. Use CUDA GPU acceleration in XGBoost. Default
+\code{FALSE}. Requires a CUDA-enabled build of xgboost; standard CRAN
+xgboost does not support this. (\code{SL.tgt.xgboost} only.)}
 }
 \value{
 A list with elements \code{pred} (numeric predictions on the probability
@@ -171,8 +172,8 @@ choices and are the recommended building blocks for \code{sl_tmle}:
 \item{\code{SL.tmle_glmnet_ridge}}{Ridge regression (alpha = 0).}
 \item{\code{SL.tmle_glmnet_enet}}{Elastic net (alpha = 0.5).}
 \item{\code{SL.tmle_glmnet_lasso}}{Lasso (alpha = 1).}
-\item{\code{SL.tmle_xgb_d1}}{XGBoost depth 1, CPU, 50 rounds.}
-\item{\code{SL.tmle_xgb_d3}}{XGBoost depth 3, CPU, 50 rounds.}
+\item{\code{SL.tmle_xgb_d1}}{XGBoost depth 1 (stumps), CPU, 50 rounds.}
+\item{\code{SL.tmle_xgb_d2}}{XGBoost depth 2, CPU, 50 rounds.}
 \item{\code{SL.tmle_xgb_d6}}{XGBoost depth 6, CPU, 50 rounds.}
 }
 
@@ -191,7 +192,7 @@ sl_tmle_light <- c("SL.tmle_empty", "SL.tmle_intercept", "SL.tmle_glm")
 sl_tmle_penalised <- c(
   "SL.tmle_empty", "SL.tmle_intercept", "SL.tmle_glm",
   "SL.tmle_glmnet_ridge", "SL.tmle_glmnet_enet",
-  "SL.tmle_xgb_d1", "SL.tmle_xgb_d3", "SL.tmle_xgb_d6"
+  "SL.tmle_xgb_d1", "SL.tmle_xgb_d2", "SL.tmle_xgb_d6"
 )
 
 }

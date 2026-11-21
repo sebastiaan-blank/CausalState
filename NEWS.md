@@ -27,9 +27,6 @@
   with one.
 * `sim_cat()` returns a panel with an ordered four-level treatment for use
   with `fit_g(method = "propensity")`.
-* `balance_check()` computes unweighted and IPW-weighted standardised mean
-  differences (or correlations for continuous treatment) at each time point
-  to assess covariate balance after `fit_g()`.
 
 # CausalState 0.10.2
 

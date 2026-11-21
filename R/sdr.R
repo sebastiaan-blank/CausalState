@@ -624,112 +624,178 @@ sdr <- function(
                        isTRUE(parallel) && isTRUE(reg_workers > 1L)
 
     if (identical(fits, "load")) {
-      pooled_dex <- if (isTRUE(pool_g_death)) {
-        p <- readRDS(cs_fits_path(fits_dir, f_idx, NULL, "dex_pooled"))
-        list(fit = p$fit, sl = NULL, cols = p$cn, cols_pool = p$cols, Y = p$Y)
-      } else NULL
-      pooled_qex <- if (isTRUE(pool_q_exit)) {
-        if (.reuse_qexit) {
-          p <- readRDS(cs_fits_path(fits_dir, f_idx, NULL, "qexit_pooled"))
-          list(fit = p$fit, sl = NULL, cols = p$cn, cols_pool = p$cols, Y = p$Y)
-        } else {
-          .fit_pool_q()
-        }
-      } else NULL
-    } else if (run_both_pooled) {
-      pool_res   <- par_lapply(
-        X        = list(g_death = .fit_pool_g, q_exit = .fit_pool_q),
-        FUN      = function(f) f(),
-        workers  = reg_workers,
-        parallel = TRUE,
-        seed     = TRUE
-      )
-      pooled_dex <- pool_res$g_death
-      pooled_qex <- pool_res$q_exit
-    } else {
-      pooled_dex <- if (isTRUE(pool_g_death)) .fit_pool_g() else NULL
-      pooled_qex <- if (isTRUE(pool_q_exit))  .fit_pool_q() else NULL
-    }
+      # Load slim predictable fits and rebuild prediction caches for new policy
+      .dex_saved       <- if (isTRUE(pool_g_death))
+        readRDS(cs_fits_path(fits_dir, f_idx, NULL, "dex_pooled")) else NULL
+      fit_dex_pooled   <- if (!is.null(.dex_saved)) .dex_saved$fit  else NULL
+      cn_pool          <- if (!is.null(.dex_saved)) .dex_saved$cn_pool   else NULL
+      cols_pool        <- if (!is.null(.dex_saved)) .dex_saved$cols_pool else NULL
+      rm(.dex_saved)
 
-    if (isTRUE(pool_g_death)) {
-      if (is.null(pooled_dex$fit)) {
-        message(sprintf(
-          "[fold %d] pool_g_death=TRUE but pooled g_death_exit fit failed (%s); falling back to per-time fits",
-          f_idx, pooled_dex$reason))
-        fit_dex_pooled <- sl_dex_pooled <- cn_pool <- cols_pool <- all_Y_pool <- NULL
-        pool_g_death <- FALSE
-      } else {
-        fit_dex_pooled <- pooled_dex$fit
-        sl_dex_pooled  <- pooled_dex$sl
-        cn_pool        <- pooled_dex$cols
-        cols_pool      <- pooled_dex$cols_pool
-        all_Y_pool     <- pooled_dex$Y
-      }
-    } else {
-      fit_dex_pooled <- sl_dex_pooled <- cn_pool <- cols_pool <- all_Y_pool <- NULL
-    }
-
-    if (isTRUE(pool_q_exit)) {
-      if (is.null(pooled_qex$fit)) {
-        message(sprintf(
-          "[fold %d] pool_q_exit=TRUE but pooled Q_exit failed (%s); per-time fallback",
-          f_idx, pooled_qex$reason))
-        fit_qexit_pooled <- sl_qexit_pooled <- cn_qexit_pool <- cols_pool_qexit <- all_Y_qexit_pool <- NULL
-        pool_q_exit <- FALSE
-      } else {
-        fit_qexit_pooled  <- pooled_qex$fit
-        sl_qexit_pooled   <- pooled_qex$sl
-        cn_qexit_pool     <- pooled_qex$cols
-        cols_pool_qexit   <- pooled_qex$cols_pool
-        all_Y_qexit_pool  <- pooled_qex$Y
-      }
-    } else {
-      fit_qexit_pooled <- sl_qexit_pooled <- cn_qexit_pool <- cols_pool_qexit <- all_Y_qexit_pool <- NULL
-    }
-
-    pooled_dex_used   <- isTRUE(pool_g_death) && !is.null(fit_dex_pooled)
-    pooled_qexit_used <- isTRUE(pool_q_exit)  && !is.null(fit_qexit_pooled)
-
-    if (pooled_dex_used || pooled_qexit_used) {
-      pooled_pred_cache <- build_pooled_pred_cache(
-        tmax             = tmax,
-        tr_ids           = tr_ids,
-        vl_ids           = vl_ids,
-        row_index        = row_index,
-        D                = D,
-        D_shifted        = D_shifted,
-        pool_g_death     = pool_g_death,
-        fit_dex_pooled   = fit_dex_pooled,
-        cols_pool        = cols_pool,
-        cn_pool          = cn_pool,
-        pool_q_exit      = pool_q_exit,
-        fit_qexit_pooled = fit_qexit_pooled,
-        cols_pool_qexit  = cols_pool_qexit,
-        cn_qexit_pool    = cn_qexit_pool,
-        pool_time_basis  = pool_time_basis,
-        a_names          = a_names,
-        k                = k,
-        t_min            = t_min,
-        scale_info       = scale_info
-      )
-      if (identical(fits, "save")) {
-        if (pooled_dex_used)
-          saveRDS(list(fit = fit_dex_pooled, cn = cn_pool,
-                       cols = cols_pool, Y = all_Y_pool),
-                  cs_fits_path(fits_dir, f_idx, NULL, "dex_pooled"))
-        if (pooled_qexit_used)
-          saveRDS(list(fit = fit_qexit_pooled, cn = cn_qexit_pool,
-                       cols = cols_pool_qexit, Y = all_Y_qexit_pool),
-                  cs_fits_path(fits_dir, f_idx, NULL, "qexit_pooled"))
-      }
-      sl_dex_pooled   <- slim_sl(sl_dex_pooled)
-      sl_qexit_pooled <- slim_sl(sl_qexit_pooled)
-      rm(fit_dex_pooled, fit_qexit_pooled)
-      gc(FALSE)
-      fit_dex_pooled   <- NULL
+      .qexit_saved     <- NULL
       fit_qexit_pooled <- NULL
+      cn_qexit_pool    <- NULL
+      cols_pool_qexit  <- NULL
+      all_Y_qexit_pool <- NULL
+      sl_qexit_pooled  <- NULL
+      if (isTRUE(pool_q_exit) && !.reuse_qexit) {
+        pooled_qex <- .fit_pool_q()
+        if (is.null(pooled_qex$fit)) {
+          message(sprintf(
+            "[fold %d] pool_q_exit=TRUE but pooled Q_exit failed (%s); per-time fallback",
+            f_idx, pooled_qex$reason))
+          pool_q_exit <- FALSE
+        } else {
+          fit_qexit_pooled  <- pooled_qex$fit
+          cn_qexit_pool     <- pooled_qex$cols
+          cols_pool_qexit   <- pooled_qex$cols_pool
+          all_Y_qexit_pool  <- pooled_qex$Y
+          sl_qexit_pooled   <- slim_sl(pooled_qex$sl)
+          rm(pooled_qex); gc(FALSE)
+        }
+      } else if (isTRUE(pool_q_exit)) {
+        .qexit_saved    <- readRDS(cs_fits_path(fits_dir, f_idx, NULL, "qexit_pooled"))
+        fit_qexit_pooled <- .qexit_saved$fit
+        cn_qexit_pool    <- .qexit_saved$cols
+        cols_pool_qexit  <- .qexit_saved$cols_pool
+        rm(.qexit_saved); gc(FALSE)
+      }
+
+      pooled_dex_used   <- isTRUE(pool_g_death) && !is.null(fit_dex_pooled)
+      pooled_qexit_used <- isTRUE(pool_q_exit)  && !is.null(fit_qexit_pooled)
+      sl_dex_pooled     <- NULL
+      all_Y_pool        <- NULL
+
+      if (pooled_dex_used || pooled_qexit_used) {
+        pooled_pred_cache <- build_pooled_pred_cache(
+          tmax             = tmax,
+          tr_ids           = tr_ids,
+          vl_ids           = vl_ids,
+          row_index        = row_index,
+          D                = D,
+          D_shifted        = D_shifted,
+          pool_g_death     = pool_g_death,
+          fit_dex_pooled   = fit_dex_pooled,
+          cols_pool        = cols_pool,
+          cn_pool          = cn_pool,
+          pool_q_exit      = pool_q_exit,
+          fit_qexit_pooled = fit_qexit_pooled,
+          cols_pool_qexit  = cols_pool_qexit,
+          cn_qexit_pool    = cn_qexit_pool,
+          pool_time_basis  = pool_time_basis,
+          a_names          = a_names,
+          k                = k,
+          t_min            = t_min,
+          scale_info       = scale_info
+        )
+        rm(fit_dex_pooled, fit_qexit_pooled); gc(FALSE)
+        fit_dex_pooled   <- NULL
+        fit_qexit_pooled <- NULL
+      } else {
+        pooled_pred_cache <- NULL
+      }
+
     } else {
-      pooled_pred_cache <- NULL
+      if (run_both_pooled) {
+        pool_res   <- par_lapply(
+          X        = list(g_death = .fit_pool_g, q_exit = .fit_pool_q),
+          FUN      = function(f) f(),
+          workers  = reg_workers,
+          parallel = TRUE,
+          seed     = TRUE
+        )
+        pooled_dex <- pool_res$g_death
+        pooled_qex <- pool_res$q_exit
+        rm(pool_res)
+      } else {
+        pooled_dex <- if (isTRUE(pool_g_death)) .fit_pool_g() else NULL
+        pooled_qex <- if (isTRUE(pool_q_exit))  .fit_pool_q() else NULL
+      }
+
+      if (isTRUE(pool_g_death)) {
+        if (is.null(pooled_dex$fit)) {
+          message(sprintf(
+            "[fold %d] pool_g_death=TRUE but pooled g_death_exit fit failed (%s); falling back to per-time fits",
+            f_idx, pooled_dex$reason))
+          fit_dex_pooled <- sl_dex_pooled <- cn_pool <- cols_pool <- all_Y_pool <- NULL
+          pool_g_death <- FALSE
+        } else {
+          fit_dex_pooled <- pooled_dex$fit
+          sl_dex_pooled  <- pooled_dex$sl
+          cn_pool        <- pooled_dex$cols
+          cols_pool      <- pooled_dex$cols_pool
+          all_Y_pool     <- pooled_dex$Y
+        }
+      } else {
+        fit_dex_pooled <- sl_dex_pooled <- cn_pool <- cols_pool <- all_Y_pool <- NULL
+      }
+
+      if (isTRUE(pool_q_exit)) {
+        if (is.null(pooled_qex$fit)) {
+          message(sprintf(
+            "[fold %d] pool_q_exit=TRUE but pooled Q_exit failed (%s); per-time fallback",
+            f_idx, pooled_qex$reason))
+          fit_qexit_pooled <- sl_qexit_pooled <- cn_qexit_pool <- cols_pool_qexit <- all_Y_qexit_pool <- NULL
+          pool_q_exit <- FALSE
+        } else {
+          fit_qexit_pooled  <- pooled_qex$fit
+          sl_qexit_pooled   <- pooled_qex$sl
+          cn_qexit_pool     <- pooled_qex$cols
+          cols_pool_qexit   <- pooled_qex$cols_pool
+          all_Y_qexit_pool  <- pooled_qex$Y
+        }
+      } else {
+        fit_qexit_pooled <- sl_qexit_pooled <- cn_qexit_pool <- cols_pool_qexit <- all_Y_qexit_pool <- NULL
+      }
+
+      rm(pooled_dex, pooled_qex)
+
+      pooled_dex_used   <- isTRUE(pool_g_death) && !is.null(fit_dex_pooled)
+      pooled_qexit_used <- isTRUE(pool_q_exit)  && !is.null(fit_qexit_pooled)
+
+      if (pooled_dex_used || pooled_qexit_used) {
+        pooled_pred_cache <- build_pooled_pred_cache(
+          tmax             = tmax,
+          tr_ids           = tr_ids,
+          vl_ids           = vl_ids,
+          row_index        = row_index,
+          D                = D,
+          D_shifted        = D_shifted,
+          pool_g_death     = pool_g_death,
+          fit_dex_pooled   = fit_dex_pooled,
+          cols_pool        = cols_pool,
+          cn_pool          = cn_pool,
+          pool_q_exit      = pool_q_exit,
+          fit_qexit_pooled = fit_qexit_pooled,
+          cols_pool_qexit  = cols_pool_qexit,
+          cn_qexit_pool    = cn_qexit_pool,
+          pool_time_basis  = pool_time_basis,
+          a_names          = a_names,
+          k                = k,
+          t_min            = t_min,
+          scale_info       = scale_info
+        )
+        if (identical(fits, "save")) {
+          if (pooled_dex_used)
+            saveRDS(list(fit       = slim_predictable_sl(fit_dex_pooled),
+                         cn_pool   = cn_pool,
+                         cols_pool = cols_pool),
+                    cs_fits_path(fits_dir, f_idx, NULL, "dex_pooled"))
+          if (pooled_qexit_used)
+            saveRDS(list(fit  = slim_predictable_sl(fit_qexit_pooled),
+                         cols = cn_qexit_pool,
+                         cols_pool = cols_pool_qexit),
+                    cs_fits_path(fits_dir, f_idx, NULL, "qexit_pooled"))
+        }
+        sl_dex_pooled   <- slim_sl(sl_dex_pooled)
+        sl_qexit_pooled <- slim_sl(sl_qexit_pooled)
+        rm(fit_dex_pooled, fit_qexit_pooled)
+        gc(FALSE)
+        fit_dex_pooled   <- NULL
+        fit_qexit_pooled <- NULL
+      } else {
+        pooled_pred_cache <- NULL
+      }
     }
 
     for (tt in rev(seq_len(tmax))) {
@@ -904,7 +970,18 @@ sdr <- function(
 
       rm(reg_res, r_rem, r_dex, r_exit, r_qrem)
       gc()
-      
+
+      if (identical(fits, "save")) {
+        saveRDS(slim_predictable_sl(fit_rem),
+                cs_fits_path(fits_dir, f_idx, tt, "grem"))
+        if (!isTRUE(pool_g_death))
+          saveRDS(slim_predictable_sl(fit_dex),
+                  cs_fits_path(fits_dir, f_idx, tt, "dex"))
+        if (!isTRUE(pool_q_exit))
+          saveRDS(list(fit = slim_predictable_sl(fit_qexit), cn = cn_qexit),
+                  cs_fits_path(fits_dir, f_idx, tt, "qexit"))
+      }
+
       q_death_nat_raw <- q_death_nat
       q_dc_nat_raw    <- q_dc_nat
       q_death_shf_raw <- q_death_shf
@@ -956,15 +1033,6 @@ sdr <- function(
 
       meta <- sl_meta(sl_qrem,  f_idx, tt, "Q_rem",        length(rem_idx),  n_val_tt)
       if (!is.null(meta)) sl_chunks_here[[length(sl_chunks_here) + 1L]] <- meta
-
-      if (identical(fits, "save")) {
-        saveRDS(fit_rem, cs_fits_path(fits_dir, f_idx, tt, "grem"))
-        if (!isTRUE(pool_g_death))
-          saveRDS(fit_dex, cs_fits_path(fits_dir, f_idx, tt, "dex"))
-        if (!isTRUE(pool_q_exit))
-          saveRDS(list(fit = fit_qexit, cn = cn_qexit),
-                  cs_fits_path(fits_dir, f_idx, tt, "qexit"))
-      }
 
       rm(fit_rem, fit_dex, fit_qexit, fit_qrem); gc(FALSE)
 

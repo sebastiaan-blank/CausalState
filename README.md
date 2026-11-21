@@ -157,7 +157,7 @@ res_itmle <- itmle(
   a_names         = "A",
   sl_remain       = sl_lib, sl_death = sl_lib,
   sl_recursive    = sl_lib, sl_y = sl_lib,
-  sl_target       = sl_tmle,
+  sl_tmle         = sl_tmle,
   outcome_family  = "binomial",
   k               = 5L, inner_v = 5L,
   seed            = 1L,

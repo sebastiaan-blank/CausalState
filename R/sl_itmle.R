@@ -56,8 +56,8 @@ tgt_clip <- function(p, bounds = 1e-5) {
 #'   \item{`SL.tmle_glmnet_ridge`}{Ridge regression (alpha = 0).}
 #'   \item{`SL.tmle_glmnet_enet`}{Elastic net (alpha = 0.5).}
 #'   \item{`SL.tmle_glmnet_lasso`}{Lasso (alpha = 1).}
-#'   \item{`SL.tmle_xgb_d1`}{XGBoost depth 1, CPU, 50 rounds.}
-#'   \item{`SL.tmle_xgb_d3`}{XGBoost depth 3, CPU, 50 rounds.}
+#'   \item{`SL.tmle_xgb_d1`}{XGBoost depth 1 (stumps), CPU, 50 rounds.}
+#'   \item{`SL.tmle_xgb_d2`}{XGBoost depth 2, CPU, 50 rounds.}
 #'   \item{`SL.tmle_xgb_d6`}{XGBoost depth 6, CPU, 50 rounds.}
 #' }
 #'
@@ -97,8 +97,9 @@ tgt_clip <- function(p, bounds = 1e-5) {
 #'   Default `0`. (`SL.tgt.xgboost` only.)
 #' @param nthread Integer. Number of threads for XGBoost. Default `1L`.
 #'   (`SL.tgt.xgboost` only.)
-#' @param use_cuda Logical. Use CUDA GPU acceleration in XGBoost if available.
-#'   Default `TRUE`. (`SL.tgt.xgboost` only.)
+#' @param use_cuda Logical. Use CUDA GPU acceleration in XGBoost. Default
+#'   `FALSE`. Requires a CUDA-enabled build of xgboost; standard CRAN xgboost
+#'   does not support this. (`SL.tgt.xgboost` only.)
 #' @param ... Additional arguments (ignored).
 #'
 #' @return A list with elements `pred` (numeric predictions on the probability
@@ -115,7 +116,7 @@ tgt_clip <- function(p, bounds = 1e-5) {
 #' sl_tmle_penalised <- c(
 #'   "SL.tmle_empty", "SL.tmle_intercept", "SL.tmle_glm",
 #'   "SL.tmle_glmnet_ridge", "SL.tmle_glmnet_enet",
-#'   "SL.tmle_xgb_d1", "SL.tmle_xgb_d3", "SL.tmle_xgb_d6"
+#'   "SL.tmle_xgb_d1", "SL.tmle_xgb_d2", "SL.tmle_xgb_d6"
 #' )
 #'
 #' @name sl_itmle
@@ -352,7 +353,7 @@ SL.tgt.xgboost <- function(Y, X, newX, family, obsWeights, id,
                            nrounds = 100L, max_depth = 2L, eta = 0.1,
                            subsample = 0.8, colsample_bytree = 0.8,
                            max_delta_step = 0,
-                           nthread = 1L, use_cuda = TRUE,
+                           nthread = 1L, use_cuda = FALSE,
                            bounds = 1e-5, ...) {
   if (!requireNamespace("xgboost", quietly = TRUE))
     stop("Package 'xgboost' is required for SL.tgt.xgboost. Install with install.packages('xgboost').",
@@ -427,7 +428,6 @@ SL.tgt.xgboost <- function(Y, X, newX, family, obsWeights, id,
     fit  = structure(
       list(
         object         = fit,
-        use_cuda       = use_cuda,
         max_delta_step = max_delta_step,
         bounds         = bounds
       ),
@@ -531,9 +531,8 @@ SL.tmle_xgb_d1 <- function(Y, X, newX, family, obsWeights, id, ...) {
     Y, X, newX, family, obsWeights, id,
     nrounds = 50L,
     eta = 0.1,
-    max_delta_step = 1,
+    max_depth = 1L,
     nthread = 1L,
-    use_cuda = F,
     ...
   )
 }
@@ -541,18 +540,17 @@ predict.SL.tmle_xgb_d1 <- predict.SL.tgt.xgboost
 
 #' @rdname sl_itmle
 #' @export
-SL.tmle_xgb_d3 <- function(Y, X, newX, family, obsWeights, id, ...) {
+SL.tmle_xgb_d2 <- function(Y, X, newX, family, obsWeights, id, ...) {
   SL.tgt.xgboost(
     Y, X, newX, family, obsWeights, id,
     nrounds = 50L,
     eta = 0.1,
-    max_delta_step = 3,
+    max_depth = 2L,
     nthread = 1L,
-    use_cuda = F,
     ...
   )
 }
-predict.SL.tmle_xgb_d3 <- predict.SL.tgt.xgboost
+predict.SL.tmle_xgb_d2 <- predict.SL.tgt.xgboost
 
 #' @rdname sl_itmle
 #' @export
@@ -561,9 +559,8 @@ SL.tmle_xgb_d6 <- function(Y, X, newX, family, obsWeights, id, ...) {
     Y, X, newX, family, obsWeights, id,
     nrounds = 50L,
     eta = 0.1,
-    max_delta_step = 6,
+    max_depth = 6L,
     nthread = 1L,
-    use_cuda = F,
     ...
   )
 }
@@ -574,6 +571,6 @@ sl_tmle <- c(
   "SL.tmle_intercept",
   "SL.tmle_glm",
   "SL.tmle_xgb_d1",
-  "SL.tmle_xgb_d3",
+  "SL.tmle_xgb_d2",
   "SL.tmle_xgb_d6"
 )

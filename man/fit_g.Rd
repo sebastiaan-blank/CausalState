@@ -19,8 +19,8 @@ fit_g(
   v = 5L,
   seed = 1L,
   policy_spec_fun,
-  id = "id",
-  time = "trial_time",
+  id,
+  time,
   bounds = 1e-05,
   method = "classification",
   dr_sl = FALSE,
@@ -76,9 +76,9 @@ factor using its declared levels. Numeric outputs for a factor are matched
 to category labels, never interpreted as internal integer codes. The
 function is also called on hypothetical treatments at every declared level.}
 
-\item{id}{Character. Subject identifier column name. Default \code{"id"}.}
+\item{id}{Character. Subject identifier column name.}
 
-\item{time}{Character. Time column name. Default \code{"trial_time"}.}
+\item{time}{Character. Time column name.}
 
 \item{bounds}{Numeric. Probability floor for clipping. Default \code{1e-5}.}
 
