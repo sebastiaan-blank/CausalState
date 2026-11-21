@@ -127,7 +127,7 @@ test_that("all estimator paths and targeting receive numeric treatment indicator
     list(A = levels(D$A)[rank])
   }
   g_args <- list(df = D, a_names = "A", tmax = 3L, baseline = "age", tv_names = "L1",
-                 sl_g = "SL.mean", k = 1L, inner_v = 2L, v = 2L, time = "time",
+                 sl_g = "SL.mean", k = 1L, inner_v = 2L, v = 2L, id = "id", time = "time",
                  policy_spec_fun = policy, verbose = FALSE)
   w <- suppressMessages(do.call(fit_g, c(g_args, list(method = "propensity"))))
   expect_true(any(vapply(seen$models, function(nm)
@@ -180,7 +180,7 @@ test_that("joint factor and continuous classification keeps both treatment types
   }
   w <- suppressMessages(fit_g(
     D, c("A","B"), 1L, sl_g = "SL.mean", k = 0L, inner_v = 2L, v = 2L,
-    time = "time", policy_spec_fun = policy, verbose = FALSE
+    id = "id", time = "time", policy_spec_fun = policy, verbose = FALSE
   ))
   expect_identical(w$settings$treatment_levels, list(A = levels(D$A)))
   expect_identical(w$settings$treatment_ordered, c(A = FALSE))

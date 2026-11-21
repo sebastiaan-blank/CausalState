@@ -99,12 +99,12 @@ test_that("categorical declarations and policy labels are validated", {
   expect_error(fit_ordinal_test(d, function(D, t, a_names) list(A = c("none", "low"))),
                "one value or 800 values")
   expect_error(fit_g(transform(d, B = A), c("A", "B"), 1L,
-                    sl_g = "SL.mean", time = "time", policy_spec_fun = policy,
+                    sl_g = "SL.mean", id = "id", time = "time", policy_spec_fun = policy,
                     method = "propensity", verbose = FALSE), "single")
   nominal <- d
   nominal$A <- factor(nominal$A, levels = levels(d$A), ordered = FALSE)
   classified <- suppressMessages(fit_g(
-    nominal, "A", 1L, sl_g = "SL.mean", time = "time", k = 0L, inner_v = 2L,
+    nominal, "A", 1L, sl_g = "SL.mean", id = "id", time = "time", k = 0L, inner_v = 2L,
     policy_spec_fun = policy, verbose = FALSE))
   expect_identical(classified$settings$treatment_encoding, "reference")
   expect_identical(classified$settings$treatment_ordered, c(A = FALSE))
@@ -167,7 +167,7 @@ test_that("ordinal factor weights work with every downstream estimator", {
   w <- suppressMessages(fit_g(
     d, "A", 2L, baseline = "age", tv_names = "L1",
     sl_g = c("SL.mean", "SL.glm"), k = 1L, inner_v = 2L, v = 2L,
-    time = "time", policy_spec_fun = policy, method = "propensity", verbose = FALSE
+    id = "id", time = "time", policy_spec_fun = policy, method = "propensity", verbose = FALSE
   ))
   args <- list(
     df = d, weight_object = w, tmax = 2L, id = "id", time = "time",
