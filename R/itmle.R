@@ -91,258 +91,208 @@ itmle_target_fit <- function(
     offset_train, offset_pred_tr, offset_pred_vl,
     weights,
     sl_lib,
-    v_target            = 10L,
     v_sl_inner          = 10L,
     parallel            = FALSE,
     reg_workers         = NULL,
     sl_workers          = NULL,
     cluster_inner       = NULL,
     seed                = 1L,
-    min_n_train_fold    = 20L,
     min_obs_with_weight = 30L,
     clip_fun            = function(x) pmin(pmax(x, 1e-5), 1 - 1e-5)
 ) {
   N_tr <- length(Y_train)
-  
-  ok <- weights > 0 & is.finite(weights) &
-    is.finite(Y_train) & is.finite(offset_train)
-  
-  if (sum(ok) < min_obs_with_weight) {
+  N_vl <- nrow(X_pred_vl)
+
+  rows_preds_finite_tr <- stats::complete.cases(X_pred_tr)
+  rows_preds_finite_vl <- stats::complete.cases(X_pred_vl)
+
+  fit_ok <- is.finite(weights) &
+            weights > 0 &
+            is.finite(Y_train) &
+            is.finite(offset_train) &
+            rows_preds_finite_tr
+
+  no_update_return <- function(reason) {
     Q_tr <- clip_fun(plogis(offset_pred_tr))
     Q_vl <- clip_fun(plogis(offset_pred_vl))
-    
-    return(list(
-      eps_tr  = rep(0, nrow(X_pred_tr)),
-      eps_vl  = rep(0, nrow(X_pred_vl)),
+    list(
+      eps_tr  = rep(0, N_tr),
+      eps_vl  = rep(0, N_vl),
       Q_tr    = Q_tr,
       Q_vl    = Q_vl,
       sl_meta = data.table::data.table(
-        learner = "empty_fallback_too_few_weighted",
-        weight  = 1,
-        fold    = NA_integer_
+        learner = reason,
+        weight  = 1
       ),
-      
       mean_Q_tr_before = mean(Q_tr, na.rm = TRUE),
       mean_Q_tr_after  = mean(Q_tr, na.rm = TRUE),
       mean_eps_tr      = 0,
       sd_eps_tr        = 0,
-      
       mean_Q_vl_before = mean(Q_vl, na.rm = TRUE),
       mean_Q_vl_after  = mean(Q_vl, na.rm = TRUE),
       mean_eps_vl      = 0,
       sd_eps_vl        = 0
-    ))
+    )
   }
-  
+
+  if (sum(fit_ok) < min_obs_with_weight) {
+    return(no_update_return("empty_fallback_too_few_weighted"))
+  }
+
+  pred_ok_tr <- is.finite(weights) &
+                weights == 0 &
+                is.finite(offset_pred_tr) &
+                rows_preds_finite_tr
+
+  pred_ok_vl <- is.finite(offset_pred_vl) &
+                rows_preds_finite_vl
+
   X_train_aug   <- cbind(as.data.frame(X_train),   "._sl_offset" = offset_train)
   X_pred_tr_aug <- cbind(as.data.frame(X_pred_tr), "._sl_offset" = offset_pred_tr)
   X_pred_vl_aug <- cbind(as.data.frame(X_pred_vl), "._sl_offset" = offset_pred_vl)
-  
-  use_cluster <- !is.null(cluster_inner) &&
-    length(unique(cluster_inner)) >= v_target
-  
-  outer_folds <- with_seed(seed, {
-    if (use_cluster) {
+
+  fit_ok_idx <- which(fit_ok)
+  n_fit      <- length(fit_ok_idx)
+
+  if (!is.null(cluster_inner)) {
+    n_clusters <- length(unique(cluster_inner[fit_ok_idx]))
+    if (n_clusters < 2L) {
+      return(no_update_return("empty_fallback_too_few_clusters"))
+    }
+    V_eff <- min(v_sl_inner, n_clusters)
+    inner_folds <- with_seed(seed + 1000L, {
       origami::make_folds(
-        n           = N_tr,
-        V           = v_target,
-        cluster_ids = cluster_inner,
+        n           = n_fit,
+        V           = V_eff,
+        cluster_ids = cluster_inner[fit_ok_idx],
         fold_fun    = origami::folds_vfold
       )
-    } else {
+    })
+  } else {
+    V_eff <- min(v_sl_inner, n_fit)
+    inner_folds <- with_seed(seed + 1000L, {
       origami::make_folds(
-        n        = N_tr,
-        V        = v_target,
+        n        = n_fit,
+        V        = V_eff,
         fold_fun = origami::folds_vfold
       )
-    }
-  })
-  
-  eps_tr_cv <- numeric(N_tr)
-  Q_tr_cv   <- clip_fun(plogis(offset_pred_tr))
-  
-  eps_vl_mat <- matrix(
-    NA_real_,
-    nrow = nrow(X_pred_vl),
-    ncol = length(outer_folds)
-  )
-  
-  ok_idx <- which(ok)
+    })
+  }
+  sl_validRows <- lapply(inner_folds, function(f) f$validation_set)
 
-  use_mc_tgt <- !is.null(sl_workers)
+  # With one SuperLearner per flexible targeting step there is no outer
+  # par_lapply loop to spend reg_workers on; collapse reg_workers and
+  # sl_workers into mcSuperLearner's mc.cores budget.
+  tgt_workers <- (if (!is.null(reg_workers)) as.integer(reg_workers) else 0L) +
+                 (if (!is.null(sl_workers))  as.integer(sl_workers)  else 0L)
+  use_mc_tgt <- isTRUE(parallel) && tgt_workers > 1L
   if (use_mc_tgt) {
     old_cores_tgt <- getOption("mc.cores")
-    options(mc.cores = as.integer(sl_workers))
+    options(mc.cores = tgt_workers)
     on.exit(options(mc.cores = old_cores_tgt), add = TRUE)
   }
   sl_fn_tgt <- if (use_mc_tgt) SuperLearner::mcSuperLearner else SuperLearner::SuperLearner
 
-  fold_res <- par_lapply(
-    seq_along(outer_folds),
-    function(v) {
-      
-      tr_idx <- outer_folds[[v]]$training_set
-      vl_idx <- outer_folds[[v]]$validation_set
-      
-      tr_v <- intersect(tr_idx, ok_idx)
-      vl_v <- intersect(vl_idx, ok_idx)
-      
-      if (length(tr_v) < min_n_train_fold || length(vl_v) < 1L) {
-        return(list(
-          vl_idx = vl_idx,
-          eps_vl = rep(0, length(vl_idx)),
-          Q_vl   = clip_fun(plogis(offset_pred_tr[vl_idx])),
-          eps_vl_full = rep(NA_real_, nrow(X_pred_vl)),
-          sl_meta = data.table::data.table(
-            learner = "fold_skipped_too_small",
-            weight  = 1,
-            fold    = v
-          )
-        ))
-      }
-      
-      inner_use_cluster <- !is.null(cluster_inner) &&
-        length(unique(cluster_inner[tr_v])) >= v_sl_inner
-      
-      inner_folds <- with_seed(seed + 1000L * v, {
-        if (inner_use_cluster) {
-          origami::make_folds(
-            n           = length(tr_v),
-            V           = v_sl_inner,
-            cluster_ids = cluster_inner[tr_v],
-            fold_fun    = origami::folds_vfold
-          )
-        } else {
-          origami::make_folds(
-            n        = length(tr_v),
-            V        = v_sl_inner,
-            fold_fun = origami::folds_vfold
-          )
-        }
-      })
-      
-      sl_validRows <- lapply(inner_folds, function(f) f$validation_set)
-      
-      fit_v <- tryCatch(
-        with_seed(
-          seed + 2000L * v,
-          suppressWarnings(
-            sl_fn_tgt(
-              Y          = clip_fun(Y_train[tr_v]),
-              X          = X_train_aug[tr_v, , drop = FALSE],
-              SL.library = sl_lib,
-              family     = stats::binomial(),
-              obsWeights = weights[tr_v],
-              id         = if (!is.null(cluster_inner)) {
-                cluster_inner[tr_v]
-              } else {
-                seq_along(tr_v)
-              },
-              cvControl  = list(
-                V = v_sl_inner,
-                validRows = sl_validRows
-              )
-            )
-          ),
-          use_lecuyer = use_mc_tgt
-        ),
-        error = function(e) {
-          message(sprintf(
-            "[itmle_target_fit fold %d] SL error: %s",
-            v, conditionMessage(e)
-          ))
-          NULL
-        }
-      )
-      
-      if (is.null(fit_v)) {
-        return(list(
-          vl_idx = vl_idx,
-          eps_vl = rep(0, length(vl_idx)),
-          Q_vl   = clip_fun(plogis(offset_pred_tr[vl_idx])),
-          eps_vl_full = rep(NA_real_, nrow(X_pred_vl)),
-          sl_meta = data.table::data.table(
-            learner = "fold_sl_error",
-            weight  = 1,
-            fold    = v
-          )
-        ))
-      }
-      
-      p_tr_v <- as.numeric(
-        stats::predict(
-          fit_v,
-          X_pred_tr_aug[vl_v, , drop = FALSE]
-        )$pred
-      )
-      
-      p_tr_v <- clip_fun(p_tr_v)
-      
-      eps_v <- qlogis(p_tr_v) - offset_pred_tr[vl_v]
-      eps_v[!is.finite(eps_v)] <- 0
-      
-      p_vl_v <- as.numeric(
-        stats::predict(
-          fit_v,
-          X_pred_vl_aug
-        )$pred
-      )
-      
-      p_vl_v <- clip_fun(p_vl_v)
-      
-      eps_vl_full <- qlogis(p_vl_v) - offset_pred_vl
-      eps_vl_full[!is.finite(eps_vl_full)] <- 0
-      
-      list(
-        vl_idx = vl_v,
-        eps_vl = eps_v,
-        Q_vl   = p_tr_v,
-        eps_vl_full = eps_vl_full,
-        sl_meta = data.table::data.table(
-          learner = fit_v$libraryNames,
-          weight  = fit_v$coef,
-          fold    = v
+  fit <- tryCatch(
+    with_seed(
+      seed + 2000L,
+      suppressWarnings(
+        sl_fn_tgt(
+          Y          = clip_fun(Y_train[fit_ok_idx]),
+          X          = X_train_aug[fit_ok_idx, , drop = FALSE],
+          SL.library = sl_lib,
+          family     = stats::binomial(),
+          obsWeights = weights[fit_ok_idx],
+          id         = if (!is.null(cluster_inner)) {
+            cluster_inner[fit_ok_idx]
+          } else {
+            seq_along(fit_ok_idx)
+          },
+          cvControl  = list(V = V_eff, validRows = sl_validRows)
         )
-      )
-    },
-    workers  = reg_workers,
-    parallel = parallel,
-    seed     = TRUE
+      ),
+      use_lecuyer = use_mc_tgt
+    ),
+    error = function(e) {
+      message(sprintf(
+        "[itmle_target_fit] SL error: %s", conditionMessage(e)
+      ))
+      NULL
+    }
   )
-  
-  sl_meta_all <- vector("list", length(fold_res))
-  
-  for (v in seq_along(fold_res)) {
-    rr <- fold_res[[v]]
-    
-    eps_tr_cv[rr$vl_idx] <- rr$eps_vl
-    Q_tr_cv[rr$vl_idx]   <- rr$Q_vl
-    
-    eps_vl_mat[, v] <- rr$eps_vl_full
-    sl_meta_all[[v]] <- rr$sl_meta
+
+  if (is.null(fit)) {
+    return(no_update_return("sl_fit_failed"))
   }
-  
-  eps_vl_cv <- rowMeans(eps_vl_mat, na.rm = TRUE)
-  
-  bad_vl <- !is.finite(eps_vl_cv)
-  if (any(bad_vl)) {
-    eps_vl_cv[bad_vl] <- 0
+
+  if (all(fit$coef == 0)) {
+    return(no_update_return("sl_all_zero_coef"))
   }
-  
+
+  # Fit-set rows: Z %*% coef via method$computePred (one vectorised call).
+  # SuperLearner drops any candidate that fails in a fold from the whole
+  # library, so Z has no NA columns and coef length matches ncol(Z).
+  p_fit_ok <- clip_fun(as.numeric(
+    fit$method$computePred(
+      predY   = fit$Z,
+      coef    = fit$coef,
+      control = fit$control
+    )
+  ))
+
+  p_tr <- rep(NA_real_, N_tr)
+  p_tr[fit_ok_idx] <- p_fit_ok
+
+  # Zero-weight at-risk training rows: full-refit predict (same ensemble
+  # weights, candidates refit on all fit-set rows).
+  zw_tr_idx <- which(pred_ok_tr)
+  if (length(zw_tr_idx) > 0L) {
+    p_tr[zw_tr_idx] <- clip_fun(as.numeric(
+      stats::predict(
+        fit,
+        X_pred_tr_aug[zw_tr_idx, , drop = FALSE]
+      )$pred
+    ))
+  }
+
+  # Outer-validation rows: full-refit predict.
+  p_vl <- rep(NA_real_, N_vl)
+  vl_pred_idx <- which(pred_ok_vl)
+  if (length(vl_pred_idx) > 0L) {
+    p_vl[vl_pred_idx] <- clip_fun(as.numeric(
+      stats::predict(
+        fit,
+        X_pred_vl_aug[vl_pred_idx, , drop = FALSE]
+      )$pred
+    ))
+  }
+
+  eps_tr_cv <- qlogis(p_tr) - offset_pred_tr
+  eps_tr_cv[!is.finite(eps_tr_cv)] <- 0
+
+  eps_vl_cv <- qlogis(p_vl) - offset_pred_vl
+  eps_vl_cv[!is.finite(eps_vl_cv)] <- 0
+
+  Q_tr_cv <- clip_fun(plogis(offset_pred_tr + eps_tr_cv))
   Q_vl_cv <- clip_fun(plogis(offset_pred_vl + eps_vl_cv))
-  
+
+  sl_meta <- data.table::data.table(
+    learner = fit$libraryNames,
+    weight  = fit$coef
+  )
+
   list(
     eps_tr  = eps_tr_cv,
     eps_vl  = eps_vl_cv,
     Q_tr    = Q_tr_cv,
     Q_vl    = Q_vl_cv,
-    sl_meta = data.table::rbindlist(sl_meta_all, use.names = TRUE, fill = TRUE), 
-    
+    sl_meta = sl_meta,
+
     mean_Q_tr_before = mean(clip_fun(plogis(offset_pred_tr)), na.rm = TRUE),
     mean_Q_tr_after  = mean(Q_tr_cv, na.rm = TRUE),
     mean_eps_tr      = mean(eps_tr_cv, na.rm = TRUE),
     sd_eps_tr        = sd(eps_tr_cv, na.rm = TRUE),
-    
+
     mean_Q_vl_before = mean(clip_fun(plogis(offset_pred_vl)), na.rm = TRUE),
     mean_Q_vl_after  = mean(Q_vl_cv, na.rm = TRUE),
     mean_eps_vl      = mean(eps_vl_cv, na.rm = TRUE),
@@ -361,7 +311,6 @@ itmle_inner_target <- function(
     ids,
     sl_lib_target,
     cluster_tr   = NULL,
-    v_target     = 10L,
     v_sl_inner   = 10L,
     parallel     = FALSE,
     reg_workers  = NULL,
@@ -478,7 +427,6 @@ itmle_inner_target <- function(
 
         weights        = weight_tr,
         sl_lib         = sl_lib_target,
-        v_target       = v_target,
         v_sl_inner     = v_sl_inner,
         reg_workers    = reg_workers,
         parallel       = parallel,
@@ -653,10 +601,11 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #' @param sl_tmle SuperLearner library for the iTMLE targeting step. Should
 #'   consist of learners from [sl_itmle] that accept an offset column
 #'   (`._sl_offset`). Defaults to the package-provided `sl_tmle` vector.
-#' @param v_target_itmle Integer. Number of cross-validation folds for the
-#'   outer targeting loop. Default `10L`.
 #' @param v_sl_inner_itmle Integer. Number of inner CV folds inside the
-#'   targeting SuperLearner. Default `10L`.
+#'   targeting SuperLearner. Default `10L`. This controls the fold count that
+#'   SuperLearner uses to learn its ensemble weights; it is shrunk to the
+#'   number of eligible clusters (when `cluster` is supplied) or to the number
+#'   of eligible training rows if those are smaller.
 #' @param fits See [sdr()] for full documentation.  `fits = "save"` /
 #'   `"load"` saves and reloads the `g_remain`, `g_death_exit`, and `Q_exit`
 #'   fits; the iTMLE targeting step always runs in full.  Outcome and pooling
@@ -798,7 +747,7 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #'   baseline = c("age", "sex"), tv_names = c("L1", "L2"), a_names = "A",
 #'   sl_remain = sl_lib, sl_death = sl_lib,
 #'   sl_recursive = sl_lib, sl_y = sl_lib, sl_tmle = tgt_lib,
-#'   k = 1L, inner_v = 2L, v_target_itmle = 2L, v_sl_inner_itmle = 2L,
+#'   k = 1L, inner_v = 2L, v_sl_inner_itmle = 2L,
 #'   parallel = FALSE, seed = 1L, policy_spec_fun = policy_bin
 #' )
 #' res$psi; res$se
@@ -822,7 +771,7 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #'   baseline = "age", tv_names = "L1", a_names = "A",
 #'   sl_remain = sl_lib, sl_death = sl_lib,
 #'   sl_recursive = sl_lib, sl_y = sl_lib, sl_tmle = tgt_lib,
-#'   k = 1L, inner_v = 2L, v_target_itmle = 2L, v_sl_inner_itmle = 2L,
+#'   k = 1L, inner_v = 2L, v_sl_inner_itmle = 2L,
 #'   parallel = FALSE, seed = 1L, policy_spec_fun = policy_cont
 #' )
 #' res_c$psi; res_c$se
@@ -849,7 +798,7 @@ itmle_eic_se <- function(ic, cluster_by_id = NULL, use_second_moment = TRUE) {
 #'   baseline = c("age", "sex"), tv_names = "L1", a_names = c("A_b1", "A_c1"),
 #'   sl_remain = sl_lib, sl_death = sl_lib,
 #'   sl_recursive = sl_lib, sl_y = sl_lib, sl_tmle = tgt_lib,
-#'   k = 1L, inner_v = 2L, v_target_itmle = 2L, v_sl_inner_itmle = 2L,
+#'   k = 1L, inner_v = 2L, v_sl_inner_itmle = 2L,
 #'   parallel = FALSE, seed = 1L, policy_spec_fun = policy_multi
 #' )
 #' res_m$psi; res_m$se
@@ -884,7 +833,6 @@ itmle <- function(
     sl_workers   = NULL,
     inner_v = 5L,
     sl_tmle = NULL,
-    v_target_itmle = 10L,
     v_sl_inner_itmle = 10L,
     cluster = NULL,
     cluster_se_only = FALSE,
@@ -1753,7 +1701,6 @@ itmle <- function(
         sl_lib_target     = sl_tmle,
         cluster_tr        = cluster_by_id[id_tr_ar],
 
-        v_target          = v_target_itmle,
         v_sl_inner        = v_sl_inner_itmle,
         parallel          = parallel,
         reg_workers       = reg_workers,

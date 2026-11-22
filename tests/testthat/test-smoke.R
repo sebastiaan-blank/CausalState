@@ -203,7 +203,6 @@ test_that("itmle returns finite psi, positive se, and ordered ci", {
     outcome_family   = "binomial",
     k                = 1L,
     inner_v          = 2L,
-    v_target_itmle   = 2L,
     v_sl_inner_itmle = 2L,
     parallel         = FALSE,
     seed             = 1L,

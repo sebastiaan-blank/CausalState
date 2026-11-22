@@ -151,7 +151,6 @@ test_that("all estimator paths and targeting receive numeric treatment indicator
       }
       if (identical(estimator, itmle)) {
         est_args$sl_tmle <- "SL.tgt.intercept"
-        est_args$v_target_itmle <- 2L
         est_args$v_sl_inner_itmle <- 2L
       }
       result <- suppressMessages(do.call(estimator, est_args))

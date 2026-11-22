@@ -185,7 +185,7 @@ test_that("ordinal factor weights work with every downstream estimator", {
     expect_identical(result$settings$treatment_levels, list(A = levels(d$A)))
   }
   result <- suppressMessages(do.call(itmle, c(args, list(
-    sl_tmle = "SL.tgt.glm", v_target_itmle = 2L, v_sl_inner_itmle = 2L
+    sl_tmle = "SL.tgt.glm", v_sl_inner_itmle = 2L
   ))))
   expect_true(is.finite(result$psi))
   expect_true(is.finite(result$se))

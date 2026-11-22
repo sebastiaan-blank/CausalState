@@ -128,8 +128,8 @@ Default \code{0}. (\code{SL.tgt.xgboost} only.)}
 (\code{SL.tgt.xgboost} only.)}
 
 \item{use_cuda}{Logical. Use CUDA GPU acceleration in XGBoost. Default
-\code{FALSE}. Requires a CUDA-enabled build of xgboost; standard CRAN
-xgboost does not support this. (\code{SL.tgt.xgboost} only.)}
+\code{FALSE}. Requires a CUDA-enabled build of xgboost; standard CRAN xgboost
+does not support this. (\code{SL.tgt.xgboost} only.)}
 }
 \value{
 A list with elements \code{pred} (numeric predictions on the probability

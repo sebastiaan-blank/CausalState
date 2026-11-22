@@ -1,3 +1,41 @@
+# CausalState 0.11.1
+
+## Bug fixes
+
+* `itmle()`: at each flexible targeting step, zero-weight at-risk training
+  patients now receive the fitted fluctuation correction at their history,
+  matching the rule already applied to validation patients. Previously these
+  patients had `eps_tr = 0` at the current inner step and their propagated
+  `Q` could enter the preceding regression stale. Point estimates may change,
+  particularly under MTPs whose density ratios hit zero on at-risk patients;
+  the fix is a no-op if no density ratio actually hits zero.
+
+## Internal
+
+* `itmle_target_fit()` now fits a single SuperLearner per flexible inner
+  targeting step per outer fold (previously `v_target` separate SuperLearners
+  whose outer-validation predictions were bagged). The candidate predictions
+  feeding the training recursion are out of fold (from SuperLearner's `$Z`),
+  combined via `fit$method$computePred()` with ensemble weights estimated
+  across all eligible outer-training rows. Zero-weight at-risk training rows
+  and outer-validation rows share the same full-refit ensemble prediction.
+  This uses the same selection principle as Algorithm 1 of Luedtke et al.
+  (2018): the candidate predictions are out of fold; the ensemble weights are
+  pooled across eligible rows.
+* When clustered CV is requested but fewer than `v_sl_inner_itmle` clusters
+  survive filtering, the inner CV is now run with `V = number_of_clusters`
+  rather than falling back to row-wise CV. With fewer than two clusters the
+  targeting step contributes `eps = 0`.
+* `reg_workers` and `sl_workers` are now combined into the single
+  SuperLearner's `mc.cores` budget (there is no longer an outer v_target
+  `par_lapply` loop to spend `reg_workers` on).
+
+## Breaking changes
+
+* `v_target_itmle` argument of `itmle()` is removed. Passing it now raises
+  R's standard "unused argument" error. Existing scripts need only drop the
+  argument; the default behaviour is unchanged by the removal.
+
 # CausalState 0.11.0
 
 ## Bug fixes

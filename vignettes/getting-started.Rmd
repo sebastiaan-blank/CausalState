@@ -259,7 +259,6 @@ res_itmle <- itmle(
   outcome_family   = "binomial",
   k                = 1L,
   inner_v          = 5L,
-  v_target_itmle   = 5L,
   v_sl_inner_itmle = 5L,
   seed             = 1L,
   policy_spec_fun  = policy_up

@@ -253,7 +253,7 @@ res_itmle_nat <- itmle(
   baseline = c("age", "sex"), tv_names = c("L1", "L2"), a_names = "A",
   sl_remain = sl_lib, sl_death = sl_lib,
   sl_recursive = sl_lib, sl_y = sl_lib, sl_tmle = tgt_lib,
-  k = 1L, inner_v = 3L, v_target_itmle = 3L, v_sl_inner_itmle = 3L,
+  k = 1L, inner_v = 3L, v_sl_inner_itmle = 3L,
   parallel = FALSE, seed = 1L, policy_spec_fun = policy_nat
 )
 res_itmle_nat$diagnostics$target_sl

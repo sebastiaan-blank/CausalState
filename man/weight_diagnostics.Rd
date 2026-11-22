@@ -17,19 +17,24 @@ to \code{sdr()}/\code{itmle()}.}
 }
 \value{
 A \code{data.table} with one row per time step and columns:
-\code{t}, \code{n_risk};
+\code{t}, \code{n_risk} (subjects at risk at \code{t});
 instantaneous ratio stats (\code{Rt_mean}, \code{Rt_median},
-\code{Rt_p05}, \code{Rt_p95}, \code{Rt_max}, \code{Rt_ess});
+\code{Rt_p05}, \code{Rt_p95}, \code{Rt_max}, \code{Rt_ess}) -- at-risk
+subjects only;
 cumulative product stats (\code{cum_mean}, \code{cum_median},
-\code{cum_p05}, \code{cum_p95}, \code{cum_max}, \code{cum_ess}).
+\code{cum_p05}, \code{cum_p95}, \code{cum_max}, \code{cum_ess}) -- full
+cohort, with exited subjects' products frozen at their last observed value.
 ESS uses the Kish approximation: \eqn{(\sum w)^2 / \sum w^2}.
 }
 \description{
 Summarises the instantaneous density ratios and their cumulative products at
-each time step, restricted to subjects at risk at that time.  This matches
-how the weights enter the SDR and iTMLE corrections: the EIF term at time t
-uses the product of ratios from t=1 through t, and only at-risk subjects
-contribute non-zero correction terms.
+each time step.  Instantaneous stats (\code{Rt_*}) are restricted to
+subjects at risk at time \code{t}.  Cumulative stats (\code{cum_*}) cover
+the full cohort: subjects who exited before \code{t} retain their
+last observed cumulative product (the missing ratios are treated as 1).
+This is intentional -- restricting to at-risk subjects would hide early
+exit of high-weight subjects, which is precisely the pathology the
+cumulative summaries are meant to detect.
 }
 \details{
 Call with different \code{trim} values to assess trim sensitivity before

@@ -38,7 +38,6 @@ itmle(
   sl_workers = NULL,
   inner_v = 5L,
   sl_tmle = NULL,
-  v_target_itmle = 10L,
   v_sl_inner_itmle = 10L,
   cluster = NULL,
   cluster_se_only = FALSE,
@@ -176,11 +175,11 @@ SuperLearner. Default \code{5L}.}
 consist of learners from \link{sl_itmle} that accept an offset column
 (\code{._sl_offset}). Defaults to the package-provided \code{sl_tmle} vector.}
 
-\item{v_target_itmle}{Integer. Number of cross-validation folds for the
-outer targeting loop. Default \code{10L}.}
-
 \item{v_sl_inner_itmle}{Integer. Number of inner CV folds inside the
-targeting SuperLearner. Default \code{10L}.}
+targeting SuperLearner. Default \code{10L}. This controls the fold count that
+SuperLearner uses to learn its ensemble weights; it is shrunk to the
+number of eligible clusters (when \code{cluster} is supplied) or to the number
+of eligible training rows if those are smaller.}
 
 \item{cluster}{Character. Name of a cluster variable for cluster-robust
 standard errors (e.g. hospital). If \code{NULL}, subject id is used.}
@@ -385,7 +384,7 @@ res <- itmle(
   baseline = c("age", "sex"), tv_names = c("L1", "L2"), a_names = "A",
   sl_remain = sl_lib, sl_death = sl_lib,
   sl_recursive = sl_lib, sl_y = sl_lib, sl_tmle = tgt_lib,
-  k = 1L, inner_v = 2L, v_target_itmle = 2L, v_sl_inner_itmle = 2L,
+  k = 1L, inner_v = 2L, v_sl_inner_itmle = 2L,
   parallel = FALSE, seed = 1L, policy_spec_fun = policy_bin
 )
 res$psi; res$se
@@ -409,7 +408,7 @@ res_c <- itmle(
   baseline = "age", tv_names = "L1", a_names = "A",
   sl_remain = sl_lib, sl_death = sl_lib,
   sl_recursive = sl_lib, sl_y = sl_lib, sl_tmle = tgt_lib,
-  k = 1L, inner_v = 2L, v_target_itmle = 2L, v_sl_inner_itmle = 2L,
+  k = 1L, inner_v = 2L, v_sl_inner_itmle = 2L,
   parallel = FALSE, seed = 1L, policy_spec_fun = policy_cont
 )
 res_c$psi; res_c$se
@@ -436,7 +435,7 @@ res_m <- itmle(
   baseline = c("age", "sex"), tv_names = "L1", a_names = c("A_b1", "A_c1"),
   sl_remain = sl_lib, sl_death = sl_lib,
   sl_recursive = sl_lib, sl_y = sl_lib, sl_tmle = tgt_lib,
-  k = 1L, inner_v = 2L, v_target_itmle = 2L, v_sl_inner_itmle = 2L,
+  k = 1L, inner_v = 2L, v_sl_inner_itmle = 2L,
   parallel = FALSE, seed = 1L, policy_spec_fun = policy_multi
 )
 res_m$psi; res_m$se

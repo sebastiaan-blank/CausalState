@@ -1,7 +1,7 @@
 Package: CausalState
 Type: Package
 Title: Causal Inference in a Longitudinal Transitioning State Environment
-Version: 0.11.0
+Version: 0.11.1
 Authors@R: person(given = "Sebastiaan",
     family = "Blank",
     role = c("aut", "cre", "cph"),
