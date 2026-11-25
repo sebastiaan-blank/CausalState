@@ -1103,8 +1103,30 @@ sdr <- function(
       m_gdeath_tr <- binom_metric(D_tr[exit_idx], p_dex_nat[exit_idx])
       m_gdeath_vl <- binom_metric(D_vl[exit_idx_vl], p_dex_nat_vl[exit_idx_vl])
 
-      m_qrem_tr <- gauss_metric(Y_init[id_tr_ar[rem_idx]], q_rem_nat[rem_idx])
-      m_qrem_vl <- gauss_metric(Y_init[id_vl_ar[rem_idx_vl]], q_rem_nat_vl[rem_idx_vl])
+      # Q_rem calibration target: on training, use the per-step pseudo-
+      # outcome the regression was actually fit against (Y_pseudo_ar).
+      # On validation, SDR does not propagate an EIF-updated pseudo-outcome
+      # through the recursion, so form the analog cheaply by running the
+      # same EIF transform on the validation chain starting at tt+1. This
+      # matches, for the validation cohort, the Y_train that will be the
+      # pseudo-outcome at step tt on the training side.  At tt = tmax
+      # the EIF transform is degenerate (empty sum), so just use the
+      # initialised shf_valid[, tmax+1] which equals Y_init.
+      if (tt < tmax) {
+        dens_vl     <- density_ratios[vl_ids, , drop = FALSE]
+        Y_vl_pseudo <- eif(
+          density_ratios = dens_vl,
+          shifted        = shf_valid,
+          natural        = nat_valid,
+          time           = tt + 1L,
+          time_horizon   = tmax
+        )
+      } else {
+        Y_vl_pseudo <- shf_valid[, tt + 1L]
+      }
+      m_qrem_tr <- gauss_metric(Y_pseudo_ar[rem_idx], q_rem_nat[rem_idx])
+      m_qrem_vl <- gauss_metric(Y_vl_pseudo[idx_vl_ar[rem_idx_vl]],
+                                q_rem_nat_vl[rem_idx_vl])
       
       if (isTRUE(is_binom)) {
         m_qexit_tr <- binom_metric(

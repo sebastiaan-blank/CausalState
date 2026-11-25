@@ -713,8 +713,14 @@ qreg <- function(
         m_grem_vl  <- binom_metric(R_vl, p_rem_nat_vl)
         m_gdeath_tr <- binom_metric(D_tr[exit_idx],    p_dex_nat[exit_idx])
         m_gdeath_vl <- binom_metric(D_vl[exit_idx_vl], p_dex_nat_vl[exit_idx_vl])
-        m_qrem_tr  <- gauss_metric(Y_init[id_tr_ar[rem_idx]], q_rem_nat[rem_idx])
-        m_qrem_vl  <- gauss_metric(Y_init[id_vl_ar[rem_idx_vl]], q_rem_nat_vl[rem_idx_vl])
+        # Q_rem calibration target is the per-step pseudo-outcome the
+        # regression was fit against (shf_*[., tt+1]), not Y_init.
+        # At tt = tmax both coincide via initialisation; at tt < tmax the
+        # carried-forward Q from the previous backward step is the right
+        # reference.
+        m_qrem_tr  <- gauss_metric(Y_pseudo_ar[rem_idx], q_rem_nat[rem_idx])
+        m_qrem_vl  <- gauss_metric(shf_valid[idx_vl_ar[rem_idx_vl], tt + 1L],
+                                   q_rem_nat_vl[rem_idx_vl])
 
         m_qexit_tr <- if (isTRUE(is_binom))
           binom_metric(Y_init[id_tr_ar[exit_idx]], q_exit_obs_tr_raw[exit_idx])

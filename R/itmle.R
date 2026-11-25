@@ -1566,8 +1566,14 @@ itmle <- function(
       m_gdeath_tr <- binom_metric(D_tr[exit_idx], p_dex_nat[exit_idx])
       m_gdeath_vl <- binom_metric(D_vl[exit_idx_vl], p_dex_nat_vl[exit_idx_vl])
 
-      m_qrem_tr <- gauss_metric(Y_init[id_tr_ar[rem_idx]], q_rem_nat[rem_idx])
-      m_qrem_vl <- gauss_metric(Y_init[id_vl_ar[rem_idx_vl]], q_rem_nat_vl[rem_idx_vl])
+      # Q_rem calibration target: use the per-step pseudo-outcome the
+      # regression was fit against. On validation the analog is the
+      # post-targeting shf_valid[., tt+1] from the previous backward step
+      # (updated by the inner iTMLE targeting loop at tt+1). At tt = tmax
+      # both targets equal Y_init via initialisation.
+      m_qrem_tr <- gauss_metric(Y_pseudo_ar[rem_idx], q_rem_nat[rem_idx])
+      m_qrem_vl <- gauss_metric(shf_valid[idx_vl_ar[rem_idx_vl], tt + 1L],
+                                q_rem_nat_vl[rem_idx_vl])
       
       if (isTRUE(is_binom)) {
         m_qexit_tr <- binom_metric(
