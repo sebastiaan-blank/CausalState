@@ -564,9 +564,9 @@ sdr <- function(
   .reuse_qexit <- TRUE
   if (identical(fits, "save")) {
     dir.create(fits_dir, showWarnings = FALSE, recursive = TRUE)
-    cs_fits_save_meta(fits_dir, tmax, N, folds, y, pool_g_death, pool_q_exit)
+    cs_fits_save_meta(fits_dir, ids, folds, y, pool_g_death, pool_q_exit)
   } else if (identical(fits, "load")) {
-    .meta <- cs_fits_check_meta(fits_dir, tmax, N, folds, y, pool_g_death, pool_q_exit)
+    .meta <- cs_fits_check_meta(fits_dir, ids, folds, y, pool_g_death, pool_q_exit)
     .reuse_qexit <- .meta$reuse_qexit
   }
 

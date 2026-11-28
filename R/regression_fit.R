@@ -6,49 +6,60 @@ cs_fits_path <- function(fits_dir, f_idx, tt, component) {
   }
 }
 
-cs_fits_save_meta <- function(fits_dir, tmax, n, folds, y, pool_g_death, pool_q_exit) {
+cs_fits_save_meta <- function(fits_dir, ids, folds, y, pool_g_death, pool_q_exit) {
+  ids_chr <- as.character(ids)
   meta <- list(
-    tmax         = tmax,
-    n            = n,
-    fold_tr      = lapply(folds, function(f) sort(f$training_set)),
-    y            = y,
-    pool_g_death = isTRUE(pool_g_death),
-    pool_q_exit  = isTRUE(pool_q_exit)
+    schema_version = 2L,
+    fold_vl_ids    = lapply(folds, function(f) ids_chr[f$validation_set]),
+    y              = y,
+    pool_g_death   = isTRUE(pool_g_death),
+    pool_q_exit    = isTRUE(pool_q_exit)
   )
   saveRDS(meta, file.path(fits_dir, "fold_structure.rds"))
 }
 
-cs_fits_check_meta <- function(fits_dir, tmax, n, folds, y, pool_g_death, pool_q_exit) {
+cs_fits_check_meta <- function(fits_dir, ids, folds, y, pool_g_death, pool_q_exit) {
   path <- file.path(fits_dir, "fold_structure.rds")
   if (!file.exists(path))
     stop(sprintf(
       "fits_dir '%s' has no fold_structure.rds - run with fits='save' first.",
       fits_dir), call. = FALSE)
   meta <- readRDS(path)
-  if (!identical(meta$tmax, tmax) || !identical(meta$n, n))
+
+  if (!identical(meta$schema_version, 2L))
+    stop(paste0(
+      "fold_structure.rds is from an older format (pre-schema-v2). ",
+      "Re-run with fits='save' to upgrade the cache."), call. = FALSE)
+
+  if (length(folds) != length(meta$fold_vl_ids))
     stop(sprintf(
-      "Fold structure mismatch: saved tmax=%d/n=%d, current tmax=%d/n=%d.",
-      meta$tmax, meta$n, tmax, n), call. = FALSE)
-  curr <- lapply(folds, function(f) sort(f$training_set))
-  if (!identical(meta$fold_tr, curr))
-    stop(paste0("Fold training assignments differ from fold_structure.rds. ",
-                "Ensure the same weight_object and seed are used."), call. = FALSE)
-  old_format <- is.null(meta$pool_g_death) && is.null(meta$pool_q_exit) && is.null(meta$y)
-  if (old_format) {
-    message("fits='load': fold_structure.rds is from an older format (pool and outcome fields missing). ",
-            "Re-save with fits='save' to enable full validation. Proceeding without pool/outcome checks.")
-  } else {
-    if (!identical(meta$pool_g_death, isTRUE(pool_g_death)))
+      "Number of folds differs: saved %d, current %d.",
+      length(meta$fold_vl_ids), length(folds)), call. = FALSE)
+
+  # Honesty invariant: every current validation id must have been in the
+  # saved validation set of the same fold (so the saved fit never saw it).
+  ids_chr <- as.character(ids)
+  for (v in seq_along(folds)) {
+    cur_vl <- ids_chr[folds[[v]]$validation_set]
+    missing <- setdiff(cur_vl, meta$fold_vl_ids[[v]])
+    if (length(missing))
       stop(sprintf(
-        "pool_g_death mismatch: saved %s, current %s.",
-        meta$pool_g_death, isTRUE(pool_g_death)), call. = FALSE)
-    if (!identical(meta$pool_q_exit, isTRUE(pool_q_exit)))
-      stop(sprintf(
-        "pool_q_exit mismatch: saved %s, current %s.",
-        meta$pool_q_exit, isTRUE(pool_q_exit)), call. = FALSE)
+        "Fold %d: %d current validation id(s) not in saved validation set (first: '%s'). ",
+        v, length(missing), missing[1L]),
+        call. = FALSE)
   }
-  reuse_qexit <- if (old_format) TRUE else identical(meta$y, y)
-  if (!old_format && !reuse_qexit)
+
+  if (!identical(meta$pool_g_death, isTRUE(pool_g_death)))
+    stop(sprintf(
+      "pool_g_death mismatch: saved %s, current %s.",
+      meta$pool_g_death, isTRUE(pool_g_death)), call. = FALSE)
+  if (!identical(meta$pool_q_exit, isTRUE(pool_q_exit)))
+    stop(sprintf(
+      "pool_q_exit mismatch: saved %s, current %s.",
+      meta$pool_q_exit, isTRUE(pool_q_exit)), call. = FALSE)
+
+  reuse_qexit <- identical(meta$y, y)
+  if (!reuse_qexit)
     message(sprintf(
       "fits='load': outcome y='%s' differs from saved y='%s' - Q_exit will be refitted.",
       y, meta$y))
